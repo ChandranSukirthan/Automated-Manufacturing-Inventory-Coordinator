@@ -49,3 +49,4 @@
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Npgsql.dll
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Npgsql.EntityFrameworkCore.PostgreSQL.dll
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/System.IdentityModel.Tokens.Jwt.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/Debug/net8.0/ManufacturingCoordinator.Api.sourcelink.json
