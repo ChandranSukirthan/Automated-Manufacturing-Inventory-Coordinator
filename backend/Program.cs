@@ -22,9 +22,8 @@ var dbUser = Env.GetString("DB_USER", "postgres");
 var dbPass = Env.GetString("DB_PASSWORD", "Sukir211002");
 builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 
-builder.Configuration["SendGridSettings:ApiKey"] = Env.GetString("SENDGRID_API_KEY") ?? builder.Configuration["SendGridSettings:ApiKey"];
-builder.Configuration["SendGridSettings:FromEmail"] = Env.GetString("SENDGRID_FROM_EMAIL") ?? builder.Configuration["SendGridSettings:FromEmail"];
-builder.Configuration["SendGridSettings:FromName"] = Env.GetString("SENDGRID_FROM_NAME") ?? builder.Configuration["SendGridSettings:FromName"];
+builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
+builder.Configuration["EmailSettings:EmailPass"] = Env.GetString("EMAIL_PASS") ?? builder.Configuration["EmailSettings:EmailPass"];
 
 builder.Configuration["JwtSettings:SecretKey"] = Env.GetString("JWT_SECRET_KEY") ?? builder.Configuration["JwtSettings:SecretKey"];
 builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? builder.Configuration["JwtSettings:Issuer"];
@@ -42,7 +41,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // Settings
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-builder.Services.Configure<SendGridSettings>(builder.Configuration.GetSection("SendGridSettings"));
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 
 // Scoped Services
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();

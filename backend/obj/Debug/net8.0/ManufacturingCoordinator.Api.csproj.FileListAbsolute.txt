@@ -51,8 +51,5 @@
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/System.IdentityModel.Tokens.Jwt.dll
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/Debug/net8.0/ManufacturingCoordinator.Api.sourcelink.json
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/BCrypt-Net-Next.dll
-/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Newtonsoft.Json.dll
-/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/SendGrid.dll
-/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/StarkbankEcdsa.dll
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/DotNetEnv.dll
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Superpower.dll
