@@ -10,6 +10,7 @@ using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Models.Authentication;
+using Google.Apis.Auth;
 
 namespace ManufacturingCoordinator.Api.Services
 {
@@ -175,11 +176,6 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("This account has been deactivated. Contact an administrator.", HttpStatusCode.Forbidden);
             }
 
-            if (!user.IsEmailVerified)
-            {
-                throw new AuthException("Please verify your email before logging in.", HttpStatusCode.Forbidden);
-            }
-
             return await IssueAuthResponseAsync(user);
         }
 
@@ -206,6 +202,74 @@ namespace ManufacturingCoordinator.Api.Services
             await _db.SaveChangesAsync();
 
             return await IssueAuthResponseAsync(storedToken.User);
+        }
+
+        public async Task<GoogleLoginResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request)
+        {
+            var payload = await ValidateGoogleTokenAsync(request.TokenId);
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
+            if (user != null)
+            {
+                if (!user.IsActive) throw new AuthException("Account disabled.", HttpStatusCode.Forbidden);
+
+                var authResponse = await IssueAuthResponseAsync(user);
+                return new GoogleLoginResponseDto
+                {
+                    RequiresRoleSelection = false,
+                    AuthResponse = authResponse
+                };
+            }
+
+            // User does not exist, return payload details so frontend can ask for role
+            return new GoogleLoginResponseDto
+            {
+                RequiresRoleSelection = true,
+                Email = payload.Email,
+                Name = payload.Name
+            };
+        }
+
+        public async Task<AuthResponseDto> GoogleRegisterAsync(GoogleRegisterRequestDto request)
+        {
+            var payload = await ValidateGoogleTokenAsync(request.TokenId);
+
+            var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == payload.Email);
+            if (existingUser != null)
+            {
+                throw new AuthException("User already exists.", HttpStatusCode.Conflict);
+            }
+
+            var user = new User
+            {
+                Email = payload.Email,
+                FullName = payload.Name ?? "Google User",
+                Role = request.Role,
+                IsEmailVerified = true,
+                IsActive = true,
+                PasswordHash = "GOOGLE_AUTH" // Or some random hash, since they login via Google
+            };
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            return await IssueAuthResponseAsync(user);
+        }
+
+        private async Task<GoogleJsonWebSignature.Payload> ValidateGoogleTokenAsync(string tokenId)
+        {
+            try
+            {
+                // We're skipping audience validation here for flexibility, but in production
+                // you should pass your Google Client ID into ValidationSettings.
+                var settings = new GoogleJsonWebSignature.ValidationSettings();
+                var payload = await GoogleJsonWebSignature.ValidateAsync(tokenId, settings);
+                return payload;
+            }
+            catch (Exception ex)
+            {
+                throw new AuthException("Invalid Google token.", HttpStatusCode.Unauthorized);
+            }
         }
 
         // ---------- Private helpers ----------

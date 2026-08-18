@@ -8,6 +8,7 @@ using System.Text;
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Api.Services;
+using ManufacturingCoordinator.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +20,7 @@ var dbHost = Env.GetString("DB_HOST", "localhost");
 var dbPort = Env.GetString("DB_PORT", "5432");
 var dbName = Env.GetString("DB_NAME", "inventory_coordinator");
 var dbUser = Env.GetString("DB_USER", "postgres");
-var dbPass = Env.GetString("DB_PASSWORD", "Sukir211002");
+var dbPass = Env.GetString("DB_PASSWORD", "bid7650");
 builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 
 builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
@@ -115,6 +116,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("ReactFrontend");
 
