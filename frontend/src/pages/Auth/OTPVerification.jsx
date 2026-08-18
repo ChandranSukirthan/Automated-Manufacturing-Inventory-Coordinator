@@ -119,7 +119,7 @@ export default function OTPVerification() {
           className={`w-full py-2.5 px-4 font-semibold rounded-xl transition-all flex items-center justify-center gap-2
             ${isExpired 
               ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
-              : 'bg-gradient-to-r from-brand-600 to-fuchsia-600 hover:from-brand-500 hover:to-fuchsia-500 text-white shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5'}`}
+              : 'bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5'}`}
         >
           <ShieldCheck className="w-5 h-5" />
           Verify Account
