@@ -38,7 +38,7 @@ namespace ManufacturingCoordinator.Api.Services
             _jwtSettings = jwtOptions.Value;
         }
 
-        public async Task<MessageResponseDto> RegisterAsync(RegisterRequestDto request)
+        public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request)
         {
             var emailNormalized = request.Email.Trim().ToLowerInvariant();
 
@@ -56,20 +56,14 @@ namespace ManufacturingCoordinator.Api.Services
                 Email = emailNormalized,
                 PasswordHash = _passwordHasher.HashPassword(request.Password),
                 Role = request.Role,
-                IsEmailVerified = false,
+                IsEmailVerified = true,
                 IsActive = true
             };
 
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
-            await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
-
-            return new MessageResponseDto
-            {
-                Success = true,
-                Message = "Registration successful. Please check your email for the verification code."
-            };
+            return await IssueAuthResponseAsync(user);
         }
 
         public async Task<MessageResponseDto> VerifyOtpAsync(VerifyOtpRequestDto request)
@@ -173,11 +167,6 @@ namespace ManufacturingCoordinator.Api.Services
             if (!user.IsActive)
             {
                 throw new AuthException("This account has been deactivated. Contact an administrator.", HttpStatusCode.Forbidden);
-            }
-
-            if (!user.IsEmailVerified)
-            {
-                throw new AuthException("Please verify your email before logging in.", HttpStatusCode.Forbidden);
             }
 
             return await IssueAuthResponseAsync(user);

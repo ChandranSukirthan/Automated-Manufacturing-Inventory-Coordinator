@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
+import authService from '../../services/authService';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -10,9 +11,10 @@ export default function Signup() {
     email: '', 
     password: '', 
     confirmPassword: '',
-    role: 'manager' 
+    role: '1' // Default: SupplyChainManager = 1
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -22,7 +24,7 @@ export default function Signup() {
     if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
       setError('Please fill in all fields.');
@@ -37,13 +39,26 @@ export default function Signup() {
       return;
     }
 
-    // Simulate success
-    setSuccessMsg('Email validated! Redirecting to OTP verification...');
-    
-    // Pass the email state to the OTP page
-    setTimeout(() => {
-      navigate('/otp-verify', { state: { email: formData.email, role: formData.role } });
-    }, 1500);
+    setLoading(true);
+    try {
+      const payload = {
+        FullName: formData.name,
+        Email: formData.email,
+        Password: formData.password,
+        Role: parseInt(formData.role, 10)
+      };
+      
+      const result = await authService.register(payload);
+      setSuccessMsg(result.message || 'Registration successful! Redirecting to OTP verification...');
+      
+      setTimeout(() => {
+        navigate('/otp-verify', { state: { email: formData.email, role: formData.role } });
+      }, 1500);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -108,10 +123,10 @@ export default function Signup() {
               onChange={handleChange}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-white appearance-none"
             >
-              <option value="manager">Supply Chain Manager</option>
-              <option value="quality">Quality Inspector</option>
-              <option value="admin">System Admin</option>
-              <option value="worker">Floor Worker</option>
+              <option value="1">Supply Chain Manager</option>
+              <option value="2">Quality Inspector</option>
+              <option value="3">System Admin</option>
+              <option value="0">Floor Worker</option>
             </select>
             {/* Custom arrow for select */}
             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-500">
@@ -171,9 +186,17 @@ export default function Signup() {
 
         <button
           type="submit"
-          className="w-full py-2.5 px-4 mt-4 bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5"
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 mt-4 bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]"
         >
-          Create Account
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Creating Account...
+            </>
+          ) : (
+            'Create Account'
+          )}
         </button>
 
         <div className="relative py-4">
