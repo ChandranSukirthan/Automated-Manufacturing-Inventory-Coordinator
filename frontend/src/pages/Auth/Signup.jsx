@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
-import authService from '../../services/authService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Signup() {
   const navigate = useNavigate();
+  const { register } = useAuth();
   const [formData, setFormData] = useState({ 
     name: '', 
     email: '', 
@@ -48,12 +49,17 @@ export default function Signup() {
         Role: parseInt(formData.role, 10)
       };
       
-      const result = await authService.register(payload);
-      setSuccessMsg(result.message || 'Registration successful! Redirecting to OTP verification...');
+      const data = await register(payload);
+      setSuccessMsg('Registration successful! Redirecting to dashboard...');
       
+      const role = data.user.role.toLowerCase();
       setTimeout(() => {
-        navigate('/otp-verify', { state: { email: formData.email, role: formData.role } });
-      }, 1500);
+        // Role-based routing
+        if (role === 'admin') navigate('/dashboard/admin');
+        else if (role === 'worker') navigate('/dashboard/worker');
+        else if (role === 'quality') navigate('/dashboard/quality');
+        else navigate('/');
+      }, 1000);
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
