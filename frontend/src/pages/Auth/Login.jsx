@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
@@ -14,7 +17,7 @@ export default function Login() {
     if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password) {
       setError('Please fill in all fields.');
@@ -25,16 +28,21 @@ export default function Login() {
       return;
     }
 
-    // Simulate backend authentication and role-based redirect
-    // For demo purposes, we check a mock role prefix in email, or default to admin
-    let role = 'admin';
-    if (formData.email.startsWith('worker')) role = 'worker';
-    if (formData.email.startsWith('quality')) role = 'quality';
+    setLoading(true);
+    try {
+      const data = await login(formData.email, formData.password);
+      const role = data.user.role.toLowerCase();
 
-    // Role-based routing
-    if (role === 'admin') navigate('/dashboard/admin');
-    else if (role === 'worker') navigate('/dashboard/worker');
-    else if (role === 'quality') navigate('/dashboard/quality');
+      // Role-based routing
+      if (role === 'admin') navigate('/dashboard/admin');
+      else if (role === 'worker') navigate('/dashboard/worker');
+      else if (role === 'quality') navigate('/dashboard/quality');
+      else navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -98,9 +106,17 @@ export default function Login() {
 
         <button
           type="submit"
-          className="w-full py-2.5 px-4 bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5"
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]"
         >
-          Sign In
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Signing in...
+            </>
+          ) : (
+            'Sign In'
+          )}
         </button>
 
         <div className="relative py-4">
