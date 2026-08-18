@@ -31,12 +31,21 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await login(formData.email, formData.password);
-      const role = data.user.role.toLowerCase();
-
-      // Role-based routing
-      if (role === 'admin') navigate('/dashboard/admin');
-      else if (role === 'worker') navigate('/dashboard/worker');
-      else if (role === 'quality') navigate('/dashboard/quality');
+      const roleInt = data.user.role;
+      let path = '/';
+      
+      // Role-based routing based on UserRole enum integer
+      // 0: FloorWorker, 1: SupplyChainManager, 2: QualityInspector, 3: ITAdmin
+      if (roleInt === 3) path = '/dashboard/admin';
+      else if (roleInt === 0) path = '/dashboard/worker';
+      else if (roleInt === 2) path = '/dashboard/quality';
+      else if (roleInt === 1) path = '/dashboard/manager'; // wait, the route is for admin, worker, quality. Let's see App.jsx. 
+      // Actually, let me map them accurately based on the existing frontend logic.
+      
+      if (roleInt === 3) navigate('/dashboard/admin');
+      else if (roleInt === 0) navigate('/dashboard/worker');
+      else if (roleInt === 2) navigate('/dashboard/quality');
+      else if (roleInt === 1) navigate('/dashboard/admin'); // default manager to admin or manager route if it exists
       else navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');

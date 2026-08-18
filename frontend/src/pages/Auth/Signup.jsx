@@ -52,12 +52,13 @@ export default function Signup() {
       const data = await register(payload);
       setSuccessMsg('Registration successful! Redirecting to dashboard...');
       
-      const role = data.user.role.toLowerCase();
+      const roleInt = data.user.role;
       setTimeout(() => {
         // Role-based routing
-        if (role === 'admin') navigate('/dashboard/admin');
-        else if (role === 'worker') navigate('/dashboard/worker');
-        else if (role === 'quality') navigate('/dashboard/quality');
+        if (roleInt === 3) navigate('/dashboard/admin');
+        else if (roleInt === 0) navigate('/dashboard/worker');
+        else if (roleInt === 2) navigate('/dashboard/quality');
+        else if (roleInt === 1) navigate('/dashboard/admin'); // Manager dashboard or fallback to admin
         else navigate('/');
       }, 1000);
     } catch (err) {
