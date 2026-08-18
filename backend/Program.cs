@@ -8,6 +8,7 @@ using System.Text;
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Api.Services;
+using ManufacturingCoordinator.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,6 +116,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("ReactFrontend");
 
