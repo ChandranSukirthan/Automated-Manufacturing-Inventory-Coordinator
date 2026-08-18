@@ -176,6 +176,11 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("This account has been deactivated. Contact an administrator.", HttpStatusCode.Forbidden);
             }
 
+            if (!user.IsEmailVerified)
+            {
+                throw new AuthException("Please verify your email before logging in.", HttpStatusCode.Forbidden);
+            }
+
             return await IssueAuthResponseAsync(user);
         }
 
