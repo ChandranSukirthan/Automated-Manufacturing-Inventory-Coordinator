@@ -1,5 +1,5 @@
 import React from 'react';
-import { Package } from 'lucide-react';
+import { Package, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function AuthLayout({ children, title, subtitle }) {
@@ -9,6 +9,15 @@ export default function AuthLayout({ children, title, subtitle }) {
       <div className="absolute top-0 -left-40 w-96 h-96 bg-brand-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-40 animate-blob"></div>
       <div className="absolute top-0 -right-40 w-96 h-96 bg-cyan-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-40 animate-blob animation-delay-2000"></div>
       <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-40 animate-blob animation-delay-4000"></div>
+
+      {/* Back Button */}
+      <Link 
+        to="/" 
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-full border border-white/10 transition-colors backdrop-blur-md"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Home
+      </Link>
 
       <div className="relative z-10 w-[400px] max-w-[90vw] mx-auto px-4 py-12 flex flex-col justify-center">
         <div className="text-center mb-6">
