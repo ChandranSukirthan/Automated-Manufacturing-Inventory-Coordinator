@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Models.Authentication;
 
-
 namespace ManufacturingCoordinator.Data
 {
     public class ApplicationDbContext : DbContext
