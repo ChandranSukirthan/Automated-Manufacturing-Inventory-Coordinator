@@ -19,7 +19,7 @@ var dbHost = Env.GetString("DB_HOST", "localhost");
 var dbPort = Env.GetString("DB_PORT", "5432");
 var dbName = Env.GetString("DB_NAME", "inventory_coordinator");
 var dbUser = Env.GetString("DB_USER", "postgres");
-var dbPass = Env.GetString("DB_PASSWORD", "Sukir211002");
+var dbPass = Env.GetString("DB_PASSWORD", "Sukir@211002");
 builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 
 builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
