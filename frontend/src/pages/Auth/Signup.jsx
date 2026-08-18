@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import { useAuth } from '../../context/AuthContext';
 
@@ -19,6 +20,11 @@ export default function Signup() {
   const [successMsg, setSuccessMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Google Auth State
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [googleTokenId, setGoogleTokenId] = useState('');
+  const [selectedRole, setSelectedRole] = useState('1'); // Default to Manager
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -67,6 +73,85 @@ export default function Signup() {
       setLoading(false);
     }
   };
+
+  const routeUserByRole = (roleInt) => {
+    if (roleInt === 3) navigate('/dashboard/admin');
+    else if (roleInt === 0) navigate('/dashboard/worker');
+    else if (roleInt === 2) navigate('/dashboard/quality');
+    else if (roleInt === 1) navigate('/dashboard/admin');
+    else navigate('/');
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await useAuth().googleLogin(credentialResponse.credential);
+      if (data.requiresRoleSelection) {
+        setGoogleTokenId(credentialResponse.credential);
+        setShowRoleModal(true);
+      } else {
+        routeUserByRole(data.authResponse.user.role);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google Sign-In failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRoleSubmit = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await useAuth().googleRegister(googleTokenId, parseInt(selectedRole, 10));
+      routeUserByRole(data.user.role);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (showRoleModal) {
+    return (
+      <AuthLayout title="Choose Your Role" subtitle="Almost there! Please select your role to complete Google Sign-In.">
+        <div className="space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-300 ml-1">Role</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                <Shield className="w-5 h-5" />
+              </div>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-white appearance-none"
+              >
+                <option value="1">Supply Chain Manager</option>
+                <option value="2">Quality Inspector</option>
+                <option value="3">System Admin</option>
+                <option value="0">Floor Worker</option>
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={handleRoleSubmit}
+            disabled={loading}
+            className="w-full py-2.5 px-4 bg-gradient-to-r from-brand-600 to-cyan-600 text-white font-semibold rounded-xl"
+          >
+            {loading ? 'Completing...' : 'Complete Sign Up'}
+          </button>
+        </div>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="Create an Account" subtitle="Join the AMIC platform today">
@@ -215,18 +300,17 @@ export default function Signup() {
           </div>
         </div>
 
-        <button
-          type="button"
-          className="w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 border border-slate-700 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 group"
-        >
-          <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-            <path fill="#34A853" d="M12 24c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 21.53 7.7 24 12 24z" />
-            <path fill="#FBBC05" d="M5.84 15.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V8.06H2.18C1.43 9.55 1 11.22 1 13s.43 3.45 1.18 4.94l3.66-2.84z" />
-            <path fill="#EA4335" d="M12 4.75c1.61 0 3.06.56 4.21 1.64l3.15-3.15C17.45 1.43 14.97 0 12 0 7.7 0 3.99 2.47 2.18 6.06l3.66 2.84c.87-2.6 3.3-4.15 6.16-4.15z" />
-          </svg>
-          Google
-        </button>
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError('Google Sign-In failed.')}
+            theme="filled_black"
+            shape="rectangular"
+            size="large"
+            text="continue_with"
+            width="100%"
+          />
+        </div>
 
         <p className="text-center text-slate-400 text-sm mt-6">
           Already have an account?{' '}

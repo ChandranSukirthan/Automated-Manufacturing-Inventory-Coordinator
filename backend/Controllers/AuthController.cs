@@ -60,13 +60,24 @@ namespace ManufacturingCoordinator.Api.Controllers
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
+            var response = await _authService.LoginAsync(request);
+            return Ok(response);
+        }
 
-            var result = await _authService.LoginAsync(request);
-            return Ok(result);
+        [HttpPost("google-login")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequestDto request)
+        {
+            var response = await _authService.GoogleLoginAsync(request);
+            return Ok(response);
+        }
+
+        [HttpPost("google-register")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GoogleRegister([FromBody] GoogleRegisterRequestDto request)
+        {
+            var response = await _authService.GoogleRegisterAsync(request);
+            return Ok(response);
         }
 
         [HttpPost("refresh-token")]

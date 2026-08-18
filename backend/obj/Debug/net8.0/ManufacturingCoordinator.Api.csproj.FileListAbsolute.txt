@@ -120,3 +120,9 @@
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/Debug/net8.0/ManufacturingCoordinator.Api.pdb
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/Debug/net8.0/ManufacturingCoordinator.Api.genruntimeconfig.cache
 /Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/Debug/net8.0/ref/ManufacturingCoordinator.Api.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Google.Apis.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Google.Apis.Auth.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Google.Apis.Core.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/Newtonsoft.Json.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/System.Management.dll
+/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/bin/Debug/net8.0/runtimes/win/lib/net7.0/System.Management.dll

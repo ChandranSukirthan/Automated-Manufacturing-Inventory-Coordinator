@@ -51,6 +51,10 @@
               "target": "Package",
               "version": "[3.2.0, )"
             },
+            "Google.Apis.Auth": {
+              "target": "Package",
+              "version": "[1.75.0, )"
+            },
             "Microsoft.AspNetCore.Authentication.JwtBearer": {
               "target": "Package",
               "version": "[8.*, )"

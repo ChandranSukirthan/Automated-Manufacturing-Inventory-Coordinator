@@ -5,10 +5,12 @@ namespace ManufacturingCoordinator.Api.Interfaces
 {
     public interface IAuthService
     {
-        Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request);
+        Task<MessageResponseDto> RegisterAsync(RegisterRequestDto request);
         Task<MessageResponseDto> VerifyOtpAsync(VerifyOtpRequestDto request);
         Task<MessageResponseDto> ResendOtpAsync(ResendOtpRequestDto request);
         Task<AuthResponseDto> LoginAsync(LoginRequestDto request);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request);
+        Task<GoogleLoginResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request);
+        Task<AuthResponseDto> GoogleRegisterAsync(GoogleRegisterRequestDto request);
     }
 }

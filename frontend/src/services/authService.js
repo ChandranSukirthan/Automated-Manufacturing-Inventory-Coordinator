@@ -19,6 +19,16 @@ const authService = {
   resendOtp: async (email) => {
     const response = await api.post('/auth/resend-otp', { email });
     return response.data;
+  },
+  
+  googleLogin: async (tokenId) => {
+    const response = await api.post('/auth/google-login', { tokenId });
+    return response.data;
+  },
+  
+  googleRegister: async (tokenId, role) => {
+    const response = await api.post('/auth/google-register', { tokenId, role });
+    return response.data;
   }
 };
 

@@ -54,6 +54,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const googleLogin = async (tokenId) => {
+    try {
+      const data = await authService.googleLogin(tokenId);
+      if (!data.requiresRoleSelection && data.authResponse) {
+        localStorage.setItem('accessToken', data.authResponse.accessToken);
+        localStorage.setItem('refreshToken', data.authResponse.refreshToken);
+        localStorage.setItem('user', JSON.stringify(data.authResponse.user));
+        setUser(data.authResponse.user);
+      }
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const googleRegister = async (tokenId, role) => {
+    try {
+      const data = await authService.googleRegister(tokenId, role);
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -66,6 +94,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     login,
     register,
+    googleLogin,
+    googleRegister,
     logout,
     isAuthenticated: !!user
   };
