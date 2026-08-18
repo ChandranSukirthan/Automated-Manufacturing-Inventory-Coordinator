@@ -42,12 +42,6 @@ export const AuthProvider = ({ children }) => {
   const register = async (payload) => {
     try {
       const data = await authService.register(payload);
-      // Backend now returns the JWT response on registration
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      setUser(data.user);
       return data;
     } catch (error) {
       throw error;

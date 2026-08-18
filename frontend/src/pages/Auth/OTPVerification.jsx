@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ShieldCheck, Timer, AlertCircle } from 'lucide-react';
+import { ShieldCheck, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
+import authService from '../../services/authService';
 
 export default function OTPVerification() {
   const navigate = useNavigate();
@@ -11,7 +12,9 @@ export default function OTPVerification() {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timeLeft, setTimeLeft] = useState(180); // 3 minutes
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const inputRefs = useRef([]);
 
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function OTPVerification() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isExpired) return;
 
@@ -64,18 +67,31 @@ export default function OTPVerification() {
       return;
     }
 
-    // Simulate OTP verification
-    // For demo: any 6 digit code works
-    navigate('/login', { state: { message: 'Account verified successfully. Please login.' } });
+    setError('');
+    setLoading(true);
+    try {
+      const response = await authService.verifyOtp(email, enteredOtp);
+      navigate('/login', { state: { message: response.message || 'Account verified successfully. Please log in.' } });
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired OTP.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleResend = () => {
-    setOtp(['', '', '', '', '', '']);
-    setTimeLeft(180);
-    setIsExpired(false);
+  const handleResend = async () => {
     setError('');
-    // Focus first input
-    setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    setSuccessMessage('');
+    try {
+      await authService.resendOtp(email);
+      setOtp(['', '', '', '', '', '']);
+      setTimeLeft(180);
+      setIsExpired(false);
+      setSuccessMessage('A new verification code has been sent to your email.');
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend OTP. Please try again.');
+    }
   };
 
   return (
@@ -86,6 +102,13 @@ export default function OTPVerification() {
           <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        )}
+        
+        {successMessage && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm animate-in fade-in slide-in-from-top-2">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span>{successMessage}</span>
           </div>
         )}
 
@@ -115,14 +138,23 @@ export default function OTPVerification() {
 
         <button
           type="submit"
-          disabled={isExpired}
+          disabled={isExpired || loading}
           className={`w-full py-2.5 px-4 font-semibold rounded-xl transition-all flex items-center justify-center gap-2
-            ${isExpired 
+            ${isExpired || loading
               ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
               : 'bg-gradient-to-r from-brand-600 to-cyan-600 hover:from-brand-500 hover:to-cyan-500 text-white shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] hover:-translate-y-0.5'}`}
         >
-          <ShieldCheck className="w-5 h-5" />
-          Verify Account
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Verifying...
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="w-5 h-5" />
+              Verify Account
+            </>
+          )}
         </button>
 
         <p className="text-center text-slate-400 text-sm mt-4">

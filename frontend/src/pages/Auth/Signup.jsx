@@ -56,17 +56,11 @@ export default function Signup() {
       };
       
       const data = await register(payload);
-      setSuccessMsg('Registration successful! Redirecting to dashboard...');
+      setSuccessMsg('Registration successful! Redirecting to email verification...');
       
-      const roleInt = data.user.role;
       setTimeout(() => {
-        // Role-based routing
-        if (roleInt === 3) navigate('/dashboard/admin');
-        else if (roleInt === 0) navigate('/dashboard/worker');
-        else if (roleInt === 2) navigate('/dashboard/quality');
-        else if (roleInt === 1) navigate('/dashboard/admin'); // Manager dashboard or fallback to admin
-        else navigate('/');
-      }, 1000);
+        navigate('/otp-verify', { state: { email: formData.email } });
+      }, 1500);
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
