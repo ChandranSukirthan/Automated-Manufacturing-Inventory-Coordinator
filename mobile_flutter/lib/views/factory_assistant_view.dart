@@ -3,6 +3,7 @@ import '../controllers/inventory_controller.dart';
 import 'scanner_view.dart'; // Added the scanner import!
 // ignore: unused_import
 import 'stock_view.dart';
+import 'tracker_view.dart'; // Added the tracker import!
 
 class FactoryAssistantView extends StatefulWidget {
   final InventoryController controller;
@@ -641,13 +642,10 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
             ),
           );
         } else if (index == 3) { // TRACKER TAB
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: Color(0xFF1E1E1E),
-              content: Text(
-                'Opening AI Workflow Tracker...', 
-                style: TextStyle(color: Colors.white)
-              ),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TrackerView(controller: widget.controller),
             ),
           );
         } else if (widget.onTabSelected != null) {
