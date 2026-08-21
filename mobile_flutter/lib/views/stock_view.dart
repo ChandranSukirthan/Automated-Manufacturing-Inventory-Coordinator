@@ -1,21 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/inventory_controller.dart';
-
-class StockItem {
-  final String name;
-  final String sku;
-  final int quantity;
-  final String unit;
-  final bool isLowStock;
-
-  const StockItem({
-    required this.name,
-    required this.sku,
-    required this.quantity,
-    this.unit = 'Units',
-    required this.isLowStock,
-  });
-}
+import '../services/inventory_api_service.dart';
 
 class StockView extends StatefulWidget {
   final InventoryController controller;
@@ -34,45 +19,12 @@ class StockView extends StatefulWidget {
 class _StockViewState extends State<StockView> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-
-  final List<StockItem> _defaultItems = const [
-    StockItem(
-      name: 'Polyethylene Film',
-      sku: 'RM-PLASTIC-502',
-      quantity: 150,
-      isLowStock: true,
-    ),
-    StockItem(
-      name: 'Box Pouch',
-      sku: 'BX-POUCH-101',
-      quantity: 850,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Biscuit Packaging',
-      sku: 'PK-BISCUIT-04',
-      quantity: 1200,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Tea Bag Roll',
-      sku: 'TB-ROLL-88',
-      quantity: 90,
-      isLowStock: true,
-    ),
-    StockItem(
-      name: 'Aluminum Can',
-      sku: 'CN-ALUM-330',
-      quantity: 3400,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Plastic Bottle',
-      sku: 'BT-PET-500',
-      quantity: 45,
-      isLowStock: true,
-    ),
-  ];
+  
+  final InventoryApiService _apiService = InventoryApiService();
+  
+  List<InventoryItemModel> _inventoryItems = [];
+  List<StockAlertModel> _alerts = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -82,6 +34,32 @@ class _StockViewState extends State<StockView> {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    final results = await Future.wait([
+      _apiService.fetchInventory(),
+      _apiService.fetchAlerts(),
+    ]);
+
+    setState(() {
+      _inventoryItems = results[0] as List<InventoryItemModel>;
+      _alerts = results[1] as List<StockAlertModel>;
+      _isLoading = false;
+    });
+  }
+
+  bool _hasPredictiveAlert(String sku) {
+    return _alerts.any((alert) => 
+      alert.sku == sku && 
+      alert.workerId.contains('Predictive') &&
+      alert.status != 'Resolved'
+    );
   }
 
   @override
@@ -99,29 +77,15 @@ class _StockViewState extends State<StockView> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, child) {
-        // Build item list incorporating current controller SKU/quantity if set
-        final List<StockItem> items = [
-          if (widget.controller.sku.isNotEmpty)
-            StockItem(
-              name: '${widget.controller.packagingType} (Current Request)',
-              sku: widget.controller.sku,
-              quantity: widget.controller.quantityRequested,
-              isLowStock: widget.controller.quantityRequested < 200,
-            ),
-          ..._defaultItems,
-        ];
-
-        final filteredItems = items.where((item) {
+        
+        final filteredItems = _inventoryItems.where((item) {
           if (_searchQuery.isEmpty) return true;
           return item.name.toLowerCase().contains(_searchQuery) ||
               item.sku.toLowerCase().contains(_searchQuery);
         }).toList();
 
         return Scaffold(
-          // 1. Scaffold background must be dark (0xFF121212)
           backgroundColor: darkBg,
-
-          // 2. AppBar: Bold yellow title "LIVE STOCK STATUS", white back button
           appBar: AppBar(
             backgroundColor: darkBg,
             elevation: 0,
@@ -146,13 +110,12 @@ class _StockViewState extends State<StockView> {
               ),
             ),
           ),
-
           body: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 3. Search Bar at the top (dark background with yellow focus border)
+                // Search Bar at the top (dark background with yellow focus border)
                 TextField(
                   controller: _searchController,
                   style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -183,33 +146,46 @@ class _StockViewState extends State<StockView> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 18),
-
-                // 4. ListView displaying current inventory items
+                // ListView displaying current inventory items
                 Expanded(
-                  child: filteredItems.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 56),
-                              SizedBox(height: 12),
-                              Text(
-                                'No matching materials found',
-                                style: TextStyle(color: Colors.white54, fontSize: 15),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: filteredItems.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final item = filteredItems[index];
-                            return _buildStockItemCard(item: item, cardBg: cardBg);
-                          },
-                        ),
+                  child: _isLoading 
+                    ? const Center(
+                        child: CircularProgressIndicator(color: yellowAccent),
+                      )
+                    : RefreshIndicator(
+                        color: yellowAccent,
+                        backgroundColor: cardBg,
+                        onRefresh: _fetchData,
+                        child: filteredItems.isEmpty
+                          ? ListView(
+                              children: [
+                                const SizedBox(height: 100),
+                                Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 56),
+                                      SizedBox(height: 12),
+                                      Text(
+                                        'No matching materials found',
+                                        style: TextStyle(color: Colors.white54, fontSize: 15),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              itemCount: filteredItems.length,
+                              separatorBuilder: (context, index) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = filteredItems[index];
+                                return _buildStockItemCard(item: item, cardBg: cardBg);
+                              },
+                            ),
+                      ),
                 ),
               ],
             ),
@@ -219,19 +195,51 @@ class _StockViewState extends State<StockView> {
     );
   }
 
-  // 5. Dark Card (0xFF1E1E1E) with subtle border, material name, SKU, bold yellow stock numbers, status badge
   Widget _buildStockItemCard({
-    required StockItem item,
+    required InventoryItemModel item,
     required Color cardBg,
   }) {
     const yellowAccent = Color(0xFFFFD700);
+    const predictiveWarningColor = Colors.orange;
+
+    final isLowStock = item.stockLevel <= item.reorderThreshold;
+    final hasPredictiveAlert = _hasPredictiveAlert(item.sku);
+    final isWarning = isLowStock || hasPredictiveAlert;
+
+    Color borderColor = Colors.white12;
+    if (isLowStock) {
+      borderColor = const Color(0xFFFF5252);
+    } else if (hasPredictiveAlert) {
+      borderColor = predictiveWarningColor;
+    }
+
+    // Determine the status text and colors
+    String statusText = 'In Stock';
+    Color statusColor = const Color(0xFF4CAF50);
+    Color statusBg = const Color(0x334CAF50);
+
+    if (isLowStock) {
+      statusText = 'Low Stock';
+      statusColor = const Color(0xFFFF5252);
+      statusBg = const Color(0x33FF5252);
+    } else if (hasPredictiveAlert) {
+      statusText = 'Predictive Alert';
+      statusColor = predictiveWarningColor;
+      statusBg = predictiveWarningColor.withValues(alpha: 0.2);
+    }
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12, width: 1),
-        boxShadow: const [
+        border: Border.all(color: borderColor, width: isWarning ? 2.0 : 1.0),
+        boxShadow: isWarning ? [
+          BoxShadow(
+            color: borderColor.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ] : const [
           BoxShadow(
             color: Color(0x0F000000),
             blurRadius: 8,
@@ -265,6 +273,18 @@ class _StockViewState extends State<StockView> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                if (hasPredictiveAlert && !isLowStock)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'Forecasted Stockout (< 5 Days)',
+                      style: TextStyle(
+                        color: predictiveWarningColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -274,9 +294,9 @@ class _StockViewState extends State<StockView> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${item.quantity} ${item.unit}',
-                style: const TextStyle(
-                  color: yellowAccent,
+                '${item.stockLevel} Units',
+                style: TextStyle(
+                  color: isLowStock ? const Color(0xFFFF5252) : yellowAccent,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -285,23 +305,17 @@ class _StockViewState extends State<StockView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: item.isLowStock
-                      ? const Color(0x33FF5252)
-                      : const Color(0x334CAF50),
+                  color: statusBg,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: item.isLowStock
-                        ? const Color(0xFFFF5252)
-                        : const Color(0xFF4CAF50),
+                    color: statusColor,
                     width: 1,
                   ),
                 ),
                 child: Text(
-                  item.isLowStock ? 'Low Stock' : 'In Stock',
+                  statusText,
                   style: TextStyle(
-                    color: item.isLowStock
-                        ? const Color(0xFFFF5252)
-                        : const Color(0xFF4CAF50),
+                    color: statusColor,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                   ),

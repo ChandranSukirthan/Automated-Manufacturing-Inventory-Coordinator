@@ -453,15 +453,14 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                       ),
 
                       _buildTimelineStep(
-                        title: 'Pending Manager Approval',
-                        subtitle: 'Awaiting response',
-                        leadingIcon: Container(
+                        title: 'Pending Approval...',
+                        subtitle: 'Waiting for manager review',
+                        leadingIcon: const SizedBox(
                           width: 20,
                           height: 20,
-                          decoration: BoxDecoration(
-                            color: const Color(0x33FFD700),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: yellowAccent.withAlpha(150), width: 1.5),
+                          child: CircularProgressIndicator(
+                            color: yellowAccent,
+                            strokeWidth: 2,
                           ),
                         ),
                         titleColor: yellowAccent, 
@@ -476,41 +475,60 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
             ),
           ),
 
-          bottomNavigationBar: Container(
-            decoration: const BoxDecoration(
-              color: cardBg,
-              border: Border(top: BorderSide(color: Colors.white12, width: 1)),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  index: 0,
-                  icon: Icons.grid_view_rounded,
-                  label: 'DASHBOARD',
-                  isActive: _selectedNavIndex == 0,
-                ),
-                _buildNavItem(
-                  index: 1,
-                  icon: Icons.qr_code_scanner,
-                  label: 'SCANNER',
-                  isActive: _selectedNavIndex == 1,
-                ),
-                _buildNavItem(
-                  index: 2,
-                  icon: Icons.inventory_2_outlined,
-                  label: 'STOCK',
-                  isActive: _selectedNavIndex == 2,
-                ),
-                _buildNavItem(
-                  index: 3,
-                  icon: Icons.precision_manufacturing,
-                  label: 'TRACKER',
-                  isActive: _selectedNavIndex == 3,
-                ),
-              ],
-            ),
+          bottomNavigationBar: BottomNavigationBar(
+            backgroundColor: cardBg,
+            type: BottomNavigationBarType.fixed,
+            currentIndex: _selectedNavIndex,
+            selectedItemColor: yellowAccent,
+            unselectedItemColor: Colors.white60,
+            onTap: (index) {
+              setState(() {
+                _selectedNavIndex = index;
+              });
+
+              if (index == 1) { // SCANNER TAB
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ScannerView(controller: widget.controller),
+                  ),
+                );
+              } else if (index == 2) { // STOCK TAB
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => StockView(controller: widget.controller),
+                  ),
+                );
+              } else if (index == 3) { // TRACKER TAB
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TrackerView(controller: widget.controller),
+                  ),
+                );
+              } else if (widget.onTabSelected != null) {
+                widget.onTabSelected!(index);
+              }
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.grid_view_rounded),
+                label: 'DASHBOARD',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.qr_code_scanner),
+                label: 'SCANNER',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.inventory_2_outlined),
+                label: 'STOCK',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.precision_manufacturing),
+                label: 'TRACKER',
+              ),
+            ],
           ),
         );
       },
@@ -608,78 +626,6 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNavItem({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool isActive,
-  }) {
-    const yellowAccent = Color(0xFFFFD700);
-
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedNavIndex = index;
-        });
-
-        // 2. Navigate to the correct screen based on which tab was clicked!
-        if (index == 1) { // SCANNER TAB
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ScannerView(controller: widget.controller),
-            ),
-          );
-        } else if (index == 2) { // STOCK TAB
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => StockView(controller: widget.controller),
-            ),
-          );
-        } else if (index == 3) { // TRACKER TAB
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TrackerView(controller: widget.controller),
-            ),
-          );
-        } else if (widget.onTabSelected != null) {
-          widget.onTabSelected!(index);
-        }
-
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? yellowAccent : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? Colors.black : Colors.white60,
-              size: 22,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.black : Colors.white60,
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
