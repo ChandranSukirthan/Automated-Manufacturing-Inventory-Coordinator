@@ -1,6 +1,0 @@
-@ManufacturingCoordinator.Api_HostAddress = http://localhost:5070
-
-GET {{ManufacturingCoordinator.Api_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

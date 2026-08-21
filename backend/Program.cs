@@ -1,49 +1,51 @@
-using ManufacturingCoordinator.Api.Data;
 using Microsoft.EntityFrameworkCore;
+using backend.Data;
+using backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers
+// Add services to the container.
 builder.Services.AddControllers();
-
-// PostgreSQL + Entity Framework Core
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
-);
-
-// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS for React frontend
+// Register EF Core PostgreSQL Database Context
+builder.Services.AddDbContext<ManufacturingContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Register Inventory Service Dependency Injection
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+
+// Enable CORS for Flutter mobile & web clients
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ReactFrontend", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy
-            .WithOrigins("http://localhost:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
 });
 
 var app = builder.Build();
 
-// Swagger
-if (app.Environment.IsDevelopment())
+// Enable Swagger UI middleware so API endpoints appear in Swagger UI
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Automated Manufacturing Inventory API v1");
+    c.RoutePrefix = string.Empty; // Serve Swagger UI at root URL
+});
+
+// Auto-create database tables on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ManufacturingContext>();
+    dbContext.Database.EnsureCreated();
 }
 
-app.UseCors("ReactFrontend");
-
-app.UseHttpsRedirection();
-
+app.UseCors("AllowAll");
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
