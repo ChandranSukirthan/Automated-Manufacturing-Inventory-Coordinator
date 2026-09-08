@@ -92,11 +92,35 @@ class InventoryApiService {
         Iterable list = json.decode(response.body);
         return list.map((model) => StockAlertModel.fromJson(model)).toList();
       } else {
-        throw Exception('Failed to load alerts. Status Code: \${response.statusCode}');
+        throw Exception('Failed to load alerts. Status Code: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('Error fetching alerts: \$e');
+      debugPrint('Error fetching alerts: $e');
       return [];
     }
+  }
+
+  // Phase 3: Agent Integration
+  String get agentBaseUrl {
+    if (!kIsWeb && Platform.isAndroid) {
+      return 'http://10.0.2.2:8000/api/agent';
+    }
+    return 'http://localhost:8000/api/agent';
+  }
+
+  Future<Map<String, dynamic>?> triggerDataExtractionAgent(String batchName) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$agentBaseUrl/extract-data'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'batchName': batchName}),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+    } catch (e) {
+      debugPrint('Error triggering agent: $e');
+    }
+    return null;
   }
 }

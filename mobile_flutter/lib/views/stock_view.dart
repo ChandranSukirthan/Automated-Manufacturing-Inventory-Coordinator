@@ -62,6 +62,73 @@ class _StockViewState extends State<StockView> {
     );
   }
 
+  Future<void> _triggerAgentAnalysis(BuildContext context) async {
+    // Show a loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+    );
+
+    // Call the Data Extraction Agent for a target batch (e.g. "BoxPouch")
+    final result = await _apiService.triggerDataExtractionAgent('BoxPouch');
+
+    // Close loading dialog
+    if (context.mounted) Navigator.pop(context);
+
+    if (result != null) {
+      final requiresApproval = result['requiresApproval'] == true;
+      final agentMessage = result['agentMessage'] ?? 'Analysis complete.';
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            title: Row(
+              children: [
+                Icon(Icons.smart_toy, color: requiresApproval ? Colors.orange : const Color(0xFFFFD700)),
+                const SizedBox(width: 10),
+                Text(
+                  requiresApproval ? 'Action Required' : 'Analysis Complete',
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                ),
+              ],
+            ),
+            content: Text(
+              agentMessage,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(requiresApproval ? 'Reject' : 'Close', style: const TextStyle(color: Colors.grey)),
+              ),
+              if (requiresApproval)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
+                  onPressed: () {
+                    // In a real app, this would hit the POST /api/AgentWorkflow/callback endpoint
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Reorder Approved & Scheduled!'), backgroundColor: Colors.green),
+                    );
+                  },
+                  child: const Text('Approve Reorder', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+        );
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to reach AI Agent.'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -109,6 +176,12 @@ class _StockViewState extends State<StockView> {
                 letterSpacing: 1.1,
               ),
             ),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _triggerAgentAnalysis(context),
+            backgroundColor: yellowAccent,
+            icon: const Icon(Icons.smart_toy, color: Colors.black),
+            label: const Text('Agent Analysis', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
           body: Padding(
             padding: const EdgeInsets.all(16.0),

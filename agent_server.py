@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-import httpx
+import httpx 
+from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -134,6 +135,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI Agent Server", lifespan=lifespan)
 
+# --- CORS MIDDLEWARE ADDED HERE ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# ----------------------------------
+
 @app.post("/api/predict")
 async def predict_inventory_needs(items: List[InventoryItem]):
     """
@@ -168,6 +179,41 @@ async def predict_inventory_needs(items: List[InventoryItem]):
     except Exception as e:
         logger.error(f"Error during prediction: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error during prediction.")
+
+class DataExtractionRequest(BaseModel):
+    batchName: str
+
+@app.post("/api/agent/extract-data")
+async def extract_data_agent_workflow(request: DataExtractionRequest):
+    """
+    Phase 3: End-to-end Data Extraction Agent workflow using LangGraph.
+    """
+    try:
+        from data_extraction_agent import run_data_extraction_workflow
+        
+        # Execute the LangGraph state machine
+        logger.info(f"Triggering Data Extraction Agent for batch: {request.batchName}")
+        
+        # In a real async environment, we'd use a background task or async graph invocation.
+        # For this prototype, we'll run it synchronously.
+        result_state = run_data_extraction_workflow(request.batchName)
+        
+        if result_state:
+            return {
+                "status": "success",
+                "requiresApproval": result_state.get("requires_human_approval"),
+                "approvalStatus": result_state.get("human_approval_status"),
+                "agentMessage": result_state["messages"][-1].content
+            }
+        else:
+            raise HTTPException(status_code=500, detail="LangGraph execution failed. Check dependencies.")
+            
+    except ImportError:
+        logger.error("data_extraction_agent.py not found or missing dependencies.")
+        raise HTTPException(status_code=500, detail="Agent logic not found.")
+    except Exception as e:
+        logger.error(f"Agent error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

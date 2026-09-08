@@ -99,5 +99,47 @@ namespace backend.Controllers
 
             return Ok(item); // Returns a 200 OK with the item data
         }
+
+        // Student A - POST: api/inventory/rolls
+        [HttpPost("rolls")]
+        public async Task<ActionResult<InventoryRoll>> CreateRoll([FromBody] InventoryRoll roll)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try 
+            {
+                var createdRoll = await _inventoryService.CreateInventoryRollAsync(roll);
+                // Return 201 Created
+                return CreatedAtAction(nameof(GetItem), new { id = createdRoll.Id }, createdRoll);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        // Student A - POST: api/inventory/rawmaterials
+        [HttpPost("rawmaterials")]
+        public async Task<ActionResult<RawMaterial>> CreateRawMaterial([FromBody] RawMaterial material)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            try 
+            {
+                var createdMaterial = await _inventoryService.CreateRawMaterialAsync(material);
+                // Return 201 Created (ignoring GetItem redirection for brevity)
+                return CreatedAtAction(nameof(GetItem), new { id = createdMaterial.Id }, createdMaterial);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

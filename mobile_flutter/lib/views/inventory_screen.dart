@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import '../services/inventory_api_service.dart';
 
@@ -43,8 +45,90 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return _alerts.any((alert) => 
       alert.sku == sku && 
       alert.workerId.contains('Predictive') &&
-      alert.status != 'Resolved' // Assuming they aren't resolved
+      alert.status != 'Resolved'
     );
+  }
+
+  Future<void> _triggerAgentAnalysis(BuildContext context) async {
+    // Show a loading indicator dialog while waiting for the response
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFFFFD700))),
+    );
+
+    try {
+      // Trigger an asynchronous HTTP POST request to our local Python FastAPI LangGraph agent server
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/api/agent/extract-data'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'batchName': 'BoxPouch'}),
+      );
+
+      // Close loading dialog
+      if (context.mounted) Navigator.pop(context);
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        final requiresApproval = result['requiresApproval'] == true;
+        final agentMessage = result['agentMessage'] ?? 'Analysis complete.';
+        final status = result['status'] ?? 'Success';
+
+        if (context.mounted) {
+          // Display the agent's status, approval requirements, and message inside a clean AlertDialog popup
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1E1E1E),
+              title: Row(
+                children: [
+                  Icon(Icons.smart_toy, color: requiresApproval ? Colors.orange : const Color(0xFFFFD700)),
+                  const SizedBox(width: 10),
+                  Text(
+                    requiresApproval ? 'Action Required' : 'Status: $status',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: Text(
+                agentMessage,
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(requiresApproval ? 'Reject' : 'Close', style: const TextStyle(color: Colors.grey)),
+                ),
+                if (requiresApproval)
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reorder Approved & Scheduled!'), backgroundColor: Colors.green),
+                      );
+                    },
+                    child: const Text('Approve Reorder', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Server Error: ${response.statusCode}'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context); // close loader if error
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reach AI Agent: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -67,6 +151,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
             letterSpacing: 1.1,
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _triggerAgentAnalysis(context),
+        backgroundColor: const Color(0xFFFFD700),
+        icon: const Icon(Icons.smart_toy, color: Colors.black),
+        label: const Text('Run Agent Analysis', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
       body: _isLoading
           ? const Center(

@@ -14,5 +14,9 @@ namespace backend.Services
         Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item);
         Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item);
         Task<bool> DeleteInventoryItemAsync(int id);
+        
+        // Student A - New Method for Inventory Roll and Raw Material
+        Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
+        Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material);
     }
 }

@@ -16,6 +16,12 @@ builder.Services.AddDbContext<ManufacturingContext>(options =>
 // Register Inventory Service Dependency Injection
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 
+// Register Barcode Service
+builder.Services.AddScoped<IBarcodeService, BarcodeService>();
+
+// Register Agent Integration Service Dependency Injection
+builder.Services.AddHttpClient<IAgentIntegrationService, AgentIntegrationService>();
+
 // Enable CORS for Flutter mobile & web clients
 builder.Services.AddCors(options =>
 {

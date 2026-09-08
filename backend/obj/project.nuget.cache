@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "/wkFooZ+Dsw=",
+  "dgSpecHash": "8/BwtO7N56s=",
   "success": true,
-  "projectFilePath": "C:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC_project\\Automated_Manufacturing_Inventory_Coordinator\\backend\\backend.csproj",
+  "projectFilePath": "c:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC\\Automated-Manufacturing-Inventory-Coordinator\\backend\\backend.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\MSI\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\MSI\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\6.0.0\\microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
