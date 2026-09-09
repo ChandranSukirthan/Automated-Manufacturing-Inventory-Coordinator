@@ -10,6 +10,8 @@ namespace ManufacturingCoordinator.Api.Interfaces
         Task<MessageResponseDto> ResendOtpAsync(ResendOtpRequestDto request);
         Task<AuthResponseDto> LoginAsync(LoginRequestDto request);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request);
+        Task<MessageResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request);
+        Task<MessageResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request);
         Task<GoogleLoginResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request);
         Task<AuthResponseDto> GoogleRegisterAsync(GoogleRegisterRequestDto request);
     }

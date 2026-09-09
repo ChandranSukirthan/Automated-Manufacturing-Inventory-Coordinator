@@ -56,6 +56,24 @@ namespace ManufacturingCoordinator.Api.Controllers
             return Ok(result);
         }
 
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var result = await _authService.ForgotPasswordAsync(request);
+            return Ok(result);
+        }
+
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var result = await _authService.ResetPasswordAsync(request);
+            return Ok(result);
+        }
+
         [HttpPost("login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
