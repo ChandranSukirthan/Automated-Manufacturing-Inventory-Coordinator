@@ -32,8 +32,10 @@ namespace ManufacturingCoordinator.Api.Services
 
                 using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
                 {
-                    Credentials = new NetworkCredential(_settings.EmailUser, _settings.EmailPass),
-                    EnableSsl = true
+                    UseDefaultCredentials = false,
+                    Credentials = new NetworkCredential(_settings.EmailUser.Trim(), _settings.EmailPass.Trim()),
+                    EnableSsl = true,
+                    DeliveryMethod = SmtpDeliveryMethod.Network
                 };
 
                 var fromAddress = new MailAddress(_settings.EmailUser, _settings.FromName);
