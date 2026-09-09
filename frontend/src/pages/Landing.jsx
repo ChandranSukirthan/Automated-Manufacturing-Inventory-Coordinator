@@ -26,7 +26,7 @@ export default function Landing() {
           <img 
             src="/assets/amic-logo.png" 
             alt="AMIC Logo" 
-            className="w-12 h-12 object-contain drop-shadow-[0_0_12px_rgba(14,165,233,0.5)]" 
+            className="w-12 h-12 object-contain filter drop-shadow-[0_0_15px_rgba(14,165,233,0.6)]" 
           />
           <h1 className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
             AMIC
