@@ -2736,11 +2736,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "c:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC\\Automated-Manufacturing-Inventory-Coordinator\\backend\\backend.csproj",
+      "projectUniqueName": "C:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC_project\\Automated_Manufacturing_Inventory_Coordinator\\backend\\backend.csproj",
       "projectName": "backend",
-      "projectPath": "c:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC\\Automated-Manufacturing-Inventory-Coordinator\\backend\\backend.csproj",
+      "projectPath": "C:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC_project\\Automated_Manufacturing_Inventory_Coordinator\\backend\\backend.csproj",
       "packagesPath": "C:\\Users\\MSI\\.nuget\\packages\\",
-      "outputPath": "c:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC\\Automated-Manufacturing-Inventory-Coordinator\\backend\\obj\\",
+      "outputPath": "C:\\Users\\MSI\\Desktop\\Y3S1 labsheets\\SEF-labsheets\\AMIC_project\\Automated_Manufacturing_Inventory_Coordinator\\backend\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\MSI\\AppData\\Roaming\\NuGet\\NuGet.Config"

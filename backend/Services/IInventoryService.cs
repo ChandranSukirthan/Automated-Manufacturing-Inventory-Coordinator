@@ -11,6 +11,7 @@ namespace backend.Services
         Task<InventoryItem> GetInventoryItemByIdAsync(int id);
         Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync();
         Task<StockAlertResponseDto> CreateStockAlertAsync(CreateStockAlertDto alertDto);
+        Task<bool> UpdateAlertStatusAsync(int id, string newStatus);
         Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item);
         Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item);
         Task<bool> DeleteInventoryItemAsync(int id);

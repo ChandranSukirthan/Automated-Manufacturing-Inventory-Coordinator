@@ -37,44 +37,8 @@ class _StockViewState extends State<StockView> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  final List<StockItem> _defaultItems = const [
-    StockItem(
-      name: 'Polyethylene Film',
-      sku: 'RM-PLASTIC-502',
-      quantity: 150,
-      isLowStock: true,
-    ),
-    StockItem(
-      name: 'Box Pouch',
-      sku: 'BX-POUCH-101',
-      quantity: 850,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Biscuit Packaging',
-      sku: 'PK-BISCUIT-04',
-      quantity: 1200,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Tea Bag Roll',
-      sku: 'TB-ROLL-88',
-      quantity: 90,
-      isLowStock: true,
-    ),
-    StockItem(
-      name: 'Aluminum Can',
-      sku: 'CN-ALUM-330',
-      quantity: 3400,
-      isLowStock: false,
-    ),
-    StockItem(
-      name: 'Plastic Bottle',
-      sku: 'BT-PET-500',
-      quantity: 45,
-      isLowStock: true,
-    ),
-  ];
+  bool _isLoading = true;
+  List<StockItem> _fetchedItems = [];
 
   @override
   void initState() {
@@ -84,6 +48,52 @@ class _StockViewState extends State<StockView> {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+    _fetchInventory();
+  }
+
+  Future<void> _fetchInventory() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await http.get(Uri.parse('http://localhost:5158/api/Inventory'));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = json.decode(response.body);
+
+        setState(() {
+          _fetchedItems = jsonList.map((jsonItem) {
+            String rawCategory = jsonItem['category'] ?? 'Units';
+            
+            // Format category to explicitly use mixed case
+            String formattedUnit = rawCategory;
+            if (rawCategory.isNotEmpty) {
+              formattedUnit = rawCategory[0].toUpperCase() + rawCategory.substring(1).toLowerCase();
+            }
+
+            final int quantity = jsonItem['stockLevel'] ?? 0;
+            final int threshold = jsonItem['reorderThreshold'] ?? 0;
+
+            return StockItem(
+              name: jsonItem['name'] ?? 'Unknown Item',
+              sku: jsonItem['sku'] ?? 'UNKNOWN-SKU',
+              quantity: quantity,
+              unit: formattedUnit,
+              isLowStock: quantity <= threshold,
+            );
+          }).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching inventory: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -170,6 +180,130 @@ class _StockViewState extends State<StockView> {
     }
   }
 
+  void _showAddStockDialog() {
+    final _formKey = GlobalKey<FormState>();
+    String sku = '';
+    String name = '';
+    String category = 'BoxPouch';
+    int stockLevel = 0;
+    int reorderThreshold = 0;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text('Add Manual Stock', style: TextStyle(color: Colors.white)),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'SKU', labelStyle: TextStyle(color: Colors.white54)),
+                    validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                    onSaved: (value) => sku = value!,
+                  ),
+                  TextFormField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Name', labelStyle: TextStyle(color: Colors.white54)),
+                    validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                    onSaved: (value) => name = value!,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: category,
+                    dropdownColor: const Color(0xFF1E1E1E),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Category', labelStyle: TextStyle(color: Colors.white54)),
+                    items: ['BoxPouch', 'Can', 'Bottle', 'TeaBag']
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (value) => category = value!,
+                  ),
+                  TextFormField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Stock Level', labelStyle: TextStyle(color: Colors.white54)),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Required';
+                      if (int.tryParse(value) == null) return 'Must be a valid integer';
+                      return null;
+                    },
+                    onSaved: (value) => stockLevel = int.parse(value!),
+                  ),
+                  TextFormField(
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Reorder Threshold', labelStyle: TextStyle(color: Colors.white54)),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Required';
+                      if (int.tryParse(value) == null) return 'Must be a valid integer';
+                      return null;
+                    },
+                    onSaved: (value) => reorderThreshold = int.parse(value!),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFFD700)),
+              onPressed: () async {
+                if (_formKey.currentState!.validate()) {
+                  _formKey.currentState!.save();
+                  
+                  try {
+                    final response = await http.post(
+                      Uri.parse('http://localhost:5158/api/Inventory'),
+                      headers: {'Content-Type': 'application/json'},
+                      body: json.encode({
+                        'sku': sku,
+                        'name': name,
+                        'category': category,
+                        'stockLevel': stockLevel,
+                        'reorderThreshold': reorderThreshold,
+                      }),
+                    );
+
+                    if (response.statusCode == 200 || response.statusCode == 201) {
+                      if (context.mounted) Navigator.pop(dialogContext);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Stock successfully registered!'), backgroundColor: Colors.green),
+                        );
+                      }
+                      _fetchInventory();
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to add stock: ${response.statusCode}'), backgroundColor: Colors.red),
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Network error: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                }
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const yellowAccent = Color(0xFFFFD700);
@@ -180,14 +314,7 @@ class _StockViewState extends State<StockView> {
       animation: widget.controller,
       builder: (context, child) {
         final List<StockItem> items = [
-          if (widget.controller.sku.isNotEmpty)
-            StockItem(
-              name: '${widget.controller.packagingType} (Current Request)',
-              sku: widget.controller.sku,
-              quantity: widget.controller.quantityRequested,
-              isLowStock: widget.controller.quantityRequested < 200,
-            ),
-          ..._defaultItems,
+          ..._fetchedItems,
         ];
 
         final filteredItems = items.where((item) {
@@ -198,11 +325,26 @@ class _StockViewState extends State<StockView> {
 
         return Scaffold(
           backgroundColor: darkBg,
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _triggerAgentAnalysis(context),
-            backgroundColor: yellowAccent,
-            icon: const Icon(Icons.smart_toy, color: Colors.black),
-            label: const Text('Run Agent Analysis', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          floatingActionButton: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              FloatingActionButton.extended(
+                heroTag: 'addStockBtn',
+                onPressed: _showAddStockDialog,
+                backgroundColor: const Color(0xFF1E1E1E),
+                icon: const Icon(Icons.add, color: yellowAccent),
+                label: const Text('Add Stock', style: TextStyle(color: yellowAccent)),
+              ),
+              const SizedBox(height: 12),
+              FloatingActionButton.extended(
+                heroTag: 'agentAnalysisBtn',
+                onPressed: () => _triggerAgentAnalysis(context),
+                backgroundColor: yellowAccent,
+                icon: const Icon(Icons.smart_toy, color: Colors.black),
+                label: const Text('Run Agent Analysis', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
           appBar: AppBar(
             backgroundColor: darkBg,
@@ -270,28 +412,46 @@ class _StockViewState extends State<StockView> {
 
                 // 4. ListView displaying current inventory items
                 Expanded(
-                  child: filteredItems.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 56),
-                              SizedBox(height: 12),
-                              Text(
-                                'No matching materials found',
-                                style: TextStyle(color: Colors.white54, fontSize: 15),
-                              ),
-                            ],
-                          ),
+                  child: _isLoading 
+                      ? const Center(
+                          child: CircularProgressIndicator(color: yellowAccent),
                         )
-                      : ListView.separated(
-                          itemCount: filteredItems.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final item = filteredItems[index];
-                            return _buildStockItemCard(item: item, cardBg: cardBg);
-                          },
-                        ),
+                      : _fetchedItems.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.inventory_2_outlined, color: Colors.white24, size: 56),
+                                  SizedBox(height: 12),
+                                  Text(
+                                    'No live inventory data found. Please register stock.',
+                                    style: TextStyle(color: Colors.white54, fontSize: 15),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : filteredItems.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.search_off, color: Colors.white24, size: 56),
+                                      SizedBox(height: 12),
+                                      Text(
+                                        'No matching materials found',
+                                        style: TextStyle(color: Colors.white54, fontSize: 15),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.separated(
+                                  itemCount: filteredItems.length,
+                                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                                  itemBuilder: (context, index) {
+                                    final item = filteredItems[index];
+                                    return _buildStockItemCard(item: item, cardBg: cardBg);
+                                  },
+                                ),
                 ),
               ],
             ),

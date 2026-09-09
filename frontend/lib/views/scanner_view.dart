@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../controllers/inventory_controller.dart';
 
 class ScannerView extends StatefulWidget {
@@ -26,6 +28,61 @@ class _ScannerViewState extends State<ScannerView> {
     super.dispose();
   }
 
+  Future<void> _registerScannedRoll(String rollId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://localhost:5158/api/Inventory/rolls'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'qrCodeId': rollId, 'status': 'Scanned'}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.green,
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Roll successfully registered: $rollId',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to register roll: ${response.statusCode}'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Network error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      // Reset scanner state after a delay so it can scan the next item
+      if (mounted) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _hasScanned = false;
+            });
+          }
+        });
+      }
+    }
+  }
+
   void _handleBarcode(BarcodeCapture capture) {
     if (_hasScanned) return;
 
@@ -37,47 +94,10 @@ class _ScannerViewState extends State<ScannerView> {
         });
 
         final scannedCode = barcode.rawValue!;
-
-        // Pass String data to controller placeholder method
         widget.controller.setSku(scannedCode);
-
-        // Show yellow SnackBar saying "Scan Successful"
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFFFD700),
-            duration: const Duration(seconds: 2),
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.black),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Scan Successful: $scannedCode',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            if (widget.onBack != null) {
-              widget.onBack!();
-            } else if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              setState(() {
-                _hasScanned = false;
-              });
-            }
-          }
-        });
-
+        
+        // Register the roll asynchronously
+        _registerScannedRoll(scannedCode);
         break;
       }
     }

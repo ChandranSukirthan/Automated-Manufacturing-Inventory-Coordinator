@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import '../controllers/inventory_controller.dart';
 
@@ -40,35 +42,60 @@ class TrackerView extends StatefulWidget {
 class _TrackerViewState extends State<TrackerView> {
   int _selectedNavIndex = 3; // Index 3: TRACKER active
 
-  final List<TrackerAlertItem> _mockHistory = const [
-    TrackerAlertItem(
-      packagingType: 'Box Pouch',
-      sku: 'RM-PLASTIC-502',
-      quantity: 500,
-      timestamp: 'Today, 08:15 AM',
-      status: 'Pending Manager Approval',
-      isPending: true,
-      progressSteps: ['Alert Logged', 'AI Plan Generated', 'Awaiting Approval'],
-    ),
-    TrackerAlertItem(
-      packagingType: 'Cardboard Box',
-      sku: 'BX-CARD-901',
-      quantity: 1200,
-      timestamp: 'Yesterday, 03:40 PM',
-      status: 'PO Dispatched',
-      isPending: false,
-      progressSteps: ['Data Extracted', 'PO Drafted', 'PO Dispatched'],
-    ),
-    TrackerAlertItem(
-      packagingType: 'Plastic Drum',
-      sku: 'DR-CHEM-33',
-      quantity: 300,
-      timestamp: 'Aug 18, 11:20 AM',
-      status: 'Fulfilled',
-      isPending: false,
-      progressSteps: ['Alert Logged', 'Supplier Confirmed', 'Delivered'],
-    ),
-  ];
+  bool _isLoading = true;
+  List<TrackerAlertItem> _fetchedAlerts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchAlerts();
+  }
+
+  Future<void> _fetchAlerts() async {
+    try {
+      final response = await http.get(Uri.parse('http://localhost:5158/api/Inventory/alerts'));
+      if (response.statusCode == 200) {
+        final List<dynamic> alertsJson = json.decode(response.body);
+        
+        setState(() {
+          _fetchedAlerts = alertsJson.map((a) {
+            final String status = a['status'] ?? 'Pending';
+            final bool isPending = status == 'Pending' || status == 'Pending Approval';
+            
+            // Map real backend status to visual timeline steps
+            List<String> progressSteps = ['Alert Logged', 'AI Plan Generated', 'Awaiting Approval'];
+            if (status == 'Approved') {
+              progressSteps = ['Data Extracted', 'PO Drafted', 'Approved'];
+            } else if (status == 'Rejected') {
+              progressSteps = ['Alert Logged', 'AI Plan Generated', 'Rejected'];
+            } else if (status == 'PO Dispatched') {
+              progressSteps = ['Data Extracted', 'PO Drafted', 'PO Dispatched'];
+            } else if (status == 'Fulfilled') {
+              progressSteps = ['Alert Logged', 'Supplier Confirmed', 'Delivered'];
+            }
+
+            return TrackerAlertItem(
+              packagingType: a['packagingType'] ?? 'Unknown',
+              sku: a['sku'] ?? 'N/A',
+              quantity: a['quantityRequested'] ?? 0,
+              timestamp: a['timestamp'] != null ? a['timestamp'].toString().split('T')[0] : 'Just now',
+              status: status,
+              isPending: isPending,
+              progressSteps: progressSteps,
+            );
+          }).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching alerts: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,23 +106,8 @@ class _TrackerViewState extends State<TrackerView> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, child) {
-        // Build items list with dynamic submission from controller if present
         final List<TrackerAlertItem> alertItems = [
-          if (widget.controller.sku.isNotEmpty)
-            TrackerAlertItem(
-              packagingType: widget.controller.packagingType.isNotEmpty
-                  ? widget.controller.packagingType
-                  : 'Box Pouch',
-              sku: widget.controller.sku,
-              quantity: widget.controller.quantityRequested,
-              timestamp: 'Just now',
-              status: widget.controller.successMessage != null
-                  ? 'Pending Manager Approval'
-                  : 'Submitted to AI',
-              isPending: true,
-              progressSteps: ['Alert Logged', 'AI Plan Generated', 'Awaiting Approval'],
-            ),
-          ..._mockHistory,
+          ..._fetchedAlerts,
         ];
 
         return Scaffold(
@@ -129,15 +141,19 @@ class _TrackerViewState extends State<TrackerView> {
           ),
 
           // 3. Main body: ListView displaying history of submitted low-stock alerts
-          body: ListView.separated(
-            padding: const EdgeInsets.all(16.0),
-            itemCount: alertItems.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              final alert = alertItems[index];
-              return _buildAlertCard(alert: alert, cardBg: cardBg);
-            },
-          ),
+          body: _isLoading 
+            ? const Center(child: CircularProgressIndicator(color: yellowAccent))
+            : alertItems.isEmpty 
+              ? const Center(child: Text('No alerts tracked yet.', style: TextStyle(color: Colors.white54)))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16.0),
+                  itemCount: alertItems.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 16),
+                  itemBuilder: (context, index) {
+                    final alert = alertItems[index];
+                    return _buildAlertCard(alert: alert, cardBg: cardBg);
+                  },
+                ),
 
           // 6. BottomNavigationBar with TRACKER tab (index 3) set as active, highlighted tab
           bottomNavigationBar: _buildBottomNavBar(),

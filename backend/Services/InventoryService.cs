@@ -79,6 +79,19 @@ namespace backend.Services
             };
         }
 
+        public async Task<bool> UpdateAlertStatusAsync(int id, string newStatus)
+        {
+            var alert = await _context.StockAlerts.FindAsync(id);
+            if (alert == null)
+            {
+                return false;
+            }
+
+            alert.Status = newStatus;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item)
         {
             if (id != item.Id)
