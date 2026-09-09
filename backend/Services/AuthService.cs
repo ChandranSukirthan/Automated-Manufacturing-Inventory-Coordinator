@@ -177,7 +177,14 @@ namespace ManufacturingCoordinator.Api.Services
                     HttpStatusCode.TooManyRequests);
             }
 
-            await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            try
+            {
+                await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send registration OTP email to {Email}.", user.Email);
+            }
 
             return new MessageResponseDto
             {
@@ -213,7 +220,14 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("Please wait before requesting another code.", HttpStatusCode.TooManyRequests);
             }
 
-            await IssueAndSendOtpAsync(user, OtpPurpose.PasswordReset);
+            try
+            {
+                await IssueAndSendOtpAsync(user, OtpPurpose.PasswordReset);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send password reset OTP email to {Email}.", user.Email);
+            }
 
             return new MessageResponseDto
             {
