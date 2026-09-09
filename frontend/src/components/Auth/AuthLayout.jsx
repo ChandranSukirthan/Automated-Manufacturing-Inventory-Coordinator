@@ -22,9 +22,11 @@ export default function AuthLayout({ children, title, subtitle }) {
       <div className="relative z-10 w-[400px] max-w-[90vw] mx-auto px-4 py-12 flex flex-col justify-center">
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
-              <Package className="w-6 h-6 text-white" />
-            </div>
+            <img 
+              src="/assets/amic-logo.png" 
+              alt="AMIC Logo" 
+              className="w-14 h-14 object-contain drop-shadow-[0_0_12px_rgba(14,165,233,0.5)]" 
+            />
             <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
               AMIC
             </span>
