@@ -29,6 +29,16 @@ const authService = {
   googleRegister: async (tokenId, role) => {
     const response = await api.post('/auth/google-register', { tokenId, role });
     return response.data;
+  },
+
+  forgotPassword: async (email) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (email, code, newPassword) => {
+    const response = await api.post('/auth/reset-password', { email, code, newPassword });
+    return response.data;
   }
 };
 

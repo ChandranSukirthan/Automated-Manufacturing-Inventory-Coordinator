@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, googleLogin, googleRegister } = useAuth();
   const [formData, setFormData] = useState({ 
     name: '', 
     email: '', 
@@ -80,7 +80,7 @@ export default function Signup() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleLogin(credentialResponse.credential);
+      const data = await googleLogin(credentialResponse.credential);
       if (data.requiresRoleSelection) {
         setGoogleTokenId(credentialResponse.credential);
         setShowRoleModal(true);
@@ -98,7 +98,7 @@ export default function Signup() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleRegister(googleTokenId, parseInt(selectedRole, 10));
+      const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed.');

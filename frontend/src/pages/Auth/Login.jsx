@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, googleLogin, googleRegister } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,7 +72,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleLogin(credentialResponse.credential);
+      const data = await googleLogin(credentialResponse.credential);
       if (data.requiresRoleSelection) {
         setGoogleTokenId(credentialResponse.credential);
         setShowRoleModal(true);
@@ -90,7 +90,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleRegister(googleTokenId, parseInt(selectedRole, 10));
+      const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed.');
@@ -195,7 +195,7 @@ export default function Login() {
             <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900/50 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950" />
             <span className="text-slate-400 group-hover:text-slate-300 transition-colors">Remember me</span>
           </label>
-          <a href="#" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</a>
+          <Link to="/forgot-password" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</Link>
         </div>
 
         <button
