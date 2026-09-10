@@ -27,7 +27,7 @@ namespace ManufacturingCoordinator.Api.Services
                 if (string.IsNullOrEmpty(_settings.EmailUser) || string.IsNullOrEmpty(_settings.EmailPass))
                 {
                     _logger.LogWarning("Email credentials are not configured. Cannot send OTP to {Email}", toEmail);
-                    return;
+                    throw new AuthException("Server email credentials are not configured.");
                 }
 
                 using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
@@ -55,7 +55,7 @@ namespace ManufacturingCoordinator.Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error sending OTP email to {Email}", toEmail);
-                throw new InvalidOperationException("Failed to send verification email.", ex);
+                throw new AuthException($"Failed to send verification email: {ex.Message}");
             }
         }
     }
