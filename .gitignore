@@ -1,17 +1,3 @@
-<<<<<<< HEAD
-# .NET
-**/bin/
-**/obj/
-
-# Environment variables
-**/.env
-
-# macOS
-.DS_Store
-
-# Node
-**/node_modules/
-=======
 # Node/React Frontend
 node_modules/
 dist/
@@ -65,4 +51,3 @@ Thumbs.db
 
 # Antigravity/Gemini (if applicable)
 .gemini/
->>>>>>> b0a266eac59800bbd142cbc567ad4aa16dab27d1
