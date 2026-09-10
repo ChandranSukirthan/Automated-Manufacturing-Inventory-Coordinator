@@ -58,6 +58,21 @@ namespace ManufacturingCoordinator.Api.Services
 
         public async Task<DefectReportDto> CreateAsync(CreateDefectReportDto dto)
         {
+            if (dto == null)
+            {
+                throw new ArgumentNullException(nameof(dto));
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.BatchId))
+            {
+                throw new ArgumentException("Batch ID is required.", nameof(dto));
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Description))
+            {
+                throw new ArgumentException("Description is required.", nameof(dto));
+            }
+
             var report = new DefectReport
             {
                 BatchId = dto.BatchId.Trim(),

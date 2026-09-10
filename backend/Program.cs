@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization;
 
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
@@ -31,7 +32,11 @@ builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? bui
 builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // PostgreSQL + Entity Framework Core
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

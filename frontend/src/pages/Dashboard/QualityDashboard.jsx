@@ -1,58 +1,121 @@
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import dashboardService from '../../services/dashboardService';
 import QANavigation from '../../components/Dashboard/QANavigation';
-import { parseErrorMessage } from '../../utils/errorHandler';
+
+const statCards = [
+  { key: 'totalDefects', label: 'Total Defects', accent: 'emerald' },
+  { key: 'highSeverityDefects', label: 'High Severity', accent: 'rose' },
+  { key: 'activeQuarantines', label: 'Active Quarantines', accent: 'amber' },
+  { key: 'releasedQuarantines', label: 'Released', accent: 'cyan' }
+];
 
 export default function QualityDashboard() {
   const navigate = useNavigate();
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState({
+    totalDefects: 0,
+    highSeverityDefects: 0,
+    activeQuarantines: 0,
+    releasedQuarantines: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    dashboardService.getQualitySummary()
-      .then(setSummary)
-      .catch((err) => setError(parseErrorMessage(err, 'Unable to load QA dashboard data.')))
-      .finally(() => setLoading(false));
+    const loadSummary = async () => {
+      try {
+        const data = await dashboardService.getQualitySummary();
+        setSummary(data);
+      } catch (err) {
+        setError(err?.response?.data?.message || 'Unable to load quality dashboard summary.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSummary();
   }, []);
 
+  const cardStyles = {
+    emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+    rose: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+    amber: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+    cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-8">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
+      <div className="max-w-6xl mx-auto">
         <QANavigation />
-        <div className="flex items-center justify-between">
+
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-8">
           <div>
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>
-            <h1 className="text-4xl font-bold text-emerald-500 mt-2">Quality Control Dashboard</h1>
+            <h1 className="text-4xl font-bold mt-2">Quality Control Dashboard</h1>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => navigate('/dashboard/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">View Defects</button>
+            <button onClick={() => navigate('/dashboard/quarantine')} className="px-4 py-2 rounded-xl border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Manage Quarantine</button>
+            <button onClick={() => navigate('/dashboard/defects/new')} className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400">+ New Defect</button>
           </div>
         </div>
 
-        {error && <div className="mt-6 p-3 rounded bg-red-500/10 text-red-300 border border-red-500/30">{error}</div>}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-          {[
-            ['Total Defects', summary?.totalDefects],
-            ['High Severity', summary?.highSeverityDefects],
-            ['Active Quarantines', summary?.activeQuarantines],
-            ['Released Quarantines', summary?.releasedQuarantines]
-          ].map(([label, value]) => (
-            <div key={label} className="p-6 rounded-2xl border border-slate-800 bg-slate-900">
-              <div className="text-slate-400 text-sm">{label}</div>
-              <div className="text-4xl font-bold mt-2">{loading ? '...' : value ?? 0}</div>
-            </div>
-          ))}
-        </div>
+        {error ? (
+          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">{error}</div>
+        ) : null}
 
-        <div className="grid md:grid-cols-3 gap-4 mt-8">
-          <button onClick={() => navigate('/dashboard/quarantine')} className="p-6 rounded-3xl border border-amber-800 bg-slate-900 text-left">
-            <div className="text-amber-300 text-sm font-bold">Inventory Control</div>
-            <div className="text-2xl font-semibold mt-2">Quarantine Management</div>
-          </button>
-          <button onClick={() => navigate('/dashboard/defects/new')} className="p-6 rounded-3xl border border-slate-800 bg-slate-900 text-left">
-            <div className="text-emerald-400 text-sm font-bold">Create</div>
-            <div className="text-2xl font-semibold mt-2">New Defect</div>
-          </button>
-        </div>
+        {loading ? (
+          <div className="text-slate-400">Loading quality summary...</div>
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-8">
+              {statCards.map((card) => (
+                <div key={card.key} className={`rounded-2xl border p-5 ${cardStyles[card.accent]}`}>
+                  <div className="text-sm uppercase tracking-[0.15em] opacity-80">{card.label}</div>
+                  <div className="mt-4 text-4xl font-bold">{summary[card.key]}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Operational Overview</h2>
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300">System online</span>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                    <div className="text-sm text-slate-400">Defect Risk</div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-2xl font-bold text-white">{summary.highSeverityDefects > 0 ? 'Attention required' : 'Stable'}</span>
+                      <span className="text-sm text-rose-300">{summary.highSeverityDefects} high priority</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+                    <div className="text-sm text-slate-400">Quality Flow</div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-2xl font-bold text-white">{summary.activeQuarantines === 0 ? 'No active holds' : `${summary.activeQuarantines} active holds`}</span>
+                      <span className="text-sm text-amber-300">{summary.releasedQuarantines} released</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+                <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+                <div className="space-y-3">
+                  <button onClick={() => navigate('/dashboard/defects')} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left hover:bg-slate-800">Review defect reports</button>
+                  <button onClick={() => navigate('/dashboard/quarantine')} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left hover:bg-slate-800">Open quarantine queue</button>
+                  <button onClick={() => navigate('/dashboard/defects/new')} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left hover:bg-slate-800">Log a new defect</button>
+                  <button onClick={() => navigate('/dashboard/quarantine/history')} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left hover:bg-slate-800">View quarantine history</button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

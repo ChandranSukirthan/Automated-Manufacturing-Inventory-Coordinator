@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import authService from '../../services/authService';
-import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function OTPVerification() {
   const navigate = useNavigate();
@@ -73,7 +72,7 @@ export default function OTPVerification() {
       const response = await authService.verifyOtp(email, enteredOtp);
       navigate('/login', { state: { message: response.message || 'Account verified successfully. Please log in.' } });
     } catch (err) {
-      setError(parseErrorMessage(err, 'Invalid or expired OTP.'));
+      setError(err.response?.data?.message || 'Invalid or expired OTP.');
     } finally {
       setLoading(false);
     }
@@ -89,7 +88,7 @@ export default function OTPVerification() {
       setSuccessMessage('A new verification code has been sent to your email.');
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Failed to resend OTP. Please try again.'));
+      setError(err.response?.data?.message || 'Failed to resend OTP. Please try again.');
     }
   };
 

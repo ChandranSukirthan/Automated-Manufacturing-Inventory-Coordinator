@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using ManufacturingCoordinator.Api.DTOs.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
 
@@ -43,9 +44,24 @@ namespace ManufacturingCoordinator.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateDefectReportDto dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new { message = "The defect payload is required." });
+            }
+
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return ValidationProblem(ModelState);
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.BatchId))
+            {
+                return BadRequest(new { message = "Batch ID is required." });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Description))
+            {
+                return BadRequest(new { message = "Description is required." });
             }
 
             var created = await _service.CreateAsync(dto);
@@ -55,9 +71,14 @@ namespace ManufacturingCoordinator.Api.Controllers
         [HttpPut("{id:guid}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDefectReportDto dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new { message = "The defect payload is required." });
+            }
+
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                return ValidationProblem(ModelState);
             }
 
             var updated = await _service.UpdateAsync(id, dto);
@@ -82,7 +103,9 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/quarantine")]
-        public async Task<IActionResult> Quarantine(Guid id, [FromBody] CreateQuarantineDto? dto)
+        public async Task<IActionResult> Quarantine(
+            Guid id,
+            [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreateQuarantineDto? dto)
         {
             var created = await _quarantineService.QuarantineDefectAsync(
                 id,

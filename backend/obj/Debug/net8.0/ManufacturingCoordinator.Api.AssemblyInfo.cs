@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ManufacturingCoordinator.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+60f9a8df0b6e5df5c887cad2e67c7b9c929a9080")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1271bad86a74a5771d5d0bfbe3756c4fc32392ee")]
 [assembly: System.Reflection.AssemblyProductAttribute("ManufacturingCoordinator.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ManufacturingCoordinator.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

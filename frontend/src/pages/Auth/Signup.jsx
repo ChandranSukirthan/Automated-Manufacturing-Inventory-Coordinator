@@ -4,7 +4,6 @@ import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loade
 import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import { useAuth } from '../../context/useAuth';
-import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -42,10 +41,6 @@ export default function Signup() {
       setError('Please enter a valid email address containing "@".');
       return;
     }
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long.');
-      return;
-    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -67,7 +62,7 @@ export default function Signup() {
         navigate('/otp-verify', { state: { email: formData.email } });
       }, 1500);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Registration failed. Please try again.'));
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -93,7 +88,7 @@ export default function Signup() {
         routeUserByRole(data.authResponse.user.role);
       }
     } catch (err) {
-      setError(parseErrorMessage(err, 'Google Sign-In failed.'));
+      setError(err.response?.data?.message || 'Google Sign-In failed.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +101,7 @@ export default function Signup() {
       const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Registration failed.'));
+      setError(err.response?.data?.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
