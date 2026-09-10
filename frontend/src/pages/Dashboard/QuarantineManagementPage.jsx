@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import quarantineService from '../../services/quarantineService';
 import { parseErrorMessage } from '../../utils/errorHandler';
+import QANavigation from '../../components/Dashboard/QANavigation';
 
 export default function QuarantineManagementPage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export default function QuarantineManagementPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <div className="max-w-6xl mx-auto">
+        <QANavigation />
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
           <div>
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>

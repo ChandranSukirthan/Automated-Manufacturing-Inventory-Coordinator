@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import defectService from '../../services/defectService';
 import { parseErrorMessage } from '../../utils/errorHandler';
+import QANavigation from '../../components/Dashboard/QANavigation';
 
 export default function DefectReportsPage() {
   const navigate = useNavigate();
@@ -39,6 +40,7 @@ export default function DefectReportsPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <div className="max-w-6xl mx-auto">
+        <QANavigation />
         <div className="flex items-center justify-between mb-8">
           <div>
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>

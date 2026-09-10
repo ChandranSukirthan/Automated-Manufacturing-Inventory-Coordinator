@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import defectService from '../../services/defectService';
 import { parseErrorMessage } from '../../utils/errorHandler';
+import QANavigation from '../../components/Dashboard/QANavigation';
 
 const productTypes = ['BoxPouch', 'BiscuitPackaging', 'TeaBag', 'Bag', 'Can', 'Bottle'];
 const severities = ['LOW', 'MEDIUM', 'HIGH'];
@@ -97,6 +98,7 @@ export default function DefectFormPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <div className="max-w-3xl mx-auto">
+        <QANavigation />
         <div className="flex justify-between items-center mb-8">
           <div>
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>

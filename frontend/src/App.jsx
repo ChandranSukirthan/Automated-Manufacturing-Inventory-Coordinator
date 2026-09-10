@@ -13,6 +13,7 @@ import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import QuarantineManagementPage from './pages/Dashboard/QuarantineManagementPage';
 import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
 
 function App() {
   return (
@@ -26,14 +27,16 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/worker" element={<WorkerDashboard />} />
-          <Route path="/dashboard/quality" element={<QualityDashboard />} />
-          <Route path="/dashboard/defects" element={<DefectReportsPage />} />
-          <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
-          <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
-          <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
-          <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
-          <Route path="/dashboard/quarantine/history" element={<QuarantineManagementPage />} />
-          <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
+          <Route element={<ProtectedRoute allowedRoles={[2, 'QualityInspector']} />}>
+            <Route path="/dashboard/quality" element={<QualityDashboard />} />
+            <Route path="/dashboard/defects" element={<DefectReportsPage />} />
+            <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
+            <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
+            <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
+            <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
+            <Route path="/dashboard/quarantine/history" element={<QuarantineManagementPage />} />
+            <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
