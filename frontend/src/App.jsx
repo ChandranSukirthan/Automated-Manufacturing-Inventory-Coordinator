@@ -11,6 +11,8 @@ import DefectReportsPage from './pages/Dashboard/DefectReportsPage';
 import DefectFormPage from './pages/Dashboard/DefectFormPage';
 import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
 import ForgotPassword from './pages/Auth/ForgotPassword';
+import QuarantineManagementPage from './pages/Dashboard/QuarantineManagementPage';
+import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
 
 function App() {
   return (
@@ -29,6 +31,9 @@ function App() {
           <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
           <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
           <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
+          <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
+          <Route path="/dashboard/quarantine/history" element={<QuarantineManagementPage />} />
+          <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

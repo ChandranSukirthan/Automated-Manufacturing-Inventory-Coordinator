@@ -19,6 +19,7 @@ namespace ManufacturingCoordinator.Data
 
         // QA / Defect Reporting
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
+        public DbSet<Quarantine> Quarantines { get; set; } = null!;
 
         // TODO: other students' DbSets (Inventory, PurchaseOrders, Quality, Production) go here too
 
@@ -145,6 +146,33 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(d => d.CreatedAt)
                     .HasDefaultValueSql("timezone('utc', now())");
+            });
+
+            modelBuilder.Entity<Quarantine>(entity =>
+            {
+                entity.HasKey(q => q.Id);
+
+                entity.Property(q => q.InventoryRollId)
+                    .IsRequired()
+                    .HasMaxLength(120);
+
+                entity.Property(q => q.Reason)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(q => q.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(QuarantineStatus.Active);
+
+                entity.Property(q => q.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(q => q.DefectReport)
+                    .WithMany()
+                    .HasForeignKey(q => q.DefectReportId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(q => new { q.InventoryRollId, q.Status });
             });
         }
     }

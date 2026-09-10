@@ -13,10 +13,12 @@ namespace ManufacturingCoordinator.Api.Controllers
     public class DefectReportController : ControllerBase
     {
         private readonly IDefectReportService _service;
+        private readonly IQuarantineService _quarantineService;
 
-        public DefectReportController(IDefectReportService service)
+        public DefectReportController(IDefectReportService service, IQuarantineService quarantineService)
         {
             _service = service;
+            _quarantineService = quarantineService;
         }
 
         [HttpGet]
@@ -77,6 +79,19 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             return NoContent();
+        }
+
+        [HttpPost("{id:guid}/quarantine")]
+        public async Task<IActionResult> Quarantine(Guid id, [FromBody] CreateQuarantineDto? dto)
+        {
+            var created = await _quarantineService.QuarantineDefectAsync(
+                id,
+                dto ?? new CreateQuarantineDto());
+            return CreatedAtAction(
+                nameof(QuarantineController.GetById),
+                "Quarantine",
+                new { id = created.Id },
+                created);
         }
     }
 }

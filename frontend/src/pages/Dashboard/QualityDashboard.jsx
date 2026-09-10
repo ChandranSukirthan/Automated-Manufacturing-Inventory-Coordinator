@@ -14,12 +14,19 @@ export default function QualityDashboard() {
           <button onClick={() => navigate('/dashboard/defects')} className="px-5 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400">
             Defect Reports
           </button>
+          <button onClick={() => navigate('/dashboard/quarantine')} className="px-5 py-3 rounded-xl border border-amber-500 text-amber-300 hover:bg-amber-500/10">
+            Quarantine
+          </button>
         </div>
 
         <div className="grid md:grid-cols-3 gap-4 mt-8">
           <button onClick={() => navigate('/dashboard/defects')} className="p-6 rounded-3xl border border-slate-800 bg-slate-900 text-left">
             <div className="text-emerald-400 text-sm font-bold">QA Defect Operations</div>
             <div className="text-2xl font-semibold mt-2">View Reports</div>
+          </button>
+          <button onClick={() => navigate('/dashboard/quarantine')} className="p-6 rounded-3xl border border-amber-800 bg-slate-900 text-left">
+            <div className="text-amber-300 text-sm font-bold">Inventory Control</div>
+            <div className="text-2xl font-semibold mt-2">Quarantine Management</div>
           </button>
           <button onClick={() => navigate('/dashboard/defects/new')} className="p-6 rounded-3xl border border-slate-800 bg-slate-900 text-left">
             <div className="text-emerald-400 text-sm font-bold">Create</div>

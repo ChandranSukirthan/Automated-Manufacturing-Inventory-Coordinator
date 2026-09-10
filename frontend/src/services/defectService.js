@@ -24,6 +24,11 @@ const defectService = {
   delete: async (id) => {
     const response = await api.delete(`/defects/${id}`);
     return response.data;
+  },
+
+  quarantine: async (id, payload) => {
+    const response = await api.post(`/defects/${id}/quarantine`, payload);
+    return response.data;
   }
 };
 
