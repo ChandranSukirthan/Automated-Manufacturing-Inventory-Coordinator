@@ -4,6 +4,7 @@ import { Mail, Lock, AlertCircle, Eye, EyeOff, Loader2, Shield } from 'lucide-re
 import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import { useAuth } from '../../context/useAuth';
+import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -41,10 +42,10 @@ export default function Login() {
       if (roleInt === 3) navigate('/dashboard/admin');
       else if (roleInt === 0) navigate('/dashboard/worker');
       else if (roleInt === 2) navigate('/dashboard/quality');
-      else if (roleInt === 1) navigate('/dashboard/admin'); // default manager to admin or manager route if it exists
+      else if (roleInt === 1) navigate('/dashboard/admin');
       else navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      setError(parseErrorMessage(err, 'Login failed. Please check your credentials.'));
     } finally {
       setLoading(false);
     }
@@ -70,7 +71,7 @@ export default function Login() {
         routeUserByRole(data.authResponse.user.role);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Google Login failed.');
+      setError(parseErrorMessage(err, 'Google Login failed.'));
     } finally {
       setLoading(false);
     }
@@ -83,7 +84,7 @@ export default function Login() {
       const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      setError(parseErrorMessage(err, 'Registration failed.'));
     } finally {
       setLoading(false);
     }
@@ -185,7 +186,7 @@ export default function Login() {
             <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900/50 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950" />
             <span className="text-slate-400 group-hover:text-slate-300 transition-colors">Remember me</span>
           </label>
-          <a href="#" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</a>
+          <Link to="/forgot-password" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</Link>
         </div>
 
         <button

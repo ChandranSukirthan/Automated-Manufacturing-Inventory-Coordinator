@@ -11,7 +11,7 @@
           "BCrypt.Net-Next": "4.2.0",
           "DotNetEnv": "3.2.0",
           "Google.Apis.Auth": "1.75.0",
-          "Microsoft.AspNetCore.Authentication.JwtBearer": "8.0.30",
+          "Microsoft.AspNetCore.Authentication.JwtBearer": "8.0.31",
           "Microsoft.EntityFrameworkCore.Design": "8.0.10",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "8.0.11",
           "Swashbuckle.AspNetCore": "6.5.0"
@@ -84,14 +84,14 @@
           }
         }
       },
-      "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.30": {
+      "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.31": {
         "dependencies": {
           "Microsoft.IdentityModel.Protocols.OpenIdConnect": "7.7.3"
         },
         "runtime": {
           "lib/net8.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll": {
-            "assemblyVersion": "8.0.30.0",
-            "fileVersion": "8.0.3026.37304"
+            "assemblyVersion": "8.0.31.0",
+            "fileVersion": "8.0.3126.42125"
           }
         }
       },
@@ -1465,12 +1465,12 @@
       "path": "humanizer.core/2.14.1",
       "hashPath": "humanizer.core.2.14.1.nupkg.sha512"
     },
-    "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.30": {
+    "Microsoft.AspNetCore.Authentication.JwtBearer/8.0.31": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-ltmPwCpzuO29cl6H9w1QHIZ7J+3mnLcUAUH1l9Fgj0bY7vydv76uE5qSYGo96sSQgT98JYbleMBeEGIhjkr7aQ==",
-      "path": "microsoft.aspnetcore.authentication.jwtbearer/8.0.30",
-      "hashPath": "microsoft.aspnetcore.authentication.jwtbearer.8.0.30.nupkg.sha512"
+      "sha512": "sha512-ql5DM/d+K4oQowi7RM7wE5ii5yrpjYI7K4ZPSj/ctVXRAgqJc+CR+zkDAuPfHaBUNb73FBVRUpIkznYw903Qew==",
+      "path": "microsoft.aspnetcore.authentication.jwtbearer/8.0.31",
+      "hashPath": "microsoft.aspnetcore.authentication.jwtbearer.8.0.31.nupkg.sha512"
     },
     "Microsoft.Bcl.AsyncInterfaces/6.0.0": {
       "type": "package",

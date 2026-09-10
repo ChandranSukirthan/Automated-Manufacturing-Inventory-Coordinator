@@ -7,6 +7,7 @@ import OTPVerification from './pages/Auth/OTPVerification';
 import AdminDashboard from './pages/Dashboard/AdminDashboard';
 import WorkerDashboard from './pages/Dashboard/WorkerDashboard';
 import QualityDashboard from './pages/Dashboard/QualityDashboard';
+import ForgotPassword from './pages/Auth/ForgotPassword';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/otp-verify" element={<OTPVerification />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/worker" element={<WorkerDashboard />} />
           <Route path="/dashboard/quality" element={<QualityDashboard />} />

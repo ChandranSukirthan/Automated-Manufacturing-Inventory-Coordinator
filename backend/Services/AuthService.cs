@@ -4,6 +4,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.Api.DTOs.Authentication;
 using ManufacturingCoordinator.Enums;
@@ -21,6 +22,7 @@ namespace ManufacturingCoordinator.Api.Services
         private readonly IJwtTokenService _jwtTokenService;
         private readonly IEmailService _emailService;
         private readonly JwtSettings _jwtSettings;
+        private readonly ILogger<AuthService> _logger;
 
         private const int OtpExpiryMinutes = 10;
         private const int OtpResendCooldownSeconds = 60;
@@ -30,13 +32,15 @@ namespace ManufacturingCoordinator.Api.Services
             IPasswordHasher passwordHasher,
             IJwtTokenService jwtTokenService,
             IEmailService emailService,
-            Microsoft.Extensions.Options.IOptions<JwtSettings> jwtOptions)
+            Microsoft.Extensions.Options.IOptions<JwtSettings> jwtOptions,
+            ILogger<AuthService> logger)
         {
             _db = db;
             _passwordHasher = passwordHasher;
             _jwtTokenService = jwtTokenService;
             _emailService = emailService;
             _jwtSettings = jwtOptions.Value;
+            _logger = logger;
         }
 
         public async Task<MessageResponseDto> RegisterAsync(RegisterRequestDto request)
@@ -48,6 +52,15 @@ namespace ManufacturingCoordinator.Api.Services
 
             if (existingUser != null)
             {
+                // If account exists but email not verified, let them proceed to verify
+                if (!existingUser.IsEmailVerified)
+                {
+                    return new MessageResponseDto
+                    {
+                        Success = true,
+                        Message = "Account already exists but is not yet verified. Please check your email for the verification code, or use Resend Code on the verification screen."
+                    };
+                }
                 throw new AuthException("An account with this email already exists.", HttpStatusCode.Conflict);
             }
 
@@ -64,7 +77,21 @@ namespace ManufacturingCoordinator.Api.Services
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
-            await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            // Email sending is best-effort: account is created even if email fails.
+            // User can request a resend from the OTP verification screen.
+            try
+            {
+                await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send registration OTP email to {Email}. User created successfully, they can request a resend.", user.Email);
+                return new MessageResponseDto
+                {
+                    Success = true,
+                    Message = "Account created! We couldn't send the verification email right now — please use 'Resend Code' on the next screen."
+                };
+            }
 
             return new MessageResponseDto
             {
@@ -150,12 +177,103 @@ namespace ManufacturingCoordinator.Api.Services
                     HttpStatusCode.TooManyRequests);
             }
 
-            await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            try
+            {
+                await IssueAndSendOtpAsync(user, OtpPurpose.Registration);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send registration OTP email to {Email}.", user.Email);
+            }
 
             return new MessageResponseDto
             {
                 Success = true,
                 Message = "If an account exists and is not yet verified, a new code has been sent."
+            };
+        }
+
+        public async Task<MessageResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto request)
+        {
+            var emailNormalized = request.Email.Trim().ToLowerInvariant();
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == emailNormalized);
+
+            // Always return generic message to avoid email enumeration attacks
+            if (user == null || !user.IsActive)
+            {
+                return new MessageResponseDto
+                {
+                    Success = true,
+                    Message = "If an account with that email exists, a password reset code has been sent."
+                };
+            }
+
+            var recentOtp = await _db.OtpVerifications
+                .Where(o => o.UserId == user.Id && o.Purpose == OtpPurpose.PasswordReset)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (recentOtp != null &&
+                recentOtp.CreatedAt.AddSeconds(OtpResendCooldownSeconds) > DateTime.UtcNow)
+            {
+                throw new AuthException("Please wait before requesting another code.", HttpStatusCode.TooManyRequests);
+            }
+
+            try
+            {
+                await IssueAndSendOtpAsync(user, OtpPurpose.PasswordReset);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send password reset OTP email to {Email}.", user.Email);
+            }
+
+            return new MessageResponseDto
+            {
+                Success = true,
+                Message = "If an account with that email exists, a password reset code has been sent."
+            };
+        }
+
+        public async Task<MessageResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request)
+        {
+            var emailNormalized = request.Email.Trim().ToLowerInvariant();
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == emailNormalized);
+
+            if (user == null)
+            {
+                throw new AuthException("Invalid request.", HttpStatusCode.BadRequest);
+            }
+
+            var otp = await _db.OtpVerifications
+                .Where(o => o.UserId == user.Id
+                            && o.Purpose == OtpPurpose.PasswordReset
+                            && !o.IsUsed)
+                .OrderByDescending(o => o.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (otp == null || otp.Code != request.Code)
+            {
+                throw new AuthException("Invalid or expired reset code.", HttpStatusCode.BadRequest);
+            }
+
+            if (otp.ExpiresAt < DateTime.UtcNow)
+            {
+                throw new AuthException("This code has expired. Please request a new one.", HttpStatusCode.BadRequest);
+            }
+
+            otp.IsUsed = true;
+            user.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            return new MessageResponseDto
+            {
+                Success = true,
+                Message = "Password reset successfully. You can now log in with your new password."
             };
         }
 
