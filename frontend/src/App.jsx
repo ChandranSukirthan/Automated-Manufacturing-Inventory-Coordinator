@@ -7,6 +7,9 @@ import OTPVerification from './pages/Auth/OTPVerification';
 import AdminDashboard from './pages/Dashboard/AdminDashboard';
 import WorkerDashboard from './pages/Dashboard/WorkerDashboard';
 import QualityDashboard from './pages/Dashboard/QualityDashboard';
+import DefectReportsPage from './pages/Dashboard/DefectReportsPage';
+import DefectFormPage from './pages/Dashboard/DefectFormPage';
+import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 
 function App() {
@@ -22,6 +25,10 @@ function App() {
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/worker" element={<WorkerDashboard />} />
           <Route path="/dashboard/quality" element={<QualityDashboard />} />
+          <Route path="/dashboard/defects" element={<DefectReportsPage />} />
+          <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
+          <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
+          <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

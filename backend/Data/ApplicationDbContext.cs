@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
+using ManufacturingCoordinator.Models.Quality;
 
 namespace ManufacturingCoordinator.Data
 {
@@ -14,6 +16,9 @@ namespace ManufacturingCoordinator.Data
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<OtpVerification> OtpVerifications { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+
+        // QA / Defect Reporting
+        public DbSet<DefectReport> DefectReports { get; set; } = null!;
 
         // TODO: other students' DbSets (Inventory, PurchaseOrders, Quality, Production) go here too
 
@@ -111,6 +116,35 @@ namespace ManufacturingCoordinator.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(r => r.TokenHash);
+            });
+
+            // ---- DefectReport ----
+            modelBuilder.Entity<DefectReport>(entity =>
+            {
+                entity.HasKey(d => d.Id);
+
+                entity.Property(d => d.BatchId)
+                    .IsRequired()
+                    .HasMaxLength(80);
+
+                entity.Property(d => d.ProductType)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Severity)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Description)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(d => d.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(DefectStatus.Open);
+
+                entity.Property(d => d.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
             });
         }
     }
