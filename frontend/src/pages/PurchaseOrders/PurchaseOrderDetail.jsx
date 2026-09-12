@@ -543,3 +543,4 @@ export default function PurchaseOrderDetail() {
     </AppLayout>
   );
 }
+
