@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Models.Authentication;
+using ManufacturingCoordinator.Models.PurchaseOrders;
+using backend.Models;
 
 namespace ManufacturingCoordinator.Data
 {
@@ -15,7 +17,14 @@ namespace ManufacturingCoordinator.Data
         public DbSet<OtpVerification> OtpVerifications { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
-        // TODO: other students' DbSets (Inventory, PurchaseOrders, Quality, Production) go here too
+        // Student 2 — Purchase Order Management
+        public DbSet<Supplier> Suppliers { get; set; } = null!;
+        public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
+        public DbSet<OrderLine> OrderLines { get; set; } = null!;
+        public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
+        public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
+        public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
+        public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -111,6 +120,278 @@ namespace ManufacturingCoordinator.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(r => r.TokenHash);
+            });
+
+            // ── Supplier ──────────────────────────────────────────────────────────
+            modelBuilder.Entity<Supplier>(entity =>
+            {
+                entity.HasKey(s => s.Id);
+
+                entity.Property(s => s.SupplierCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(s => s.SupplierCode)
+                    .IsUnique();
+
+                entity.Property(s => s.Name)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(s => s.ContactEmail)
+                    .IsRequired()
+                    .HasMaxLength(256);
+
+                entity.HasIndex(s => s.ContactEmail)
+                    .IsUnique();
+
+                entity.Property(s => s.ContactPhone)
+                    .HasMaxLength(30);
+
+                entity.Property(s => s.Address)
+                    .HasMaxLength(500);
+
+                entity.Property(s => s.PaymentTerms)
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Net 30");
+
+                entity.Property(s => s.LeadTimeDays)
+                    .HasDefaultValue(7);
+
+                entity.Property(s => s.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(s => s.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(s => s.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+            });
+
+            // ── PurchaseOrder ─────────────────────────────────────────────────────
+            modelBuilder.Entity<PurchaseOrder>(entity =>
+            {
+                entity.HasKey(po => po.Id);
+
+                entity.Property(po => po.PoNumber)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(po => po.PoNumber)
+                    .IsUnique();
+
+                // Store enum as readable string
+                entity.Property(po => po.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.HasIndex(po => po.Status);
+                entity.HasIndex(po => po.SupplierId);
+
+                entity.Property(po => po.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("USD");
+
+                entity.Property(po => po.TotalCost)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(po => po.BudgetLimit)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(po => po.ApprovalThreshold)
+                    .HasColumnType("decimal(18,2)")
+                    .HasDefaultValue(5000m);
+
+                entity.Property(po => po.Notes)
+                    .HasMaxLength(1000);
+
+                entity.Property(po => po.RejectionReason)
+                    .HasMaxLength(1000);
+
+                entity.Property(po => po.StripePaymentIntentId)
+                    .HasMaxLength(200);
+
+                entity.Property(po => po.StripePaymentStatus)
+                    .HasMaxLength(50);
+
+                entity.Property(po => po.PaymentFailureReason)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.SendGridMessageId)
+                    .HasMaxLength(200);
+
+                entity.Property(po => po.EmailStatus)
+                    .HasMaxLength(50);
+
+                entity.Property(po => po.EmailFailureReason)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(po => po.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(po => po.Supplier)
+                    .WithMany(s => s.PurchaseOrders)
+                    .HasForeignKey(po => po.SupplierId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(po => po.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(po => po.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(po => po.ApprovedBy)
+                    .WithMany()
+                    .HasForeignKey(po => po.ApprovedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── PurchaseOrderApproval (Audit) ─────────────────────────────────────
+            modelBuilder.Entity<PurchaseOrderApproval>(entity =>
+            {
+                entity.HasKey(a => a.Id);
+
+                entity.Property(a => a.Action)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(a => a.UserName)
+                    .HasMaxLength(150);
+
+                entity.Property(a => a.Notes)
+                    .HasMaxLength(1000);
+
+                entity.Property(a => a.Timestamp)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(a => a.PurchaseOrder)
+                    .WithMany(po => po.Approvals)
+                    .HasForeignKey(a => a.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(a => a.User)
+                    .WithMany()
+                    .HasForeignKey(a => a.UserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(a => a.PurchaseOrderId);
+            });
+
+            // ── PaymentTransaction ────────────────────────────────────────────────
+            modelBuilder.Entity<PaymentTransaction>(entity =>
+            {
+                entity.HasKey(pt => pt.Id);
+
+                entity.Property(pt => pt.Amount)
+                    .HasColumnType("decimal(18,2)")
+                    .IsRequired();
+
+                entity.Property(pt => pt.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("usd");
+
+                entity.Property(pt => pt.PaymentStatus)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(pt => pt.TransactionId)
+                    .HasMaxLength(200);
+
+                entity.Property(pt => pt.FailureReason)
+                    .HasMaxLength(500);
+
+                entity.Property(pt => pt.Timestamp)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(pt => pt.PurchaseOrder)
+                    .WithMany(po => po.Transactions)
+                    .HasForeignKey(pt => pt.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(pt => pt.PurchaseOrderId);
+            });
+
+            // ── SupplierPerformance ───────────────────────────────────────────────
+            modelBuilder.Entity<SupplierPerformance>(entity =>
+            {
+                entity.HasKey(sp => sp.Id);
+
+                entity.Property(sp => sp.TotalSpending)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.AverageOrderValue)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.AverageLeadTime)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.DeliveryPerformanceRate)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sp => sp.RejectionRate)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sp => sp.CalculatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(sp => sp.Supplier)
+                    .WithMany()
+                    .HasForeignKey(sp => sp.SupplierId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(sp => sp.SupplierId);
+            });
+
+            // ── OrderLine ─────────────────────────────────────────────────────────
+            modelBuilder.Entity<OrderLine>(entity =>
+            {
+                entity.HasKey(ol => ol.Id);
+
+                entity.Property(ol => ol.Description)
+                    .HasMaxLength(500);
+
+                entity.Property(ol => ol.Quantity)
+                    .HasColumnType("decimal(18,3)")
+                    .IsRequired();
+
+                entity.Property(ol => ol.UnitPrice)
+                    .HasColumnType("decimal(18,2)")
+                    .IsRequired();
+
+                entity.Property(ol => ol.TotalPrice)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(ol => ol.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(ol => ol.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasIndex(ol => ol.PurchaseOrderId);
+                entity.HasIndex(ol => ol.RawMaterialId);
+
+                entity.HasOne(ol => ol.PurchaseOrder)
+                    .WithMany(po => po.OrderLines)
+                    .HasForeignKey(ol => ol.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // FK to RawMaterial (Student 1 entity — in ManufacturingContext)
+                // We reference the table by name since they are in different DbContexts
+                entity.HasOne(ol => ol.RawMaterial)
+                    .WithMany()
+                    .HasForeignKey(ol => ol.RawMaterialId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ── RawMaterial (Existing table from Student 1) ───────────────────────
+            modelBuilder.Entity<RawMaterial>(entity =>
+            {
+                entity.ToTable("RawMaterials");
+                entity.HasKey(rm => rm.Id);
+                entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
+                entity.HasIndex(rm => rm.SkuCode).IsUnique();
             });
         }
     }

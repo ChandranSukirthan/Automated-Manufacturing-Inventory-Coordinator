@@ -1,5 +1,7 @@
 using DotNetEnv;
 using ManufacturingCoordinator.Data;
+using backend.Data;
+using backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -9,6 +11,7 @@ using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Api.Services;
 using ManufacturingCoordinator.Api.Middleware;
+using ManufacturingCoordinator.Services.PurchaseOrders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,22 +36,32 @@ builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ??
 // Controllers
 builder.Services.AddControllers();
 
-// PostgreSQL + Entity Framework Core
+// PostgreSQL + Entity Framework Core Contexts
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// Settings
+builder.Services.AddDbContext<ManufacturingContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+);
+
+// Register Inventory & Agent Services
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IBarcodeService, BarcodeService>();
+builder.Services.AddHttpClient<IAgentIntegrationService, AgentIntegrationService>();
+
+// Register Auth Services
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
-
-// Scoped Services
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Register Student 2 - Purchase Order Services
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IStripeService, StripeService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 
 // Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -96,10 +109,10 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS for React frontend & mobile clients
+// CORS for React frontend & Flutter mobile clients
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ReactFrontend", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
         policy
             .SetIsOriginAllowed(_ => true)
@@ -111,16 +124,37 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Swagger
+// Swagger UI
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Automated Manufacturing Inventory API v1");
+    });
+}
+
+// Auto-create database tables on startup
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var mfgContext = scope.ServiceProvider.GetRequiredService<ManufacturingContext>();
+        mfgContext.Database.EnsureCreated();
+
+        var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        appContext.Database.EnsureCreated();
+        DbInitializer.SeedAsync(appContext).GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"DB Auto-creation notice: {ex.Message}");
+    }
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseCors("ReactFrontend");
+app.UseCors("AllowAll");
 
 if (!app.Environment.IsDevelopment())
 {

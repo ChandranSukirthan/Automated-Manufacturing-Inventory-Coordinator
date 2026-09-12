@@ -60,5 +60,47 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException($"Failed to send verification email: {ex.Message}");
             }
         }
+
+        public async Task SendPurchaseOrderEmailAsync(
+            string toEmail,
+            string supplierName,
+            string poNumber,
+            byte[] pdfAttachment,
+            string attachmentFileName)
+        {
+            if (string.IsNullOrEmpty(_settings.EmailUser) || string.IsNullOrEmpty(_settings.EmailPass))
+            {
+                _logger.LogWarning("Email credentials not configured. Cannot send PO email to {Email}", toEmail);
+                throw new InvalidOperationException("Server email credentials are not configured.");
+            }
+
+            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
+            {
+                UseDefaultCredentials = false,
+                Credentials = new NetworkCredential(_settings.EmailUser.Trim(), _settings.EmailPass.Trim()),
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network
+            };
+
+            var fromAddress = new MailAddress(_settings.EmailUser, _settings.FromName);
+            var toAddress = new MailAddress(toEmail, supplierName);
+
+            using var message = new MailMessage(fromAddress, toAddress)
+            {
+                Subject = $"Purchase Order {poNumber} — Automated Manufacturing Inventory Coordinator",
+                Body = $"<p>Dear {supplierName},</p>" +
+                       $"<p>Please find attached Purchase Order <strong>{poNumber}</strong> from Automated Manufacturing Inventory Coordinator.</p>" +
+                       $"<p>Total amount has been processed successfully.</p>" +
+                       $"<p>Thank you for your partnership.</p>",
+                IsBodyHtml = true
+            };
+
+            using var pdfStream = new MemoryStream(pdfAttachment);
+            var attachment = new Attachment(pdfStream, attachmentFileName, "application/pdf");
+            message.Attachments.Add(attachment);
+
+            await client.SendMailAsync(message);
+            _logger.LogInformation("Successfully sent PO email {PoNumber} to {Email}", poNumber, toEmail);
+        }
     }
 }
