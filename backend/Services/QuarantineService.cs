@@ -9,6 +9,7 @@ using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.Enums;
+using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 
 namespace ManufacturingCoordinator.Api.Services
@@ -48,19 +49,39 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("Defect report was not found.", HttpStatusCode.NotFound);
             }
 
-            var inventoryRollId = string.IsNullOrWhiteSpace(dto.InventoryRollId)
-                ? defect.BatchId.Trim()
-                : dto.InventoryRollId.Trim();
-
-            if (string.IsNullOrWhiteSpace(inventoryRollId))
-            {
-                throw new AuthException("An inventory roll identifier is required.");
-            }
-
             if (string.IsNullOrWhiteSpace(dto.Reason))
             {
                 throw new AuthException("A quarantine reason is required.");
             }
+
+            InventoryRoll? inventoryRoll;
+            if (string.IsNullOrWhiteSpace(dto.InventoryRollId))
+            {
+                inventoryRoll = await _db.InventoryRolls
+                    .FirstOrDefaultAsync(i => i.BatchId == defect.BatchId && i.Status == InventoryStatus.Available);
+            }
+            else
+            {
+                inventoryRoll = await _db.InventoryRolls
+                    .FirstOrDefaultAsync(i => i.Id == dto.InventoryRollId.Trim());
+            }
+
+            if (inventoryRoll == null)
+            {
+                throw new AuthException("Inventory roll was not found.", HttpStatusCode.NotFound);
+            }
+
+            if (inventoryRoll.BatchId != defect.BatchId)
+            {
+                throw new AuthException("Inventory roll does not belong to the defect batch.");
+            }
+
+            if (inventoryRoll.Status != InventoryStatus.Available)
+            {
+                throw new AuthException("Inventory roll is not available for quarantine.", HttpStatusCode.Conflict);
+            }
+
+            var inventoryRollId = inventoryRoll.Id;
 
             var alreadyQuarantined = await _db.Quarantines.AnyAsync(q =>
                 q.InventoryRollId == inventoryRollId && q.Status == QuarantineStatus.Active);
@@ -78,6 +99,7 @@ namespace ManufacturingCoordinator.Api.Services
                 CreatedAt = DateTime.UtcNow
             };
 
+            inventoryRoll.Status = InventoryStatus.Quarantined;
             _db.Quarantines.Add(quarantine);
             await _db.SaveChangesAsync();
 
@@ -97,8 +119,21 @@ namespace ManufacturingCoordinator.Api.Services
                 return ToDto(quarantine);
             }
 
+            var inventoryRoll = await _db.InventoryRolls
+                .FirstOrDefaultAsync(i => i.Id == quarantine.InventoryRollId);
+            if (inventoryRoll == null)
+            {
+                throw new AuthException("Inventory roll was not found.", HttpStatusCode.NotFound);
+            }
+
+            if (inventoryRoll.Status != InventoryStatus.Quarantined)
+            {
+                throw new AuthException("Inventory roll is not currently quarantined.", HttpStatusCode.Conflict);
+            }
+
             quarantine.Status = QuarantineStatus.Released;
             quarantine.ReleasedAt = DateTime.UtcNow;
+            inventoryRoll.Status = InventoryStatus.Available;
             await _db.SaveChangesAsync();
 
             return ToDto(quarantine);

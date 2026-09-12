@@ -35,7 +35,7 @@ export default function QuarantineHistoryPage() {
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>
             <h1 className="text-4xl font-bold mt-2">Quarantine History</h1>
           </div>
-          <button onClick={() => navigate('/dashboard/quarantine')} className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800">
+          <button onClick={() => navigate('/quality/quarantine')} className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800">
             Back to Quarantine
           </button>
         </div>

@@ -4,6 +4,7 @@ namespace ManufacturingCoordinator.Enums
     {
         LOW,
         MEDIUM,
-        HIGH
+        HIGH,
+        CRITICAL
     }
 }

@@ -40,7 +40,7 @@ export default function Login() {
       const roleInt = data.user.role;
       if (roleInt === 3) navigate('/dashboard/admin');
       else if (roleInt === 0) navigate('/dashboard/worker');
-      else if (roleInt === 2) navigate('/dashboard/quality');
+      else if (roleInt === 2) navigate('/quality');
       else if (roleInt === 1) navigate('/dashboard/admin'); // default manager to admin or manager route if it exists
       else navigate('/');
     } catch (err) {
@@ -53,7 +53,7 @@ export default function Login() {
   const routeUserByRole = (roleInt) => {
     if (roleInt === 3) navigate('/dashboard/admin');
     else if (roleInt === 0) navigate('/dashboard/worker');
-    else if (roleInt === 2) navigate('/dashboard/quality');
+    else if (roleInt === 2) navigate('/quality');
     else if (roleInt === 1) navigate('/dashboard/admin');
     else navigate('/');
   };

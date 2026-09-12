@@ -4,18 +4,88 @@ class QualitySummary {
     required this.highSeverityDefects,
     required this.activeQuarantines,
     required this.releasedQuarantines,
+    required this.openDefects,
+    required this.quarantinedBatches,
+    required this.affectedInventory,
+    required this.releasedInventory,
   });
 
   final int totalDefects;
   final int highSeverityDefects;
   final int activeQuarantines;
   final int releasedQuarantines;
+  final int openDefects;
+  final int quarantinedBatches;
+  final int affectedInventory;
+  final int releasedInventory;
 
   factory QualitySummary.fromJson(Map<String, dynamic> json) => QualitySummary(
     totalDefects: json['totalDefects'] as int? ?? 0,
     highSeverityDefects: json['highSeverityDefects'] as int? ?? 0,
     activeQuarantines: json['activeQuarantines'] as int? ?? 0,
     releasedQuarantines: json['releasedQuarantines'] as int? ?? 0,
+    openDefects: json['openDefects'] as int? ?? 0,
+    quarantinedBatches: json['quarantinedBatches'] as int? ?? 0,
+    affectedInventory: json['affectedInventory'] as int? ?? 0,
+    releasedInventory: json['releasedInventory'] as int? ?? 0,
+  );
+
+  QualitySummary copyWith({
+    int? totalDefects,
+    int? highSeverityDefects,
+    int? activeQuarantines,
+    int? releasedQuarantines,
+    int? openDefects,
+    int? quarantinedBatches,
+    int? affectedInventory,
+    int? releasedInventory,
+  }) => QualitySummary(
+    totalDefects: totalDefects ?? this.totalDefects,
+    highSeverityDefects: highSeverityDefects ?? this.highSeverityDefects,
+    activeQuarantines: activeQuarantines ?? this.activeQuarantines,
+    releasedQuarantines: releasedQuarantines ?? this.releasedQuarantines,
+    openDefects: openDefects ?? this.openDefects,
+    quarantinedBatches: quarantinedBatches ?? this.quarantinedBatches,
+    affectedInventory: affectedInventory ?? this.affectedInventory,
+    releasedInventory: releasedInventory ?? this.releasedInventory,
+  );
+}
+
+class BatchDetails {
+  const BatchDetails({
+    required this.id,
+    required this.productType,
+    required this.inventoryRolls,
+  });
+
+  final String id;
+  final String productType;
+  final List<InventoryRoll> inventoryRolls;
+
+  factory BatchDetails.fromJson(Map<String, dynamic> json) => BatchDetails(
+    id: json['id']?.toString() ?? '',
+    productType: json['productType'] as String? ?? '',
+    inventoryRolls: (json['inventoryRolls'] as List<dynamic>? ?? [])
+        .map((item) => InventoryRoll.fromJson(item as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class InventoryRoll {
+  const InventoryRoll({
+    required this.id,
+    required this.batchId,
+    required this.status,
+  });
+
+  final String id;
+  final String batchId;
+  final String status;
+
+  factory InventoryRoll.fromJson(Map<String, dynamic> json) => InventoryRoll(
+    id: json['id']?.toString() ?? '',
+    batchId: json['batchId'] as String? ?? '',
+    status: json['status'] as String? ?? '',
   );
 }
 
@@ -28,6 +98,7 @@ class DefectReport {
     required this.description,
     required this.createdAt,
     required this.status,
+    this.reportedByUserId,
   });
 
   final String id;
@@ -37,6 +108,7 @@ class DefectReport {
   final String description;
   final DateTime createdAt;
   final String status;
+  final String? reportedByUserId;
 
   factory DefectReport.fromJson(Map<String, dynamic> json) => DefectReport(
     id: json['id']?.toString() ?? '',
@@ -47,6 +119,7 @@ class DefectReport {
     createdAt:
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     status: json['status'] as String? ?? '',
+    reportedByUserId: json['reportedByUserId']?.toString(),
   );
 }
 
@@ -57,6 +130,7 @@ extension DefectReportCopy on DefectReport {
     String? severity,
     String? description,
     String? status,
+    String? reportedByUserId,
   }) => DefectReport(
     id: id,
     batchId: batchId ?? this.batchId,
@@ -65,6 +139,7 @@ extension DefectReportCopy on DefectReport {
     description: description ?? this.description,
     createdAt: createdAt,
     status: status ?? this.status,
+    reportedByUserId: reportedByUserId ?? this.reportedByUserId,
   );
 }
 

@@ -18,6 +18,7 @@ class DefectsScreen extends StatefulWidget {
 
 class _DefectsScreenState extends State<DefectsScreen> {
   List<DefectReport>? _defects;
+  List<QuarantineRecord> _quarantines = [];
   String? _error;
 
   @override
@@ -29,8 +30,16 @@ class _DefectsScreenState extends State<DefectsScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final defects = await widget.service.getDefects();
-      if (mounted) setState(() => _defects = defects);
+      final results = await Future.wait([
+        widget.service.getDefects(),
+        widget.service.getQuarantines(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _defects = results[0] as List<DefectReport>;
+          _quarantines = results[1] as List<QuarantineRecord>;
+        });
+      }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
     }
@@ -108,6 +117,14 @@ class _DefectsScreenState extends State<DefectsScreen> {
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
                                 '${defect.productType}\n${defect.description}',
+                              ),
+                            ),
+                            leading: CircleAvatar(
+                              child: Text(
+                                _quarantines
+                                        .where((record) => record.defectReportId == defect.id)
+                                        .length
+                                        .toString(),
                               ),
                             ),
                             isThreeLine: true,

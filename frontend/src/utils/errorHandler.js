@@ -1,5 +1,9 @@
 export const parseErrorMessage = (err, defaultMsg = 'An error occurred. Please try again.') => {
   if (!err) return defaultMsg;
+  if (err.response?.status === 401) return 'Your session has expired. Please sign in again.';
+  if (err.response?.status === 403) return 'You are not authorized to access this quality function.';
+  if (err.response?.status === 404) return 'The requested quality record was not found.';
+  if (err.response?.status >= 500) return 'The backend encountered an error. Please try again shortly.';
   const data = err.response?.data;
   if (!data) {
     if (err.message === 'Network Error' || err.code === 'ERR_NETWORK') {

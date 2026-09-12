@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -64,7 +65,10 @@ namespace ManufacturingCoordinator.Api.Controllers
                 return BadRequest(new { message = "Description is required." });
             }
 
-            var created = await _service.CreateAsync(dto);
+            var reportedByUserId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
+                ? userId
+                : (Guid?)null;
+            var created = await _service.CreateAsync(dto, reportedByUserId);
             return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
         }
 

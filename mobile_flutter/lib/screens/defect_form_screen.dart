@@ -5,10 +5,18 @@ import '../services/api_client.dart';
 import '../services/quality_service.dart';
 
 class DefectFormScreen extends StatefulWidget {
-  const DefectFormScreen({required this.service, this.defect, super.key});
+  const DefectFormScreen({
+    required this.service,
+    this.defect,
+    this.initialBatchId,
+    this.initialProductType,
+    super.key,
+  });
 
   final QualityService service;
   final DefectReport? defect;
+  final String? initialBatchId;
+  final String? initialProductType;
 
   @override
   State<DefectFormScreen> createState() => _DefectFormScreenState();
@@ -18,7 +26,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _batch = TextEditingController();
   final _description = TextEditingController();
-  final _severityValues = ['LOW', 'MEDIUM', 'HIGH'];
+  final _severityValues = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
   final _statusValues = ['Open', 'InReview', 'Resolved', 'Closed'];
   final _productValues = [
     'BoxPouch',
@@ -38,6 +46,11 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialBatchId != null) _batch.text = widget.initialBatchId!;
+    if (widget.initialProductType != null &&
+        _productValues.contains(widget.initialProductType)) {
+      _product = widget.initialProductType!;
+    }
     final defect = widget.defect;
     if (defect != null) {
       _batch.text = defect.batchId;

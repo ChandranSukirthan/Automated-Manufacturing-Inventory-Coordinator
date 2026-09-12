@@ -26,6 +26,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
   String? _error;
   bool _loading = true;
   bool _quarantining = false;
+  List<QuarantineRecord> _affectedInventory = [];
   final _inventoryRollId = TextEditingController();
   final _reason = TextEditingController();
 
@@ -48,8 +49,20 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       _error = null;
     });
     try {
-      final defect = await widget.service.getDefect(widget.defectId);
-      if (mounted) setState(() => _defect = defect);
+      final results = await Future.wait([
+        widget.service.getDefect(widget.defectId),
+        widget.service.getQuarantines(),
+      ]);
+      final defect = results[0] as DefectReport;
+      final quarantines = results[1] as List<QuarantineRecord>;
+      if (mounted) {
+        setState(() {
+          _defect = defect;
+          _affectedInventory = quarantines
+              .where((record) => record.defectReportId == widget.defectId)
+              .toList();
+        });
+      }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
     } finally {
@@ -157,6 +170,10 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
               label: 'Created',
               value: defect.createdAt.toLocal().toString(),
             ),
+            _DetailRow(
+              label: 'Reported by',
+              value: defect.reportedByUserId ?? 'Unavailable',
+            ),
             const SizedBox(height: 12),
             Text('Description', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 6),
@@ -165,6 +182,16 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Text(defect.description),
               ),
+            ),
+            _DetailRow(
+              label: 'Affected inventory',
+              value: _affectedInventory
+                      .map((record) => record.inventoryRollId)
+                      .join(', ') .trim().isEmpty
+                  ? 'None'
+                  : _affectedInventory
+                      .map((record) => record.inventoryRollId)
+                      .join(', '),
             ),
             const SizedBox(height: 20),
             Text(

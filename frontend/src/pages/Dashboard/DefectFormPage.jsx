@@ -5,7 +5,7 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 import QANavigation from '../../components/Dashboard/QANavigation';
 
 const productTypes = ['BoxPouch', 'BiscuitPackaging', 'TeaBag', 'Bag', 'Can', 'Bottle'];
-const severities = ['LOW', 'MEDIUM', 'HIGH'];
+const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const statuses = ['Open', 'InReview', 'Resolved', 'Closed'];
 
 export default function DefectFormPage() {
@@ -87,7 +87,7 @@ export default function DefectFormPage() {
           status: form.status
         });
       }
-      navigate('/dashboard/defects');
+      navigate('/quality/defects');
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to save defect report.'));
     } finally {
@@ -104,7 +104,7 @@ export default function DefectFormPage() {
             <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>
             <h1 className="text-4xl font-bold mt-2">{isEdit ? 'Edit Defect Report' : 'Create Defect Report'}</h1>
           </div>
-          <button onClick={() => navigate('/dashboard/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Back to Defects</button>
+          <button onClick={() => navigate('/quality/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Back to Defects</button>
         </div>
 
         {error && <div className="mb-4 p-3 rounded bg-red-500/10 text-red-300 border border-red-500/30">{error}</div>}
@@ -144,7 +144,7 @@ export default function DefectFormPage() {
           </div>
 
           <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => navigate('/dashboard/defects')} className="px-5 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={() => navigate('/quality/defects')} className="px-5 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Cancel</button>
             <button type="submit" disabled={loading} className="px-5 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 disabled:opacity-60">
               {loading ? 'Saving...' : isEdit ? 'Update Defect' : 'Create Defect'}
             </button>

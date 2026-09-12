@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import defectService from '../../services/defectService';
+import quarantineService from '../../services/quarantineService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import QANavigation from '../../components/Dashboard/QANavigation';
 
@@ -13,13 +14,18 @@ export default function DefectDetailPage() {
   const [inventoryRollId, setInventoryRollId] = useState('');
   const [reason, setReason] = useState('');
   const [quarantining, setQuarantining] = useState(false);
+  const [affectedInventory, setAffectedInventory] = useState([]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await defectService.getById(id);
+        const [data, quarantineData] = await Promise.all([
+          defectService.getById(id),
+          quarantineService.getAll()
+        ]);
         setDefect(data);
+        setAffectedInventory(quarantineData.filter((record) => record.defectReportId === id));
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load defect.'));
       } finally {
@@ -44,7 +50,7 @@ export default function DefectDetailPage() {
     setQuarantining(true);
     try {
       const quarantine = await defectService.quarantine(defect.id, { inventoryRollId, reason });
-      navigate(`/dashboard/quarantine/${quarantine.id}`);
+      navigate(`/quality/quarantine/${quarantine.id}`);
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to quarantine inventory.'));
     } finally {
@@ -62,8 +68,8 @@ export default function DefectDetailPage() {
             <h1 className="text-4xl font-bold mt-2">Defect Detail</h1>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => navigate('/dashboard/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">All Defects</button>
-            <button onClick={() => navigate(`/dashboard/defects/${defect.id}/edit`)} className="px-4 py-2 rounded-xl border border-cyan-500 text-cyan-300 hover:bg-cyan-500/10">Edit</button>
+            <button onClick={() => navigate('/quality/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">All Defects</button>
+            <button onClick={() => navigate(`/quality/defects/${defect.id}/edit`)} className="px-4 py-2 rounded-xl border border-cyan-500 text-cyan-300 hover:bg-cyan-500/10">Edit</button>
           </div>
 
           <form onSubmit={handleQuarantine} className="border-t border-slate-800 pt-6 space-y-4">
@@ -95,6 +101,10 @@ export default function DefectDetailPage() {
               <div className="text-slate-400 text-sm">Status</div>
               <div className="text-2xl font-semibold text-white">{defect.status}</div>
             </div>
+            <div>
+              <div className="text-slate-400 text-sm">Reported By</div>
+              <div className="text-slate-300">{defect.reportedByUserId || 'Unavailable'}</div>
+            </div>
           </div>
 
           <div>
@@ -105,6 +115,11 @@ export default function DefectDetailPage() {
           <div>
             <div className="text-slate-400 text-sm">Created At</div>
             <div className="text-slate-300">{new Date(defect.createdAt).toLocaleString()}</div>
+          </div>
+
+          <div>
+            <div className="text-slate-400 text-sm">Affected Inventory</div>
+            <div className="text-slate-300">{affectedInventory.map((record) => record.inventoryRollId).join(', ') || 'None'}</div>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, CheckCircle2, Loader2, Timer, Eye, EyeOff } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
@@ -22,7 +22,7 @@ export default function ForgotPassword() {
   // Step 2 — OTP
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timeLeft, setTimeLeft] = useState(OTP_EXPIRY_SECONDS);
-  const [isExpired, setIsExpired] = useState(false);
+  const isExpired = timeLeft <= 0;
   const [resendSuccess, setResendSuccess] = useState('');
   const inputRefs = useRef([]);
 
@@ -36,7 +36,7 @@ export default function ForgotPassword() {
   // OTP countdown
   useEffect(() => {
     if (step !== STEPS.OTP) return;
-    if (timeLeft <= 0) { setIsExpired(true); return; }
+    if (timeLeft <= 0) return;
     const id = setInterval(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearInterval(id);
   }, [timeLeft, step]);
@@ -92,7 +92,6 @@ export default function ForgotPassword() {
       await authService.forgotPassword(email);
       setOtp(['', '', '', '', '', '']);
       setTimeLeft(OTP_EXPIRY_SECONDS);
-      setIsExpired(false);
       setResendSuccess('A new code has been sent to your email.');
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {

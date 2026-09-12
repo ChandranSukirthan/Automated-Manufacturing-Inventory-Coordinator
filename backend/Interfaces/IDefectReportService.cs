@@ -9,7 +9,7 @@ namespace ManufacturingCoordinator.Api.Interfaces
     {
         Task<IEnumerable<DefectReportDto>> GetAllAsync();
         Task<DefectReportDto?> GetByIdAsync(Guid id);
-        Task<DefectReportDto> CreateAsync(CreateDefectReportDto dto);
+        Task<DefectReportDto> CreateAsync(CreateDefectReportDto dto, Guid? reportedByUserId);
         Task<DefectReportDto?> UpdateAsync(Guid id, UpdateDefectReportDto dto);
         Task<bool> DeleteAsync(Guid id);
     }

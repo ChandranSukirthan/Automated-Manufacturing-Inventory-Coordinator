@@ -22,6 +22,11 @@ class QualityService {
     await api.get('/dashboard/quality/summary') as Map<String, dynamic>,
   );
 
+  Future<BatchDetails> getBatch(String id) async => BatchDetails.fromJson(
+    await api.get('/batches/${Uri.encodeComponent(id.trim())}')
+        as Map<String, dynamic>,
+  );
+
   Future<List<DefectReport>> getDefects() async =>
       _list(await api.get('/defects'), DefectReport.fromJson);
 

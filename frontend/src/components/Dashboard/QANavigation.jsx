@@ -2,10 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 
 const links = [
-  { label: 'Dashboard', to: '/dashboard/quality' },
-  { label: 'Defect Reports', to: '/dashboard/defects' },
-  { label: 'Quarantine Management', to: '/dashboard/quarantine' },
-  { label: 'Quarantine History', to: '/dashboard/quarantine/history' }
+  { label: 'Dashboard', to: '/quality' },
+  { label: 'Defect Reports', to: '/quality/defects' },
+  { label: 'Quarantine Management', to: '/quality/quarantine' },
+  { label: 'Quarantine History', to: '/quality/quarantine/history' }
 ];
 
 export default function QANavigation() {
@@ -23,7 +23,7 @@ export default function QANavigation() {
         <NavLink
           key={link.to}
           to={link.to}
-          end={link.to === '/dashboard/quality' || link.to === '/dashboard/quarantine'}
+          end={link.to === '/quality' || link.to === '/quality/quarantine'}
           className={({ isActive }) => `px-3 py-2 rounded-lg text-sm ${isActive ? 'bg-emerald-500 text-slate-950 font-semibold' : 'text-slate-300 hover:bg-slate-800'}`}
         >
           {link.label}

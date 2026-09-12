@@ -24,6 +24,7 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
   String? _error;
   bool _loading = true;
   bool _releasing = false;
+  BatchDetails? _batch;
 
   @override
   void initState() {
@@ -38,7 +39,13 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     });
     try {
       final record = await widget.service.getQuarantine(widget.quarantineId);
-      if (mounted) setState(() => _record = record);
+      final batch = await widget.service.getBatch(record.batchId);
+      if (mounted) {
+        setState(() {
+          _record = record;
+          _batch = batch;
+        });
+      }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
     } finally {
@@ -76,7 +83,13 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
       final record = await widget.service.releaseQuarantine(
         widget.quarantineId,
       );
-      if (mounted) setState(() => _record = record);
+      final batch = await widget.service.getBatch(record.batchId);
+      if (mounted) {
+        setState(() {
+          _record = record;
+          _batch = batch;
+        });
+      }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
     } finally {
@@ -121,6 +134,20 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
             _Info(label: 'Defect', value: record.defectReportId),
             _Info(label: 'Batch', value: record.batchId),
             _Info(label: 'Inventory', value: record.inventoryRollId),
+            _Info(
+              label: 'Inventory status',
+              value: _batch?.inventoryRolls
+                      .firstWhere(
+                        (roll) => roll.id == record.inventoryRollId,
+                        orElse: () => const InventoryRoll(
+                          id: '',
+                          batchId: '',
+                          status: 'Unknown',
+                        ),
+                      )
+                      .status ??
+                  'Unknown',
+            ),
             Row(
               children: [
                 Expanded(

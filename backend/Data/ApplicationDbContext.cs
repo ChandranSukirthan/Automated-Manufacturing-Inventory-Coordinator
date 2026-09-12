@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
+using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 
 namespace ManufacturingCoordinator.Data
@@ -20,8 +21,8 @@ namespace ManufacturingCoordinator.Data
         // QA / Defect Reporting
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
         public DbSet<Quarantine> Quarantines { get; set; } = null!;
-
-        // TODO: other students' DbSets (Inventory, PurchaseOrders, Quality, Production) go here too
+        public DbSet<Batch> Batches { get; set; } = null!;
+        public DbSet<InventoryRoll> InventoryRolls { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -146,6 +147,31 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(d => d.CreatedAt)
                     .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(d => d.ReportedByUser)
+                    .WithMany()
+                    .HasForeignKey(d => d.ReportedByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<Batch>(entity =>
+            {
+                entity.HasKey(b => b.Id);
+                entity.Property(b => b.Id).HasMaxLength(80);
+                entity.Property(b => b.ProductType).HasConversion<string>().IsRequired();
+            });
+
+            modelBuilder.Entity<InventoryRoll>(entity =>
+            {
+                entity.HasKey(i => i.Id);
+                entity.Property(i => i.Id).HasMaxLength(120);
+                entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
+                entity.Property(i => i.Status).HasConversion<string>().IsRequired();
+                entity.HasOne(i => i.Batch)
+                    .WithMany(b => b.InventoryRolls)
+                    .HasForeignKey(i => i.BatchId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(i => new { i.BatchId, i.Status });
             });
 
             modelBuilder.Entity<Quarantine>(entity =>
