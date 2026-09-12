@@ -53,3 +53,5 @@ Thumbs.db
 Library/
 .local/
 backend/Library/
+.aspnet/
+backend/.aspnet/

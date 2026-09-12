@@ -39,6 +39,11 @@ export const purchaseOrderService = {
   async revisePurchaseOrder(id, notes = '') {
     const response = await api.post(`/purchase-orders/${id}/revise`, { notes });
     return response.data;
+  },
+
+  async processPayment(id, forceDispatch = true) {
+    const response = await api.post(`/purchase-orders/${id}/process-payment?forceDispatch=${forceDispatch}`);
+    return response.data;
   }
 };
 

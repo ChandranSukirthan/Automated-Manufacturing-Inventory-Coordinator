@@ -150,6 +150,29 @@ namespace ManufacturingCoordinator.Controllers
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
         }
 
+        /// <summary>
+        /// POST /api/purchase-orders/{id}/process-payment — execute payment settlement & PO dispatch
+        /// Used to settle payment or retry for orders in Approved or Payment status.
+        /// </summary>
+        [HttpPost("{id:int}/process-payment")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderResponseDto>> ProcessPayment(int id, [FromQuery] bool forceDispatch = true)
+        {
+            var approverId = GetCurrentUserId();
+            try
+            {
+                var po = await _poService.ProcessPaymentAsync(id, approverId, forceDispatch);
+                return Ok(po);
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+            catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
         /// <summary>POST /api/purchase-orders/{id}/reject — transition PendingApproval → Rejected</summary>
         [HttpPost("{id:int}/reject")]
         [Authorize(Roles = "SupplyChainManager")]

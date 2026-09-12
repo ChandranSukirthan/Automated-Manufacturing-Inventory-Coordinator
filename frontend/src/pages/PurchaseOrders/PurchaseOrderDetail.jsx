@@ -132,6 +132,23 @@ export default function PurchaseOrderDetail() {
     }
   };
 
+  // Settle Payment & Dispatch PO
+  const handleProcessPayment = async () => {
+    setActionLoading(true);
+    setActionMessage('Connecting to Stripe Sandbox, settling payment and dispatching PO PDF...');
+    setError('');
+    try {
+      const updated = await purchaseOrderService.processPayment(id);
+      setPo(updated);
+      await fetchPoDetails();
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to complete payment settlement & dispatch.'));
+    } finally {
+      setActionLoading(false);
+      setActionMessage('');
+    }
+  };
+
   if (loading) {
     return (
       <AppLayout title="Purchase Order Details">
@@ -237,6 +254,22 @@ export default function PurchaseOrderDetail() {
               </button>
             </div>
           )}
+
+          {/* Payment Status Manager Actions */}
+          {po.status === 'Payment' && isManager && (
+            <button
+              onClick={handleProcessPayment}
+              disabled={actionLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-cyan-600/25 transition-all disabled:opacity-50"
+            >
+              {actionLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="w-3.5 h-3.5" />
+              )}
+              <span>Complete Settlement & Dispatch</span>
+            </button>
+          )}
         </div>
       }
     >
@@ -330,6 +363,111 @@ export default function PurchaseOrderDetail() {
           </div>
         )}
       </div>
+
+      {/* Step 4: Stripe Payment Settlement Cockpit Card */}
+      {po.status === 'Payment' && (
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/60 via-slate-900 to-slate-900 border border-blue-500/40 shadow-2xl space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+                <CreditCard className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-base font-bold text-white">
+                    Step 4: Stripe Payment Authorization & Settlement
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                    Awaiting Settlement
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  The order was approved by the Supply Chain Manager. Click below to execute Stripe payment settlement and trigger automatic supplier dispatch.
+                </p>
+              </div>
+            </div>
+
+            {isManager && (
+              <button
+                onClick={handleProcessPayment}
+                disabled={actionLoading}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50 shrink-0"
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CreditCard className="w-4 h-4" />
+                )}
+                <span>Complete Stripe Settlement & Dispatch</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
+                Settlement Amount
+              </span>
+              <p className="text-base font-mono font-bold text-emerald-400">
+                ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
+                Stripe Gateway Status
+              </span>
+              <p className="font-mono text-white flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                <span>{po.stripePaymentStatus || 'Ready (Sandbox Simulation)'}</span>
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
+                Next Automated Action
+              </span>
+              <p className="text-slate-300">
+                Step 5: Generate iText7 PDF & Dispatch via Email to <span className="text-white font-semibold">{po.supplierName}</span>
+              </p>
+            </div>
+          </div>
+
+          {po.paymentFailureReason && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>
+                  Notice: Previous transaction attempted live key ({po.paymentFailureReason}). Sandbox mode will automatically simulate authorization upon settlement.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 5: Sent Success Card */}
+      {po.status === 'Sent' && (
+        <div className="p-5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-emerald-950/40">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">
+                Purchase Order Lifecycle Completed — Step 5 Dispatched
+              </p>
+              <p className="text-slate-300 mt-0.5">
+                Stripe settlement completed (Intent: <span className="font-mono text-cyan-300">{po.stripePaymentIntentId || 'pi_sandbox'}</span>). Official PO document generated and dispatched to <span className="font-semibold text-white">{po.supplierName}</span>.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
+            <Mail className="w-3.5 h-3.5 text-blue-400" />
+            <span>Email Status: {po.emailStatus || 'Sent'}</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Info Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
