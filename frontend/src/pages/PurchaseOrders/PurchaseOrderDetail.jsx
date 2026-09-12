@@ -18,6 +18,7 @@ import {
   AlertCircle,
   AlertTriangle,
   UserCheck,
+  Check,
   Clock,
   Sparkles,
   Activity,
