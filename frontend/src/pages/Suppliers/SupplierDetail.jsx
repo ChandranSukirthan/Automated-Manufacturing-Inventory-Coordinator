@@ -143,7 +143,7 @@ export default function SupplierDetail() {
             <span>Edit Profile</span>
           </button>
           <button
-            onClick={() => navigate(`/purchase-orders?newPoSupplierId=${supplier.id}`)}
+            onClick={() => navigate(`/purchase-orders/create?supplierId=${supplier.id}`)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-brand-600/20"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -173,6 +173,9 @@ export default function SupplierDetail() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="text-2xl font-bold text-white tracking-tight">{supplier.name}</h2>
+                <span className="text-xs font-mono text-brand-400 bg-brand-950/60 px-2 py-0.5 rounded-md border border-brand-800/40">
+                  {supplier.supplierCode || `SUP-${supplier.id}`}
+                </span>
                 {supplier.isActive ? (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                     Active Partner
@@ -191,8 +194,8 @@ export default function SupplierDetail() {
           </div>
         </div>
 
-        {/* Contact Info Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Contact Info & Terms Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
             <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
               <Mail className="w-4 h-4 text-brand-400" />
@@ -208,6 +211,16 @@ export default function SupplierDetail() {
             </div>
             <p className="text-sm font-semibold text-white">
               {supplier.contactPhone || 'Not provided'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
+              <Clock className="w-4 h-4 text-brand-400" />
+              <span>Lead Time & Terms</span>
+            </div>
+            <p className="text-sm font-semibold text-white">
+              {supplier.leadTimeDays || 7} Days • {supplier.paymentTerms || 'Net 30'}
             </p>
           </div>
 

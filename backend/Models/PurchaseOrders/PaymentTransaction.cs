@@ -41,3 +41,4 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     }
 }
+

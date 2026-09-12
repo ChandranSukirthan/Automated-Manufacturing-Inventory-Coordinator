@@ -48,16 +48,10 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
 
   const navItems = [
     {
-      label: 'Manager Dashboard',
+      label: 'Dashboard',
       path: '/dashboard/admin',
       icon: <LayoutDashboard className="w-5 h-5" />,
       active: location.pathname === '/dashboard/admin' || location.pathname === '/dashboard/manager'
-    },
-    {
-      label: 'Purchase Orders',
-      path: '/purchase-orders',
-      icon: <ShoppingCart className="w-5 h-5" />,
-      active: location.pathname === '/purchase-orders' || location.pathname.startsWith('/purchase-orders/')
     },
     {
       label: 'Suppliers',
@@ -66,17 +60,34 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
       active: location.pathname === '/suppliers' || location.pathname.startsWith('/suppliers/')
     },
     {
-      label: 'AI Approvals',
-      path: '/ai-approvals',
-      icon: <CheckSquare className="w-5 h-5" />,
-      badge: pendingCount > 0 ? pendingCount : null,
-      active: location.pathname === '/ai-approvals'
+      label: 'Purchase Orders',
+      path: '/purchase-orders',
+      icon: <ShoppingCart className="w-5 h-5" />,
+      active:
+        (location.pathname === '/purchase-orders' ||
+          location.pathname === '/purchase-orders/create' ||
+          (location.pathname.startsWith('/purchase-orders/') &&
+            !location.pathname.includes('/approvals') &&
+            !location.pathname.includes('/analytics')))
     },
     {
-      label: 'Supplier Analytics',
-      path: '/supplier-analytics',
+      label: 'AI Approvals',
+      path: '/purchase-orders/approvals',
+      icon: <CheckSquare className="w-5 h-5" />,
+      badge: pendingCount > 0 ? pendingCount : null,
+      active: location.pathname === '/purchase-orders/approvals' || location.pathname === '/ai-approvals'
+    },
+    {
+      label: 'Analytics',
+      path: '/purchase-orders/analytics',
       icon: <BarChart3 className="w-5 h-5" />,
-      active: location.pathname === '/supplier-analytics'
+      active: location.pathname === '/purchase-orders/analytics' || location.pathname === '/supplier-analytics'
+    },
+    {
+      label: 'Workflow Monitoring',
+      path: '/agent-workflows',
+      icon: <UserCheck className="w-5 h-5" />,
+      active: location.pathname === '/agent-workflows'
     }
   ];
 

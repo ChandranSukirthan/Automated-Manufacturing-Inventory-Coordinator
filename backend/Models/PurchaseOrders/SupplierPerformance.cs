@@ -39,3 +39,4 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public DateTime CalculatedAt { get; set; } = DateTime.UtcNow;
     }
 }
+

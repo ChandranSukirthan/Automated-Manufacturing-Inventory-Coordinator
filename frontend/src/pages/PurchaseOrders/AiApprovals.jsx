@@ -18,7 +18,10 @@ import {
   Loader2,
   AlertCircle,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  CreditCard,
+  Mail,
+  Send
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -74,22 +77,53 @@ export default function AiApprovals() {
     fetchPendingOrders();
   }, []);
 
-  // One-click approval handler calling ASP.NET Core backend directly
+  // Approval animation steps
+  const [animatingApproval, setAnimatingApproval] = useState(false);
+  const [approvalStep, setApprovalStep] = useState(0); 
+  // 1: Approved, 2: Payment Processing, 3: Payment Successful, 4: Supplier Notification, 5: PO Sent
+
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // One-click approval handler calling ASP.NET Core backend directly with sequential animation
   const handleApprove = async () => {
     if (!selectedOrder) return;
-    setActionLoading(true);
-    setActionProgressText('Verifying token, executing Stripe Sandbox payment, and generating PDF email...');
+    setApproveModalOpen(false);
+    setAnimatingApproval(true);
+    setError('');
+
     try {
+      // Step 1: Approved
+      setApprovalStep(1);
+      await delay(600);
+
+      // Step 2: Payment Processing
+      setApprovalStep(2);
+      
+      // Execute backend API (ASP.NET Core -> Stripe Sandbox & SendGrid)
       await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
-      setApproveModalOpen(false);
-      setSelectedOrder(null);
-      await fetchPendingOrders();
+      
+      // Step 3: Payment Successful
+      setApprovalStep(3);
+      await delay(700);
+
+      // Step 4: Supplier Notification
+      setApprovalStep(4);
+      await delay(700);
+
+      // Step 5: PO Sent
+      setApprovalStep(5);
     } catch (err) {
+      setAnimatingApproval(false);
+      setApprovalStep(0);
       setError(parseErrorMessage(err, 'Failed to approve purchase order.'));
-    } finally {
-      setActionLoading(false);
-      setActionProgressText('');
     }
+  };
+
+  const handleFinishApprovalAnimation = async () => {
+    setAnimatingApproval(false);
+    setApprovalStep(0);
+    setSelectedOrder(null);
+    await fetchPendingOrders();
   };
 
   // Rejection handler
@@ -460,6 +494,92 @@ export default function AiApprovals() {
         notesPlaceholder="e.g. Please decrease quantity from 2,000 to 1,500 KG to meet limit..."
         loading={actionLoading}
       />
+
+      {/* Sequential Step Completion Modal for Approval Animation */}
+      {animatingApproval && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-brand-500/40 shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Purchase Order Execution Pipeline</h3>
+                <p className="text-xs text-slate-400">Order {selectedOrder?.poNumber} • ${selectedOrder?.totalCost?.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Stepper Progress */}
+            <div className="space-y-3">
+              {[
+                { step: 1, title: 'Approved', desc: 'Manager authorization verified via JWT' },
+                { step: 2, title: 'Payment Processing', desc: 'Invoking Stripe Sandbox payment gateway' },
+                { step: 3, title: 'Payment Successful', desc: 'Transaction authorized and settlement confirmed' },
+                { step: 4, title: 'Supplier Notification', desc: 'Generating PO PDF invoice & packaging documents' },
+                { step: 5, title: 'PO Sent', desc: `Dispatched to ${selectedOrder?.supplierName} via SendGrid` },
+              ].map((item) => {
+                const isPassed = approvalStep > item.step;
+                const isCurrent = approvalStep === item.step;
+
+                return (
+                  <div
+                    key={item.step}
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                      isPassed
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : isCurrent
+                        ? 'bg-brand-500/15 border-brand-500/40 text-brand-200 ring-1 ring-brand-500/30'
+                        : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                    }`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      {isPassed ? (
+                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                          <Check className="w-3.5 h-3.5" />
+                        </div>
+                      ) : isCurrent ? (
+                        <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                          {item.step}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className={`text-xs font-bold ${isCurrent ? 'text-white' : ''}`}>{item.title}</p>
+                        {isPassed && <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>}
+                        {isCurrent && <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>}
+                      </div>
+                      <p className="text-[11px] opacity-80 mt-0.5">{item.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer with Done button when completed */}
+            {approvalStep === 5 ? (
+              <div className="pt-2">
+                <button
+                  onClick={handleFinishApprovalAnimation}
+                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Done - Return to Approvals</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
+                <span>Executing automated workflow steps...</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

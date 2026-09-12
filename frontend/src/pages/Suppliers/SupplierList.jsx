@@ -47,9 +47,12 @@ export default function SupplierList() {
   // Form state
   const [formData, setFormData] = useState({
     name: '',
+    supplierCode: '',
     contactEmail: '',
     contactPhone: '',
     address: '',
+    paymentTerms: 'Net 30',
+    leadTimeDays: 7,
     isActive: true
   });
   const [formError, setFormError] = useState('');
@@ -77,6 +80,7 @@ export default function SupplierList() {
       .filter((s) => {
         const matchesSearch =
           s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (s.supplierCode && s.supplierCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
           s.contactEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (s.contactPhone && s.contactPhone.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (s.address && s.address.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -113,9 +117,12 @@ export default function SupplierList() {
   const handleOpenCreate = () => {
     setFormData({
       name: '',
+      supplierCode: `SUP-${Math.floor(100 + Math.random() * 900)}`,
       contactEmail: '',
       contactPhone: '',
       address: '',
+      paymentTerms: 'Net 30',
+      leadTimeDays: 7,
       isActive: true
     });
     setFormError('');
@@ -128,9 +135,12 @@ export default function SupplierList() {
     setSelectedSupplier(supplier);
     setFormData({
       name: supplier.name,
+      supplierCode: supplier.supplierCode || '',
       contactEmail: supplier.contactEmail,
       contactPhone: supplier.contactPhone || '',
       address: supplier.address || '',
+      paymentTerms: supplier.paymentTerms || 'Net 30',
+      leadTimeDays: supplier.leadTimeDays || 7,
       isActive: supplier.isActive
     });
     setFormError('');
@@ -330,8 +340,9 @@ export default function SupplierList() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-800/80 bg-slate-950/60 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Supplier Name</th>
+                  <th className="py-3.5 px-4">Supplier & Code</th>
                   <th className="py-3.5 px-4">Contact Details</th>
+                  <th className="py-3.5 px-4">Lead Time & Terms</th>
                   <th className="py-3.5 px-4">Address</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -346,10 +357,15 @@ export default function SupplierList() {
                     <td className="py-4 px-4 font-medium text-white">
                       <Link
                         to={`/suppliers/${supplier.id}`}
-                        className="flex items-center gap-2 text-brand-400 hover:text-brand-300 group-hover:underline"
+                        className="text-brand-400 hover:text-brand-300 group-hover:underline block"
                       >
-                        <Building2 className="w-4 h-4 text-slate-400" />
-                        <span>{supplier.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="font-bold">{supplier.name}</span>
+                        </div>
+                        <span className="text-xs font-mono text-slate-400 ml-6 block">
+                          {supplier.supplierCode || `SUP-${supplier.id}`}
+                        </span>
                       </Link>
                     </td>
                     <td className="py-4 px-4 space-y-1">
@@ -363,6 +379,14 @@ export default function SupplierList() {
                           <span>{supplier.contactPhone}</span>
                         </div>
                       )}
+                    </td>
+                    <td className="py-4 px-4 text-xs space-y-1">
+                      <span className="font-semibold text-white block">
+                        {supplier.leadTimeDays || 7} Days Lead Time
+                      </span>
+                      <span className="text-slate-400 font-mono block">
+                        Terms: {supplier.paymentTerms || 'Net 30'}
+                      </span>
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-400 max-w-xs truncate">
                       {supplier.address ? (
@@ -489,31 +513,79 @@ export default function SupplierList() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Contact Email <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.contactEmail}
-                  onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                  placeholder="sales@supplier.com"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Supplier Code
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.supplierCode}
+                    onChange={(e) => setFormData({ ...formData, supplierCode: e.target.value })}
+                    placeholder="e.g. SUP-001"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Lead Time (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.leadTimeDays}
+                    onChange={(e) => setFormData({ ...formData, leadTimeDays: parseInt(e.target.value, 10) || 7 })}
+                    placeholder="7"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Contact Email <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.contactEmail}
+                    onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
+                    placeholder="sales@supplier.com"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contactPhone}
+                    onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                    placeholder="+1 (555) 019-2834"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Phone Number
+                  Payment Terms
                 </label>
-                <input
-                  type="text"
-                  value={formData.contactPhone}
-                  onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                  placeholder="+1 (555) 019-2834"
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
-                />
+                <select
+                  value={formData.paymentTerms}
+                  onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-hidden focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="Net 15">Net 15</option>
+                  <option value="Net 30">Net 30 (Standard)</option>
+                  <option value="Net 60">Net 60</option>
+                  <option value="Net 90">Net 90</option>
+                  <option value="Due on Receipt">Due on Receipt / Cash</option>
+                </select>
               </div>
 
               <div>

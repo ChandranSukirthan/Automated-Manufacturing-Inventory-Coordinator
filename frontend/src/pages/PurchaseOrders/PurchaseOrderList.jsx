@@ -38,7 +38,8 @@ export default function PurchaseOrderList() {
   // Filters, Search, Sort & Pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('date'); // 'date' | 'cost' | 'poNumber'
+  const [supplierFilter, setSupplierFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('date'); // 'date' | 'amount' | 'supplier' | 'status' | 'poNumber'
   const [sortOrder, setSortOrder] = useState('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -188,8 +189,15 @@ export default function PurchaseOrderList() {
         if (!matchesSearch) return false;
 
         if (statusFilter !== 'all') {
-          return o.status.toLowerCase() === statusFilter.toLowerCase();
+          if (o.status.toLowerCase() !== statusFilter.toLowerCase()) return false;
         }
+
+        if (supplierFilter !== 'all') {
+          if (o.supplierId?.toString() !== supplierFilter && o.supplierName !== supplierFilter) {
+            return false;
+          }
+        }
+
         return true;
       })
       .sort((a, b) => {
@@ -198,8 +206,18 @@ export default function PurchaseOrderList() {
           const dateB = new Date(b.createdAt);
           return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
         }
-        if (sortBy === 'cost') {
-          return sortOrder === 'asc' ? a.totalCost - b.totalCost : b.totalCost - a.totalCost;
+        if (sortBy === 'cost' || sortBy === 'amount') {
+          return sortOrder === 'asc' ? (a.totalCost || 0) - (b.totalCost || 0) : (b.totalCost || 0) - (a.totalCost || 0);
+        }
+        if (sortBy === 'supplier') {
+          return sortOrder === 'asc'
+            ? (a.supplierName || '').localeCompare(b.supplierName || '')
+            : (b.supplierName || '').localeCompare(a.supplierName || '');
+        }
+        if (sortBy === 'status') {
+          return sortOrder === 'asc'
+            ? (a.status || '').localeCompare(b.status || '')
+            : (b.status || '').localeCompare(a.status || '');
         }
         if (sortBy === 'poNumber') {
           return sortOrder === 'asc'
@@ -208,7 +226,7 @@ export default function PurchaseOrderList() {
         }
         return 0;
       });
-  }, [orders, searchTerm, statusFilter, sortBy, sortOrder]);
+  }, [orders, searchTerm, statusFilter, supplierFilter, sortBy, sortOrder]);
 
   // Pagination
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
@@ -232,16 +250,25 @@ export default function PurchaseOrderList() {
       title="Purchase Orders"
       subtitle="Lifecycle management, automated budget verification, and manager approvals"
       actionButton={
-        <button
-          onClick={() => {
-            setCreateError('');
-            setIsCreateOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-brand-600/20"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Purchase Order</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/purchase-orders/create"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-brand-600/20"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Purchase Order</span>
+          </Link>
+          <button
+            onClick={() => {
+              setCreateError('');
+              setIsCreateOpen(true);
+            }}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-xs transition-colors border border-slate-700"
+            title="Quick Modal Create"
+          >
+            <span>Quick Create</span>
+          </button>
+        </div>
       }
     >
       {/* KPI Cards */}
@@ -303,6 +330,26 @@ export default function PurchaseOrderList() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+          {/* Supplier Filter */}
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-xs">
+            <Building2 className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={supplierFilter}
+              onChange={(e) => {
+                setSupplierFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="bg-transparent text-slate-200 focus:outline-hidden max-w-[140px] truncate"
+            >
+              <option value="all" className="bg-slate-900">All Suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id.toString()} className="bg-slate-900">
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Status Select */}
           <div className="flex items-center gap-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-xs">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
@@ -334,7 +381,9 @@ export default function PurchaseOrderList() {
               className="bg-transparent text-slate-200 focus:outline-hidden"
             >
               <option value="date" className="bg-slate-900">Sort by Date</option>
-              <option value="cost" className="bg-slate-900">Sort by Cost</option>
+              <option value="amount" className="bg-slate-900">Sort by Amount</option>
+              <option value="supplier" className="bg-slate-900">Sort by Supplier</option>
+              <option value="status" className="bg-slate-900">Sort by Status</option>
               <option value="poNumber" className="bg-slate-900">Sort by PO Number</option>
             </select>
             <button

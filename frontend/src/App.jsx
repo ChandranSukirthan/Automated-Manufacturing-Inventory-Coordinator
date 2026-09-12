@@ -15,9 +15,11 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import SupplierList from './pages/Suppliers/SupplierList';
 import SupplierDetail from './pages/Suppliers/SupplierDetail';
 import PurchaseOrderList from './pages/PurchaseOrders/PurchaseOrderList';
+import PurchaseOrderCreate from './pages/PurchaseOrders/PurchaseOrderCreate';
 import PurchaseOrderDetail from './pages/PurchaseOrders/PurchaseOrderDetail';
 import AiApprovals from './pages/PurchaseOrders/AiApprovals';
 import SupplierAnalytics from './pages/PurchaseOrders/SupplierAnalytics';
+import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
 
 function App() {
   return (
@@ -37,6 +39,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PurchaseOrderList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/purchase-orders/create"
+            element={
+              <ProtectedRoute>
+                <PurchaseOrderCreate />
               </ProtectedRoute>
             }
           />
@@ -65,6 +75,14 @@ function App() {
             }
           />
           <Route
+            path="/purchase-orders/approvals"
+            element={
+              <ProtectedRoute allowedRoles={[1]}>
+                <AiApprovals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/ai-approvals"
             element={
               <ProtectedRoute allowedRoles={[1]}>
@@ -73,10 +91,26 @@ function App() {
             }
           />
           <Route
+            path="/purchase-orders/analytics"
+            element={
+              <ProtectedRoute>
+                <SupplierAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/supplier-analytics"
             element={
               <ProtectedRoute>
                 <SupplierAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agent-workflows"
+            element={
+              <ProtectedRoute>
+                <AgentWorkflowMonitor />
               </ProtectedRoute>
             }
           />

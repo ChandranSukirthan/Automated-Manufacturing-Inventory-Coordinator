@@ -1,5 +1,7 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using backend.Services;
 using backend.Dtos;
@@ -13,15 +15,63 @@ namespace backend.Controllers
         private readonly IInventoryService _inventoryService;
         private readonly IAgentIntegrationService _agentIntegrationService;
         private readonly ILogger<AgentWorkflowController> _logger;
+        private readonly ManufacturingCoordinator.Data.ApplicationDbContext _appContext;
 
         public AgentWorkflowController(
             IInventoryService inventoryService, 
             IAgentIntegrationService agentIntegrationService,
-            ILogger<AgentWorkflowController> logger)
+            ILogger<AgentWorkflowController> logger,
+            ManufacturingCoordinator.Data.ApplicationDbContext appContext)
         {
             _inventoryService = inventoryService;
             _agentIntegrationService = agentIntegrationService;
             _logger = logger;
+            _appContext = appContext;
+        }
+
+        // GET: api/agentworkflow/workflows
+        // Returns agentic pipeline execution states for monitor view
+        [HttpGet("workflows")]
+        public async Task<IActionResult> GetWorkflows()
+        {
+            var pos = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                _appContext.PurchaseOrders
+                    .Include(p => p.Supplier)
+                    .OrderByDescending(p => p.CreatedAt)
+            );
+
+            var workflows = pos.Select((po, idx) =>
+            {
+                var isPending = po.Status == ManufacturingCoordinator.Enums.PurchaseOrderStatus.PendingApproval;
+                var isApproved = po.Status == ManufacturingCoordinator.Enums.PurchaseOrderStatus.Approved ||
+                                 po.Status == ManufacturingCoordinator.Enums.PurchaseOrderStatus.Payment ||
+                                 po.Status == ManufacturingCoordinator.Enums.PurchaseOrderStatus.Sent;
+                var isRejected = po.Status == ManufacturingCoordinator.Enums.PurchaseOrderStatus.Rejected;
+
+                var stepIdx = isApproved ? 5 : isPending ? 4 : isRejected ? 4 : 3;
+                var statusText = isApproved ? "Completed" : isPending ? "WaitingForApproval" : isRejected ? "Rejected" : "Active";
+
+                return new
+                {
+                    workflowId = $"WF-2026-{(100 + po.Id):D3}",
+                    objective = $"Replenish raw material for {po.Supplier?.Name ?? "Supplier"} under budget {po.BudgetLimit:C}",
+                    currentAgent = isApproved ? "Dispatch Agent" : isPending ? "Human Approval Gate" : "Validation Agent",
+                    currentStep = isApproved ? "Order Dispatched" : isPending ? "Waiting For Manager Approval" : "Validating SLA & Budget",
+                    status = statusText,
+                    startedAt = po.CreatedAt,
+                    completedAt = isApproved ? po.UpdatedAt : (System.DateTime?)null,
+                    approvalStatus = po.Status.ToString(),
+                    finalOutcome = isApproved ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : isRejected ? $"PO {po.PoNumber} rejected ({po.RejectionReason})" : $"PO {po.PoNumber} in evaluation (${po.TotalCost:F2})",
+                    steps = new[] { "PLANNER", "DATA EXTRACTION", "PURCHASING", "VALIDATION", "WAITING FOR APPROVAL" },
+                    currentStepIndex = stepIdx,
+                    purchaseOrderId = po.Id,
+                    poNumber = po.PoNumber,
+                    supplierName = po.Supplier?.Name ?? "—",
+                    totalCost = po.TotalCost
+                };
+            }).ToList();
+
+            return Ok(workflows);
         }
 
         // POST: api/agentworkflow/trigger/{id}
