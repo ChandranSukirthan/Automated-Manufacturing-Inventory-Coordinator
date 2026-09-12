@@ -11,6 +11,7 @@ using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Api.Services;
 using ManufacturingCoordinator.Api.Middleware;
+using ManufacturingCoordinator.Services.PurchaseOrders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,6 +57,11 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Register Student 2 - Purchase Order Services
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IStripeService, StripeService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 
 // Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -135,6 +141,9 @@ using (var scope = app.Services.CreateScope())
     {
         var mfgContext = scope.ServiceProvider.GetRequiredService<ManufacturingContext>();
         mfgContext.Database.EnsureCreated();
+
+        var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        appContext.Database.EnsureCreated();
     }
     catch (Exception ex)
     {

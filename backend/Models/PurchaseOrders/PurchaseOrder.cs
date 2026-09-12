@@ -51,7 +51,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public bool RequiresApproval { get; set; }
 
         // ── Approval ──────────────────────────────────────────────────────────
-        public int? ApprovedById { get; set; }
+        public Guid? ApprovedById { get; set; }
 
         [ForeignKey(nameof(ApprovedById))]
         public User? ApprovedBy { get; set; }

@@ -191,7 +191,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (await GetByIdAsync(po.Id))!;
         }
 
-        public async Task<PurchaseOrderResponseDto> ApproveAsync(int id, int approverId)
+        public async Task<PurchaseOrderResponseDto> ApproveAsync(int id, Guid approverId)
         {
             var po = await LoadPoAsync(id);
             TransitionStatus(po, PurchaseOrderStatus.Approved);
@@ -208,7 +208,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (await GetByIdAsync(po.Id))!;
         }
 
-        public async Task<PurchaseOrderResponseDto> RejectAsync(int id, int approverId, string? reason)
+        public async Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason)
         {
             var po = await LoadPoAsync(id);
             TransitionStatus(po, PurchaseOrderStatus.Rejected);
@@ -222,7 +222,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (await GetByIdAsync(po.Id))!;
         }
 
-        public async Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, int approverId, string? reason)
+        public async Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason)
         {
             var po = await LoadPoAsync(id);
             TransitionStatus(po, PurchaseOrderStatus.RevisionRequested);

@@ -159,11 +159,11 @@ namespace ManufacturingCoordinator.Controllers
 
         // ── Helpers ───────────────────────────────────────────────────────────────
 
-        /// <summary>Extracts the numeric user ID from the JWT NameIdentifier claim.</summary>
-        private int? GetCurrentUserId()
+        /// <summary>Extracts the user ID Guid from the JWT NameIdentifier claim.</summary>
+        private Guid? GetCurrentUserId()
         {
             var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return int.TryParse(claim, out var id) ? id : null;
+            return Guid.TryParse(claim, out var id) ? id : null;
         }
     }
 }

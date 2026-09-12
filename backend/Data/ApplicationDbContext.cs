@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Models.Authentication;
 using ManufacturingCoordinator.Models.PurchaseOrders;
+using backend.Models;
 
 namespace ManufacturingCoordinator.Data
 {
@@ -20,6 +21,7 @@ namespace ManufacturingCoordinator.Data
         public DbSet<Supplier> Suppliers { get; set; } = null!;
         public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
         public DbSet<OrderLine> OrderLines { get; set; } = null!;
+        public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -250,6 +252,15 @@ namespace ManufacturingCoordinator.Data
                     .WithMany()
                     .HasForeignKey(ol => ol.RawMaterialId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ── RawMaterial (Existing table from Student 1) ───────────────────────
+            modelBuilder.Entity<RawMaterial>(entity =>
+            {
+                entity.ToTable("RawMaterials");
+                entity.HasKey(rm => rm.Id);
+                entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
+                entity.HasIndex(rm => rm.SkuCode).IsUnique();
             });
         }
     }
