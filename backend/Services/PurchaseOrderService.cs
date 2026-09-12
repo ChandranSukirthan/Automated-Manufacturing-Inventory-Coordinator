@@ -7,8 +7,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using iText.Kernel.Pdf;
+using iText.Kernel.Colors;
 using iText.Layout;
+using iText.Layout.Borders;
 using iText.Layout.Element;
+using iText.Layout.Properties;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Enums;
@@ -580,43 +583,208 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
         // ── PDF Generation ────────────────────────────────────────────────────────
 
-        private static byte[] GeneratePoPdf(PurchaseOrder po)
+        public async Task<byte[]> GeneratePdfAsync(int id)
         {
-            using var ms = new MemoryStream();
-            using var writer = new PdfWriter(ms);
-            using var pdf = new PdfDocument(writer);
-            using var doc = new Document(pdf);
+            var poFull = await _context.PurchaseOrders
+                .Include(p => p.Supplier)
+                .Include(p => p.ApprovedBy)
+                .Include(p => p.CreatedBy)
+                .Include(p => p.OrderLines)
+                    .ThenInclude(ol => ol.RawMaterial)
+                .FirstOrDefaultAsync(p => p.Id == id);
 
-            doc.Add(new Paragraph($"PURCHASE ORDER — {po.PoNumber}")
-                .SetFontSize(18).SetBold());
-            doc.Add(new Paragraph($"Supplier: {po.Supplier?.Name} ({po.Supplier?.SupplierCode})"));
-            doc.Add(new Paragraph($"Status: {po.Status}"));
-            doc.Add(new Paragraph($"Currency: {po.Currency}"));
-            doc.Add(new Paragraph($"Date: {po.CreatedAt:yyyy-MM-dd}"));
-            doc.Add(new Paragraph(" "));
-            doc.Add(new Paragraph("ORDER LINES:").SetBold());
+            if (poFull is null)
+                throw new KeyNotFoundException($"Purchase Order {id} not found.");
 
-            var table = new Table(5).UseAllAvailableWidth();
-            foreach (var header in new[] { "Raw Material", "SKU", "Qty", "Unit Price", "Subtotal" })
-                table.AddHeaderCell(header);
+            return GeneratePoPdf(poFull);
+        }
 
-            foreach (var line in po.OrderLines)
+        public static byte[] GeneratePoPdf(PurchaseOrder po)
+        {
+            byte[] pdfBytes;
+            using (var ms = new MemoryStream())
             {
-                table.AddCell(line.RawMaterial?.Name ?? "—");
-                table.AddCell(line.RawMaterial?.SkuCode ?? "—");
-                table.AddCell(line.Quantity.ToString("F3"));
-                table.AddCell($"${line.UnitPrice:F2}");
-                table.AddCell($"${line.TotalPrice:F2}");
+                using (var writer = new PdfWriter(ms))
+                using (var pdf = new PdfDocument(writer))
+                using (var doc = new Document(pdf))
+                {
+                    // Set margins: 36pt (0.5 inch)
+                    doc.SetMargins(36, 36, 36, 36);
+
+                    // Color palette
+                    var darkSlate = new DeviceRgb(15, 23, 42);   // #0f172a
+                    var brandBlue = new DeviceRgb(37, 99, 235);  // #2563eb
+                    var emeraldGreen = new DeviceRgb(5, 150, 105); // #059669
+                    var grayText = new DeviceRgb(100, 116, 139); // #64748b
+                    var bgLight = new DeviceRgb(248, 250, 252);  // #f8fafc
+                    var borderLight = new DeviceRgb(226, 232, 240); // #e2e8f0
+
+                    // 1. Header Table (Two Columns)
+                    var headerTable = new Table(UnitValue.CreatePercentArray(new float[] { 60, 40 })).UseAllAvailableWidth();
+                    headerTable.SetBorder(Border.NO_BORDER);
+
+                    var brandCell = new Cell().SetBorder(Border.NO_BORDER);
+                    brandCell.Add(new Paragraph("AUTOMATED MANUFACTURING INVENTORY COORDINATOR")
+                        .SetFontSize(13).SetBold().SetFontColor(darkSlate));
+                    brandCell.Add(new Paragraph("Precision Manufacturing & Supply Chain Operations")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    brandCell.Add(new Paragraph("OFFICIAL PURCHASE ORDER")
+                        .SetFontSize(16).SetBold().SetFontColor(brandBlue).SetMarginTop(6));
+                    headerTable.AddCell(brandCell);
+
+                    var poMetaCell = new Cell().SetBorder(Border.NO_BORDER).SetTextAlignment(TextAlignment.RIGHT);
+                    poMetaCell.Add(new Paragraph($"ORDER: {po.PoNumber}")
+                        .SetFontSize(12).SetBold().SetFontColor(darkSlate));
+                    poMetaCell.Add(new Paragraph($"Date: {po.CreatedAt:yyyy-MM-dd HH:mm} UTC")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    poMetaCell.Add(new Paragraph($"Status: {po.Status.ToString().ToUpperInvariant()}")
+                        .SetFontSize(9.5f).SetBold().SetFontColor(po.Status == PurchaseOrderStatus.Sent ? emeraldGreen : brandBlue));
+                    poMetaCell.Add(new Paragraph($"Currency: {(string.IsNullOrWhiteSpace(po.Currency) ? "USD" : po.Currency.ToUpperInvariant())}")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    headerTable.AddCell(poMetaCell);
+
+                    doc.Add(headerTable);
+                    doc.Add(new Paragraph(" ").SetFontSize(4));
+
+                    // 2. Vendor & Buyer Details Box
+                    var partiesTable = new Table(UnitValue.CreatePercentArray(new float[] { 50, 50 })).UseAllAvailableWidth();
+                    partiesTable.SetBorder(new SolidBorder(borderLight, 1));
+                    partiesTable.SetBackgroundColor(bgLight);
+
+                    var supplierCell = new Cell().SetBorder(Border.NO_BORDER).SetPadding(10);
+                    supplierCell.Add(new Paragraph("VENDOR / SUPPLIER:")
+                        .SetFontSize(8.5f).SetBold().SetFontColor(darkSlate));
+                    supplierCell.Add(new Paragraph(po.Supplier?.Name ?? "Designated Industrial Supplier")
+                        .SetFontSize(11).SetBold().SetFontColor(darkSlate));
+                    supplierCell.Add(new Paragraph($"Vendor Code: {po.Supplier?.SupplierCode ?? $"SUP-{po.SupplierId}"}")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    supplierCell.Add(new Paragraph($"Contact Email: {po.Supplier?.ContactEmail ?? "procurement@vendor.com"}")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    if (!string.IsNullOrWhiteSpace(po.Supplier?.ContactPhone))
+                        supplierCell.Add(new Paragraph($"Phone: {po.Supplier.ContactPhone}").SetFontSize(8.5f).SetFontColor(grayText));
+                    if (!string.IsNullOrWhiteSpace(po.Supplier?.Address))
+                        supplierCell.Add(new Paragraph($"Address: {po.Supplier.Address}").SetFontSize(8.5f).SetFontColor(grayText));
+                    if (!string.IsNullOrWhiteSpace(po.Supplier?.PaymentTerms))
+                        supplierCell.Add(new Paragraph($"Payment Terms: {po.Supplier.PaymentTerms}").SetFontSize(8.5f).SetFontColor(brandBlue));
+                    partiesTable.AddCell(supplierCell);
+
+                    var buyerCell = new Cell().SetBorder(Border.NO_BORDER).SetPadding(10);
+                    buyerCell.Add(new Paragraph("BILL TO & SHIP TO:")
+                        .SetFontSize(8.5f).SetBold().SetFontColor(darkSlate));
+                    buyerCell.Add(new Paragraph("Automated Manufacturing Inventory Coordinator")
+                        .SetFontSize(11).SetBold().SetFontColor(darkSlate));
+                    buyerCell.Add(new Paragraph("Central Industrial Complex — Receiving Dock #1")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    buyerCell.Add(new Paragraph($"Approved By: {po.ApprovedBy?.FullName ?? "Supply Chain Manager"}")
+                        .SetFontSize(8.5f).SetFontColor(grayText));
+                    buyerCell.Add(new Paragraph($"Payment Settlement: Stripe ({(po.StripePaymentStatus ?? "Completed")})")
+                        .SetFontSize(8.5f).SetBold().SetFontColor(emeraldGreen));
+                    if (!string.IsNullOrWhiteSpace(po.StripePaymentIntentId))
+                        buyerCell.Add(new Paragraph($"Stripe Ref: {po.StripePaymentIntentId}").SetFontSize(8).SetFontColor(grayText));
+                    partiesTable.AddCell(buyerCell);
+
+                    doc.Add(partiesTable);
+                    doc.Add(new Paragraph(" ").SetFontSize(6));
+
+                    // 3. Order Line Items Table
+                    doc.Add(new Paragraph("PURCHASE ORDER LINE ITEMS").SetFontSize(9.5f).SetBold().SetFontColor(darkSlate));
+
+                    var itemsTable = new Table(UnitValue.CreatePercentArray(new float[] { 8, 42, 16, 16, 18 })).UseAllAvailableWidth();
+                    itemsTable.SetMarginTop(4);
+
+                    // Table Header
+                    string[] headers = { "#", "Material Item & SKU", "Quantity", "Unit Price", "Total Price" };
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        var cell = new Cell().Add(new Paragraph(headers[i]).SetFontSize(8.5f).SetBold().SetFontColor(ColorConstants.WHITE));
+                        cell.SetBackgroundColor(darkSlate);
+                        cell.SetPadding(6);
+                        if (i >= 2) cell.SetTextAlignment(TextAlignment.RIGHT);
+                        itemsTable.AddHeaderCell(cell);
+                    }
+
+                    int itemIndex = 1;
+                    if (po.OrderLines != null && po.OrderLines.Any())
+                    {
+                        foreach (var line in po.OrderLines)
+                        {
+                            var rowBg = (itemIndex % 2 == 0) ? bgLight : ColorConstants.WHITE;
+
+                            // Col 1: #
+                            itemsTable.AddCell(new Cell().Add(new Paragraph(itemIndex.ToString()).SetFontSize(8.5f))
+                                .SetBackgroundColor(rowBg).SetPadding(6).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
+
+                            // Col 2: Material & SKU
+                            var descCell = new Cell().SetBackgroundColor(rowBg).SetPadding(6).SetBorderBottom(new SolidBorder(borderLight, 0.5f));
+                            var matName = line.RawMaterial?.Name ?? line.Description ?? $"Industrial Material Item #{line.RawMaterialId}";
+                            descCell.Add(new Paragraph(matName).SetFontSize(8.5f).SetBold().SetFontColor(darkSlate));
+                            var sku = line.RawMaterial?.SkuCode ?? $"RM-{line.RawMaterialId}";
+                            descCell.Add(new Paragraph($"SKU: {sku}").SetFontSize(7.5f).SetFontColor(grayText));
+                            itemsTable.AddCell(descCell);
+
+                            // Col 3: Quantity
+                            var unit = line.RawMaterial?.UnitOfMeasure ?? "units";
+                            itemsTable.AddCell(new Cell().Add(new Paragraph($"{line.Quantity:N2} {unit}").SetFontSize(8.5f))
+                                .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
+
+                            // Col 4: Unit Price
+                            itemsTable.AddCell(new Cell().Add(new Paragraph($"${line.UnitPrice:N2}").SetFontSize(8.5f))
+                                .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
+
+                            // Col 5: Total Price
+                            var lineTotal = line.TotalPrice > 0 ? line.TotalPrice : line.Quantity * line.UnitPrice;
+                            itemsTable.AddCell(new Cell().Add(new Paragraph($"${lineTotal:N2}").SetFontSize(8.5f).SetBold().SetFontColor(darkSlate))
+                                .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
+
+                            itemIndex++;
+                        }
+                    }
+                    else
+                    {
+                        var emptyCell = new Cell(1, 5).Add(new Paragraph("Standard inventory procurement lot.").SetFontSize(8.5f).SetItalic());
+                        emptyCell.SetPadding(8).SetTextAlignment(TextAlignment.CENTER);
+                        itemsTable.AddCell(emptyCell);
+                    }
+
+                    doc.Add(itemsTable);
+                    doc.Add(new Paragraph(" ").SetFontSize(6));
+
+                    // 4. Financial Summary Block
+                    var summaryTable = new Table(UnitValue.CreatePercentArray(new float[] { 55, 45 })).UseAllAvailableWidth();
+                    summaryTable.SetBorder(Border.NO_BORDER);
+
+                    var notesCell = new Cell().SetBorder(Border.NO_BORDER).SetPadding(6);
+                    if (!string.IsNullOrWhiteSpace(po.Notes))
+                    {
+                        notesCell.Add(new Paragraph("ORDER INSTRUCTIONS:").SetFontSize(8).SetBold().SetFontColor(grayText));
+                        notesCell.Add(new Paragraph(po.Notes).SetFontSize(8.5f).SetItalic().SetFontColor(darkSlate));
+                    }
+                    notesCell.Add(new Paragraph("Authorized by Supply Chain Division. Dispatched via Automated Inventory Coordinator.")
+                        .SetFontSize(7.5f).SetFontColor(grayText).SetMarginTop(4));
+                    summaryTable.AddCell(notesCell);
+
+                    var totalCell = new Cell().SetBorder(new SolidBorder(brandBlue, 1.5f)).SetBackgroundColor(bgLight).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT);
+                    totalCell.Add(new Paragraph("TOTAL COMMITTED AMOUNT").SetFontSize(7.5f).SetBold().SetFontColor(grayText));
+                    totalCell.Add(new Paragraph($"${po.TotalCost:N2} {(string.IsNullOrWhiteSpace(po.Currency) ? "USD" : po.Currency.ToUpperInvariant())}")
+                        .SetFontSize(15).SetBold().SetFontColor(brandBlue));
+                    summaryTable.AddCell(totalCell);
+
+                    doc.Add(summaryTable);
+                    doc.Add(new Paragraph(" ").SetFontSize(10));
+
+                    // 5. Legal Terms & Compliance Footer
+                    var footer = new Paragraph("AMIC Procurement Notice: Deliveries must strictly adhere to contractual SLA timelines and quality standards. Contact logistics@amic-manufacturing.internal for gate receiving coordinates.")
+                        .SetFontSize(7).SetFontColor(grayText).SetTextAlignment(TextAlignment.CENTER);
+                    doc.Add(footer);
+
+                    // CRITICAL: Must close Document so PDF trailer and xref are flushed to MemoryStream
+                    doc.Close();
+                }
+
+                pdfBytes = ms.ToArray();
             }
 
-            doc.Add(table);
-            doc.Add(new Paragraph(" "));
-            doc.Add(new Paragraph($"TOTAL COST: ${po.TotalCost:F2} {po.Currency}").SetBold().SetFontSize(14));
-
-            if (!string.IsNullOrEmpty(po.Notes))
-                doc.Add(new Paragraph($"Notes: {po.Notes}"));
-
-            return ms.ToArray();
+            return pdfBytes;
         }
 
         // ── Audit Recording ───────────────────────────────────────────────────────

@@ -46,6 +46,27 @@ namespace ManufacturingCoordinator.Controllers
             return Ok(po);
         }
 
+        /// <summary>GET /api/purchase-orders/{id}/pdf — download or preview generated PO PDF document</summary>
+        [HttpGet("{id:int}/pdf")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetPdf(int id)
+        {
+            try
+            {
+                var pdfBytes = await _poService.GeneratePdfAsync(id);
+                var po = await _poService.GetByIdAsync(id);
+                var fileName = $"PurchaseOrder_{po?.PoNumber ?? id.ToString()}.pdf";
+                return File(pdfBytes, "application/pdf", fileName);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
         /// <summary>POST /api/purchase-orders — create new PO in Draft status</summary>
         [HttpPost]
         [Authorize(Roles = "SupplyChainManager")]

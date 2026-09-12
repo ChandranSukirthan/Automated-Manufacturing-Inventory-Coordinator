@@ -44,6 +44,21 @@ export const purchaseOrderService = {
   async processPayment(id, forceDispatch = true) {
     const response = await api.post(`/purchase-orders/${id}/process-payment?forceDispatch=${forceDispatch}`);
     return response.data;
+  },
+
+  async downloadPdf(id, poNumber) {
+    const response = await api.get(`/purchase-orders/${id}/pdf`, {
+      responseType: 'blob'
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `PurchaseOrder_${poNumber || id}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
   }
 };
 

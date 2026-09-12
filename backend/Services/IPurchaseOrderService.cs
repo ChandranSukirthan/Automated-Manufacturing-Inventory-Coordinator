@@ -17,6 +17,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason);
         Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason);
         Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false);
+        Task<byte[]> GeneratePdfAsync(int id);
 
         // Explicit business operations (Requirements 1, 2, 3, 4)
         decimal CalculateTotalCost(PurchaseOrder po);

@@ -25,7 +25,8 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  Layers
+  Layers,
+  Download
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -44,6 +45,7 @@ export default function PurchaseOrderDetail() {
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
   // Modals for approval actions
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -54,6 +56,17 @@ export default function PurchaseOrderDetail() {
 
   // Check if current user is Supply Chain Manager (role === 1)
   const isManager = user && (user.role === 1 || user.role === 'SupplyChainManager' || user.role === '1');
+
+  const handleDownloadPdf = async () => {
+    setDownloadLoading(true);
+    try {
+      await purchaseOrderService.downloadPdf(id, po?.poNumber);
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to download purchase order PDF.'));
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
 
   const fetchPoDetails = async () => {
     setLoading(true);
@@ -270,6 +283,21 @@ export default function PurchaseOrderDetail() {
               <span>Complete Settlement & Dispatch</span>
             </button>
           )}
+
+          {/* Download Official PO PDF */}
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloadLoading}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold rounded-xl text-xs transition-all disabled:opacity-50"
+            title="Download Official Purchase Order PDF"
+          >
+            {downloadLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-400" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-brand-400" />
+            )}
+            <span>Download PDF</span>
+          </button>
         </div>
       }
     >
@@ -462,9 +490,23 @@ export default function PurchaseOrderDetail() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
-            <Mail className="w-3.5 h-3.5 text-blue-400" />
-            <span>Email Status: {po.emailStatus || 'Sent'}</span>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+              <Mail className="w-3.5 h-3.5 text-blue-400" />
+              <span>Email: {po.emailStatus || 'Sent'}</span>
+            </div>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadLoading}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-700/25 transition-all disabled:opacity-50"
+            >
+              {downloadLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span>Download Official PDF</span>
+            </button>
           </div>
         </div>
       )}
