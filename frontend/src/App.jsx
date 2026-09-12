@@ -82,7 +82,7 @@ function App() {
           />
 
           {/* Role Dashboard Redirects */}
-          <Route path="/dashboard/manager" element={<Navigate to="/purchase-orders" replace />} />
+          <Route path="/dashboard/manager" element={<Navigate to="/dashboard/admin" replace />} />
           <Route
             path="/dashboard/admin"
             element={

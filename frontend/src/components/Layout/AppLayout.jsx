@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
+  LayoutDashboard,
   ShoppingCart,
   Building2,
   CheckSquare,
@@ -46,6 +47,12 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
   }, [location.pathname]);
 
   const navItems = [
+    {
+      label: 'Manager Dashboard',
+      path: '/dashboard/admin',
+      icon: <LayoutDashboard className="w-5 h-5" />,
+      active: location.pathname === '/dashboard/admin' || location.pathname === '/dashboard/manager'
+    },
     {
       label: 'Purchase Orders',
       path: '/purchase-orders',

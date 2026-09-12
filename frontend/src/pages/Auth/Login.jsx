@@ -51,7 +51,7 @@ export default function Login() {
       if (roleInt === 3) navigate('/dashboard/admin');
       else if (roleInt === 0) navigate('/dashboard/worker');
       else if (roleInt === 2) navigate('/dashboard/quality');
-      else if (roleInt === 1) navigate('/purchase-orders');
+      else if (roleInt === 1) navigate('/dashboard/admin');
       else navigate('/');
     } catch (err) {
       setError(parseErrorMessage(err, 'Login failed. Please check your credentials.'));
@@ -64,7 +64,7 @@ export default function Login() {
     if (roleInt === 3) navigate('/dashboard/admin');
     else if (roleInt === 0) navigate('/dashboard/worker');
     else if (roleInt === 2) navigate('/dashboard/quality');
-    else if (roleInt === 1) navigate('/purchase-orders');
+    else if (roleInt === 1) navigate('/dashboard/admin');
     else navigate('/');
   };
 
