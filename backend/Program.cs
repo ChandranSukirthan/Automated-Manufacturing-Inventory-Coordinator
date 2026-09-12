@@ -144,6 +144,7 @@ using (var scope = app.Services.CreateScope())
 
         var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         appContext.Database.EnsureCreated();
+        DbInitializer.SeedAsync(appContext).GetAwaiter().GetResult();
     }
     catch (Exception ex)
     {

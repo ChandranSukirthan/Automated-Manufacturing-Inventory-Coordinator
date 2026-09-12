@@ -11,6 +11,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         Task<SupplierResponseDto> CreateAsync(CreateSupplierDto dto);
         Task<SupplierResponseDto?> UpdateAsync(int id, UpdateSupplierDto dto);
         Task<bool> DeleteAsync(int id);
+        Task<SupplierAnalyticsDto> GetAnalyticsAsync();
+        Task<SupplierPerformanceDto?> GetPerformanceAsync(int id);
     }
 }
-

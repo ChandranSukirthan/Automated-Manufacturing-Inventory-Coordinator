@@ -22,6 +22,13 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [Required]
         public int RawMaterialId { get; set; }
 
+        [NotMapped]
+        public int MaterialId
+        {
+            get => RawMaterialId;
+            set => RawMaterialId = value;
+        }
+
         [ForeignKey(nameof(RawMaterialId))]
         public RawMaterial RawMaterial { get; set; } = null!;
 
@@ -42,6 +49,13 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         /// <summary>Computed: Quantity × UnitPrice. Updated on every save.</summary>
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalPrice { get; set; }
+
+        [NotMapped]
+        public decimal Subtotal
+        {
+            get => TotalPrice;
+            set => TotalPrice = value;
+        }
 
         // ── Audit ──────────────────────────────────────────────────────────────
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

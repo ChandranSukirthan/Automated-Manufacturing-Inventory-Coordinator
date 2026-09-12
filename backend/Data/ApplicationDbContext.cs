@@ -22,6 +22,9 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
         public DbSet<OrderLine> OrderLines { get; set; } = null!;
         public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
+        public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
+        public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
+        public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -124,6 +127,13 @@ namespace ManufacturingCoordinator.Data
             {
                 entity.HasKey(s => s.Id);
 
+                entity.Property(s => s.SupplierCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(s => s.SupplierCode)
+                    .IsUnique();
+
                 entity.Property(s => s.Name)
                     .IsRequired()
                     .HasMaxLength(200);
@@ -140,6 +150,13 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(s => s.Address)
                     .HasMaxLength(500);
+
+                entity.Property(s => s.PaymentTerms)
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Net 30");
+
+                entity.Property(s => s.LeadTimeDays)
+                    .HasDefaultValue(7);
 
                 entity.Property(s => s.IsActive)
                     .HasDefaultValue(true);
@@ -171,6 +188,10 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(po => po.Status);
                 entity.HasIndex(po => po.SupplierId);
 
+                entity.Property(po => po.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("USD");
+
                 entity.Property(po => po.TotalCost)
                     .HasColumnType("decimal(18,2)");
 
@@ -193,8 +214,17 @@ namespace ManufacturingCoordinator.Data
                 entity.Property(po => po.StripePaymentStatus)
                     .HasMaxLength(50);
 
+                entity.Property(po => po.PaymentFailureReason)
+                    .HasMaxLength(500);
+
                 entity.Property(po => po.SendGridMessageId)
                     .HasMaxLength(200);
+
+                entity.Property(po => po.EmailStatus)
+                    .HasMaxLength(50);
+
+                entity.Property(po => po.EmailFailureReason)
+                    .HasMaxLength(500);
 
                 entity.Property(po => po.CreatedAt)
                     .HasDefaultValueSql("timezone('utc', now())");
@@ -207,10 +237,111 @@ namespace ManufacturingCoordinator.Data
                     .HasForeignKey(po => po.SupplierId)
                     .OnDelete(DeleteBehavior.Restrict);
 
+                entity.HasOne(po => po.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(po => po.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+
                 entity.HasOne(po => po.ApprovedBy)
                     .WithMany()
                     .HasForeignKey(po => po.ApprovedById)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── PurchaseOrderApproval (Audit) ─────────────────────────────────────
+            modelBuilder.Entity<PurchaseOrderApproval>(entity =>
+            {
+                entity.HasKey(a => a.Id);
+
+                entity.Property(a => a.Action)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(a => a.UserName)
+                    .HasMaxLength(150);
+
+                entity.Property(a => a.Notes)
+                    .HasMaxLength(1000);
+
+                entity.Property(a => a.Timestamp)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(a => a.PurchaseOrder)
+                    .WithMany(po => po.Approvals)
+                    .HasForeignKey(a => a.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(a => a.User)
+                    .WithMany()
+                    .HasForeignKey(a => a.UserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(a => a.PurchaseOrderId);
+            });
+
+            // ── PaymentTransaction ────────────────────────────────────────────────
+            modelBuilder.Entity<PaymentTransaction>(entity =>
+            {
+                entity.HasKey(pt => pt.Id);
+
+                entity.Property(pt => pt.Amount)
+                    .HasColumnType("decimal(18,2)")
+                    .IsRequired();
+
+                entity.Property(pt => pt.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("usd");
+
+                entity.Property(pt => pt.PaymentStatus)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(pt => pt.TransactionId)
+                    .HasMaxLength(200);
+
+                entity.Property(pt => pt.FailureReason)
+                    .HasMaxLength(500);
+
+                entity.Property(pt => pt.Timestamp)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(pt => pt.PurchaseOrder)
+                    .WithMany(po => po.Transactions)
+                    .HasForeignKey(pt => pt.PurchaseOrderId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(pt => pt.PurchaseOrderId);
+            });
+
+            // ── SupplierPerformance ───────────────────────────────────────────────
+            modelBuilder.Entity<SupplierPerformance>(entity =>
+            {
+                entity.HasKey(sp => sp.Id);
+
+                entity.Property(sp => sp.TotalSpending)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.AverageOrderValue)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.AverageLeadTime)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sp => sp.DeliveryPerformanceRate)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sp => sp.RejectionRate)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sp => sp.CalculatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(sp => sp.Supplier)
+                    .WithMany()
+                    .HasForeignKey(sp => sp.SupplierId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(sp => sp.SupplierId);
             });
 
             // ── OrderLine ─────────────────────────────────────────────────────────

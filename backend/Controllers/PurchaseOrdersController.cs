@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Services.PurchaseOrders;
@@ -23,16 +24,21 @@ namespace ManufacturingCoordinator.Controllers
 
         // ── CRUD ──────────────────────────────────────────────────────────────────
 
-        /// <summary>GET /api/purchase-orders — list all POs (summary)</summary>
+        /// <summary>GET /api/purchase-orders — list all purchase orders (summary view)</summary>
         [HttpGet]
+        [ProducesResponseType(typeof(IEnumerable<PurchaseOrderSummaryDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<IEnumerable<PurchaseOrderSummaryDto>>> GetAll()
         {
             var orders = await _poService.GetAllAsync();
             return Ok(orders);
         }
 
-        /// <summary>GET /api/purchase-orders/{id} — full PO with order lines</summary>
+        /// <summary>GET /api/purchase-orders/{id} — full PO details including order lines and audit history</summary>
         [HttpGet("{id:int}")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> GetById(int id)
         {
             var po = await _poService.GetByIdAsync(id);
@@ -40,16 +46,22 @@ namespace ManufacturingCoordinator.Controllers
             return Ok(po);
         }
 
-        /// <summary>POST /api/purchase-orders — create new PO in Draft</summary>
+        /// <summary>POST /api/purchase-orders — create new PO in Draft status</summary>
         [HttpPost]
         [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> Create([FromBody] CreatePurchaseOrderDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             try
             {
-                var po = await _poService.CreateAsync(dto);
+                var userId = GetCurrentUserId();
+                var po = await _poService.CreateAsync(dto, userId);
                 return CreatedAtAction(nameof(GetById), new { id = po.Id }, po);
             }
             catch (KeyNotFoundException ex)
@@ -62,9 +74,14 @@ namespace ManufacturingCoordinator.Controllers
             }
         }
 
-        /// <summary>PUT /api/purchase-orders/{id} — update PO (Draft only)</summary>
+        /// <summary>PUT /api/purchase-orders/{id} — update PO (Draft status only)</summary>
         [HttpPut("{id:int}")]
         [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> Update(int id, [FromBody] UpdatePurchaseOrderDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -75,6 +92,10 @@ namespace ManufacturingCoordinator.Controllers
                 if (po is null) return NotFound(new { message = $"Purchase Order {id} not found." });
                 return Ok(po);
             }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
@@ -83,14 +104,20 @@ namespace ManufacturingCoordinator.Controllers
 
         // ── Approval Workflow ─────────────────────────────────────────────────────
 
-        /// <summary>POST /api/purchase-orders/{id}/submit — Draft → PendingApproval</summary>
+        /// <summary>POST /api/purchase-orders/{id}/submit — transition from Draft to PendingApproval</summary>
         [HttpPost("{id:int}/submit")]
         [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> Submit(int id)
         {
             try
             {
-                var po = await _poService.SubmitForApprovalAsync(id);
+                var userId = GetCurrentUserId();
+                var po = await _poService.SubmitForApprovalAsync(id, userId);
                 return Ok(po);
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
@@ -98,12 +125,17 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// POST /api/purchase-orders/{id}/approve — PendingApproval → Approved → Payment → Sent
-        /// Only SupplyChainManager can approve. JWT enforced server-side.
+        /// POST /api/purchase-orders/{id}/approve — transition PendingApproval → Approved → Payment → Sent
+        /// Only SupplyChainManager can approve. Executes payment and sends PO PDF document to supplier.
         /// </summary>
         [HttpPost("{id:int}/approve")]
         [Authorize(Roles = "SupplyChainManager")]
-        public async Task<ActionResult<PurchaseOrderResponseDto>> Approve(int id)
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderResponseDto>> Approve(int id, [FromBody] ApprovalActionDto? dto = null)
         {
             var approverId = GetCurrentUserId();
             if (approverId is null)
@@ -111,16 +143,21 @@ namespace ManufacturingCoordinator.Controllers
 
             try
             {
-                var po = await _poService.ApproveAsync(id, approverId.Value);
+                var po = await _poService.ApproveAsync(id, approverId.Value, dto?.Notes);
                 return Ok(po);
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
         }
 
-        /// <summary>POST /api/purchase-orders/{id}/reject — PendingApproval → Rejected</summary>
+        /// <summary>POST /api/purchase-orders/{id}/reject — transition PendingApproval → Rejected</summary>
         [HttpPost("{id:int}/reject")]
         [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> Reject(int id, [FromBody] ApprovalActionDto dto)
         {
             var approverId = GetCurrentUserId();
@@ -137,11 +174,16 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// POST /api/purchase-orders/{id}/revise — PendingApproval → RevisionRequested → Draft
-        /// Manager requests changes; PO returns to Draft for editing.
+        /// POST /api/purchase-orders/{id}/revise — transition PendingApproval → RevisionRequested → Draft
+        /// Returns purchase order back to Draft for requester adjustment.
         /// </summary>
         [HttpPost("{id:int}/revise")]
         [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> Revise(int id, [FromBody] ApprovalActionDto dto)
         {
             var approverId = GetCurrentUserId();
@@ -167,4 +209,3 @@ namespace ManufacturingCoordinator.Controllers
         }
     }
 }
-

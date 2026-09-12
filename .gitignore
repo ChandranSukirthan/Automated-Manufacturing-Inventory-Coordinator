@@ -50,3 +50,6 @@ Thumbs.db
 
 # Antigravity/Gemini (if applicable)
 .gemini/
+Library/
+.local/
+backend/Library/

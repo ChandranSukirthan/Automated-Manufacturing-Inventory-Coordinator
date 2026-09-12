@@ -39,6 +39,16 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalCost { get; set; }
 
+        [NotMapped]
+        public decimal TotalAmount
+        {
+            get => TotalCost;
+            set => TotalCost = value;
+        }
+
+        [MaxLength(10)]
+        public string Currency { get; set; } = "USD";
+
         /// <summary>Maximum allowed spend for this order.</summary>
         [Column(TypeName = "decimal(18,2)")]
         public decimal BudgetLimit { get; set; }
@@ -50,7 +60,12 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         /// <summary>Set to true by checkApprovalThreshold() when TotalCost > ApprovalThreshold.</summary>
         public bool RequiresApproval { get; set; }
 
-        // ── Approval ──────────────────────────────────────────────────────────
+        // ── Creator & Approval ─────────────────────────────────────────────────
+        public Guid? CreatedById { get; set; }
+
+        [ForeignKey(nameof(CreatedById))]
+        public User? CreatedBy { get; set; }
+
         public Guid? ApprovedById { get; set; }
 
         [ForeignKey(nameof(ApprovedById))]
@@ -65,9 +80,20 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [MaxLength(50)]
         public string? StripePaymentStatus { get; set; }
 
+        [MaxLength(500)]
+        public string? PaymentFailureReason { get; set; }
+
         // ── SendGrid Email ────────────────────────────────────────────────────
         [MaxLength(200)]
         public string? SendGridMessageId { get; set; }
+
+        [MaxLength(50)]
+        public string? EmailStatus { get; set; }
+
+        public DateTime? EmailSentAt { get; set; }
+
+        [MaxLength(500)]
+        public string? EmailFailureReason { get; set; }
 
         // ── Audit ─────────────────────────────────────────────────────────────
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -75,6 +101,8 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         // Navigation
         public ICollection<OrderLine> OrderLines { get; set; } = new List<OrderLine>();
+        public ICollection<PurchaseOrderApproval> Approvals { get; set; } = new List<PurchaseOrderApproval>();
+        public ICollection<PaymentTransaction> Transactions { get; set; } = new List<PaymentTransaction>();
     }
 }
 

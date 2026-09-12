@@ -602,5 +602,252 @@ namespace backend.Tests
             Assert.NotNull(authAttr);
             Assert.Equal("SupplyChainManager", authAttr.Roles);
         }
+
+        // =========================================================================
+        // 13. BUSINESS OPERATIONS 1, 2, 3, 4 DIRECT TESTS
+        // =========================================================================
+
+        [Fact]
+        public void BusinessOperation1_CalculateTotalCost_ComputesSumAccurately()
+        {
+            using var context = CreateInMemoryDbContext();
+            var poService = new PurchaseOrderService(context, Mock.Of<IStripeService>(), Mock.Of<IEmailService>(), CreateTestConfiguration(), Mock.Of<ILogger<PurchaseOrderService>>());
+
+            var po = new PurchaseOrder
+            {
+                OrderLines = new List<OrderLine>
+                {
+                    new() { Quantity = 500m, UnitPrice = 10m, TotalPrice = 5000m },
+                    new() { Quantity = 250m, UnitPrice = 8m, TotalPrice = 2000m },
+                    new() { Quantity = 100m, UnitPrice = 15.50m, TotalPrice = 1550m }
+                }
+            };
+
+            var total = poService.CalculateTotalCost(po);
+            Assert.Equal(8550.00m, total);
+        }
+
+        [Fact]
+        public void BusinessOperation2_ValidateBudget_EnforcesBudgetAndCalculatesApprovalRequirement()
+        {
+            using var context = CreateInMemoryDbContext();
+            var poService = new PurchaseOrderService(context, Mock.Of<IStripeService>(), Mock.Of<IEmailService>(), CreateTestConfiguration(5000m), Mock.Of<ILogger<PurchaseOrderService>>());
+
+            // Case A: PO = $9,000, ApprovalThreshold = $5,000, Budget = $10,000 -> RequiresApproval = true
+            var po = new PurchaseOrder
+            {
+                TotalCost = 9000m,
+                BudgetLimit = 10000m,
+                ApprovalThreshold = 5000m
+            };
+
+            poService.ValidateBudget(po);
+            Assert.True(po.RequiresApproval);
+
+            // Case B: Exceeds budget -> Throws InvalidOperationException
+            po.BudgetLimit = 8000m;
+            Assert.Throws<InvalidOperationException>(() => poService.ValidateBudget(po));
+        }
+
+        [Fact]
+        public async Task BusinessOperation3_ValidateSupplier_ValidatesActiveStatusAndLeadTime()
+        {
+            using var context = CreateInMemoryDbContext();
+            var poService = new PurchaseOrderService(context, Mock.Of<IStripeService>(), Mock.Of<IEmailService>(), CreateTestConfiguration(), Mock.Of<ILogger<PurchaseOrderService>>());
+
+            var activeSupplier = new Supplier
+            {
+                SupplierCode = "SUP-TEST-1",
+                Name = "Test Supplier",
+                ContactEmail = "test@valid.com",
+                LeadTimeDays = 14,
+                IsActive = true
+            };
+            var inactiveSupplier = new Supplier
+            {
+                SupplierCode = "SUP-TEST-2",
+                Name = "Inactive Supplier",
+                ContactEmail = "inactive@test.com",
+                LeadTimeDays = 7,
+                IsActive = false
+            };
+            context.Suppliers.AddRange(activeSupplier, inactiveSupplier);
+            await context.SaveChangesAsync();
+
+            // Valid supplier passes
+            var validated = await poService.ValidateSupplierAsync(activeSupplier.Id);
+            Assert.NotNull(validated);
+            Assert.Equal("SUP-TEST-1", validated.SupplierCode);
+
+            // Inactive supplier throws
+            await Assert.ThrowsAsync<InvalidOperationException>(() => poService.ValidateSupplierAsync(inactiveSupplier.Id));
+
+            // Non-existent supplier throws KeyNotFoundException
+            await Assert.ThrowsAsync<KeyNotFoundException>(() => poService.ValidateSupplierAsync(9999));
+        }
+
+        [Fact]
+        public async Task BusinessOperation4_ValidatePurchaseOrder_ValidatesLinesAndCurrency()
+        {
+            using var context = CreateInMemoryDbContext();
+            var poService = new PurchaseOrderService(context, Mock.Of<IStripeService>(), Mock.Of<IEmailService>(), CreateTestConfiguration(), Mock.Of<ILogger<PurchaseOrderService>>());
+
+            var supplier = new Supplier { SupplierCode = "SUP-V", Name = "Valid", ContactEmail = "v@test.com", LeadTimeDays = 5, IsActive = true };
+            context.Suppliers.Add(supplier);
+            await context.SaveChangesAsync();
+
+            // Missing lines throws
+            var poNoLines = new PurchaseOrder { SupplierId = supplier.Id, BudgetLimit = 5000m, Currency = "USD", TotalCost = 100m };
+            await Assert.ThrowsAsync<InvalidOperationException>(() => poService.ValidatePurchaseOrderAsync(poNoLines));
+
+            // Zero unit price throws
+            var poZeroPrice = new PurchaseOrder
+            {
+                SupplierId = supplier.Id,
+                BudgetLimit = 5000m,
+                Currency = "USD",
+                TotalCost = 100m,
+                OrderLines = new List<OrderLine>
+                {
+                    new() { RawMaterialId = 1, Quantity = 10, UnitPrice = 0m, TotalPrice = 0m }
+                }
+            };
+            await Assert.ThrowsAsync<InvalidOperationException>(() => poService.ValidatePurchaseOrderAsync(poZeroPrice));
+        }
+
+        // =========================================================================
+        // 14. AUDIT TRAIL AND PAYMENT TRANSACTION LOGGING TESTS
+        // =========================================================================
+
+        [Fact]
+        public async Task AuditTrailAndTransactions_RecordedAcrossLifecycle()
+        {
+            using var context = CreateInMemoryDbContext();
+            var supplier = new Supplier { SupplierCode = "SUP-AUDIT", Name = "Audit Supplier", ContactEmail = "audit@test.com", LeadTimeDays = 7, IsActive = true };
+            context.Suppliers.Add(supplier);
+            await context.SaveChangesAsync();
+
+            var stripeMock = new Mock<IStripeService>();
+            stripeMock.Setup(s => s.CreatePaymentIntentAsync(It.IsAny<decimal>(), "usd", It.IsAny<string>()))
+                .ReturnsAsync(new StripePaymentResult(true, "pi_audit_100", "succeeded", null));
+
+            var emailMock = new Mock<IEmailService>();
+            var config = CreateTestConfiguration();
+            var poService = new PurchaseOrderService(context, stripeMock.Object, emailMock.Object, config, Mock.Of<ILogger<PurchaseOrderService>>());
+
+            var approverId = Guid.NewGuid();
+
+            // 1. Create
+            var po = await poService.CreateAsync(new CreatePurchaseOrderDto
+            {
+                SupplierId = supplier.Id,
+                BudgetLimit = 5000m,
+                Lines = new List<OrderLineDto> { new OrderLineDto { RawMaterialId = 1, Quantity = 10, UnitPrice = 25m } }
+            }, approverId);
+
+            // 2. Submit
+            await poService.SubmitForApprovalAsync(po.Id, approverId);
+
+            // 3. Approve (triggers payment + email)
+            await poService.ApproveAsync(po.Id, approverId, "All criteria satisfied.");
+
+            var fullPo = await poService.GetByIdAsync(po.Id);
+            Assert.NotNull(fullPo);
+
+            // Verify Audit entries
+            Assert.True(fullPo.Approvals.Count >= 4); // PO created, PO submitted, PO approved, payment started, payment completed, email sent
+            Assert.Contains(fullPo.Approvals, a => a.Action == "PO created");
+            Assert.Contains(fullPo.Approvals, a => a.Action == "PO submitted");
+            Assert.Contains(fullPo.Approvals, a => a.Action == "PO approved");
+            Assert.Contains(fullPo.Approvals, a => a.Action == "payment completed");
+            Assert.Contains(fullPo.Approvals, a => a.Action == "email sent");
+
+            // Verify PaymentTransaction entry
+            Assert.Single(fullPo.Transactions);
+            Assert.Equal("pi_audit_100", fullPo.Transactions[0].TransactionId);
+            Assert.Equal("succeeded", fullPo.Transactions[0].PaymentStatus);
+            Assert.Equal(250m, fullPo.Transactions[0].Amount);
+        }
+
+        // =========================================================================
+        // 15. SUPPLIER UNIQUE CODE & ANALYTICS TESTS
+        // =========================================================================
+
+        [Fact]
+        public async Task SupplierService_UniqueSupplierCode_PreventsDuplicates()
+        {
+            using var context = CreateInMemoryDbContext();
+            var supplierService = new SupplierService(context);
+
+            await supplierService.CreateAsync(new CreateSupplierDto
+            {
+                SupplierCode = "SUP-UNIQUE-1",
+                Name = "Vendor 1",
+                ContactEmail = "v1@test.com"
+            });
+
+            // Attempt duplicate code
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => supplierService.CreateAsync(new CreateSupplierDto
+            {
+                SupplierCode = "SUP-UNIQUE-1",
+                Name = "Vendor 2",
+                ContactEmail = "v2@test.com"
+            }));
+
+            Assert.Contains("already in use", ex.Message);
+        }
+
+        [Fact]
+        public async Task SupplierAnalytics_CalculatesMetricsAccurately()
+        {
+            using var context = CreateInMemoryDbContext();
+            var supplierService = new SupplierService(context);
+
+            var s1 = await supplierService.CreateAsync(new CreateSupplierDto
+            {
+                SupplierCode = "SUP-A1",
+                Name = "Supplier A1",
+                ContactEmail = "a1@test.com",
+                LeadTimeDays = 10
+            });
+
+            var s2 = await supplierService.CreateAsync(new CreateSupplierDto
+            {
+                SupplierCode = "SUP-A2",
+                Name = "Supplier A2",
+                ContactEmail = "a2@test.com",
+                LeadTimeDays = 20
+            });
+
+            // Add POs
+            context.PurchaseOrders.Add(new PurchaseOrder
+            {
+                PoNumber = "PO-AN-1",
+                SupplierId = s1.Id,
+                Status = PurchaseOrderStatus.Sent,
+                TotalCost = 5000m,
+                BudgetLimit = 10000m
+            });
+            context.PurchaseOrders.Add(new PurchaseOrder
+            {
+                PoNumber = "PO-AN-2",
+                SupplierId = s2.Id,
+                Status = PurchaseOrderStatus.Rejected,
+                TotalCost = 3000m,
+                BudgetLimit = 10000m
+            });
+            await context.SaveChangesAsync();
+
+            var analytics = await supplierService.GetAnalyticsAsync();
+            Assert.Equal(2, analytics.TotalSuppliers);
+            Assert.Equal(2, analytics.ActiveSuppliers);
+            Assert.Equal(2, analytics.TotalOrders);
+            Assert.Equal(5000m, analytics.TotalSpending); // Only approved/sent counts
+
+            var s2Perf = await supplierService.GetPerformanceAsync(s2.Id);
+            Assert.NotNull(s2Perf);
+            Assert.Equal(1, s2Perf.OrderCount);
+            Assert.Equal(100m, s2Perf.RejectionRate); // 1 out of 1 rejected
+        }
     }
 }

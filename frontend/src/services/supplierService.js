@@ -24,6 +24,16 @@ export const supplierService = {
   async deleteSupplier(id) {
     const response = await api.delete(`/suppliers/${id}`);
     return response.data;
+  },
+
+  async getAnalytics() {
+    const response = await api.get('/suppliers/analytics');
+    return response.data;
+  },
+
+  async getPerformance(id) {
+    const response = await api.get(`/suppliers/${id}/performance`);
+    return response.data;
   }
 };
 
