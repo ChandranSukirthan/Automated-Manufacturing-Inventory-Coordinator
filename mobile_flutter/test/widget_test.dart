@@ -17,10 +17,11 @@ void main() {
       auth: AuthService(api, storage),
       storage: storage,
     );
+    appState.isLoading = false;
 
     await tester.pumpWidget(MaterialApp(home: LoginScreen(appState: appState)));
 
-    expect(find.text('Quality control,\nin your pocket.'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
   });
 }

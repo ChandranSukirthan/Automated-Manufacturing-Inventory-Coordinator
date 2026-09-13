@@ -18,7 +18,7 @@ class AppState extends ChangeNotifier {
   bool get isAuthenticated => session != null;
 
   Future<void> restore() async {
-    session = await storage.read();
+    session = null;
     isLoading = false;
     notifyListeners();
   }
