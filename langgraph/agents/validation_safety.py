@@ -1,5 +1,15 @@
-"""Validation/Safety agent boundary owned by Student 3.
+"""Validation/Safety agent boundary owned by Student 3."""
 
-Future quality validation and safety tools will be registered here. The tools
-will be implemented under ``tools/quality/`` in a later part.
-"""
+from clients.backend_client import BackendClient
+from tools.quality import (
+	analyze_defect_context,
+	check_related_inventory,
+	recommend_quarantine,
+)
+
+__all__ = [
+	"analyze_defect_context",
+	"check_related_inventory",
+	"recommend_quarantine",
+	"BackendClient",
+]

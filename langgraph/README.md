@@ -19,7 +19,7 @@ The project retains exactly four mandatory agents:
 3. Purchasing
 4. Validation/Safety
 
-Student 3 owns tools used by the Validation/Safety Agent. Future quality tools belong in `tools/quality/`; they are intentionally not implemented in Part 1.
+Student 3 owns tools used by the Validation/Safety Agent. Quality tools belong in `tools/quality/` and are exposed through `agents/validation_safety.py`.
 
 ## Inspected quality contract
 
@@ -36,11 +36,19 @@ The existing API exposes quality operations under authenticated `QualityInspecto
 
 Relevant domain values include `ProductType`, `DefectSeverity`, `DefectStatus`, `QuarantineStatus`, and `InventoryStatus`, together with `DefectReport`, `Quarantine`, `Batch`, and `InventoryRoll`.
 
-## Future setup
+## Quality tools
+
+Part 2 implements three read-only tools:
+
+- `analyze_defect_context(defect)`: evaluates severity and returns a quarantine recommendation flag.
+- `check_related_inventory(batch)`: calls `GET /api/batches/{id}` and returns related inventory roll IDs.
+- `recommend_quarantine(defect, client)`: combines the two checks into a recommendation.
+
+The tools never call PostgreSQL, mutate inventory, or mutate quarantine state. The ASP.NET Core API remains the source of truth.
+
+## Setup
 
 1. Create a Python environment.
 2. Install dependencies from `requirements.txt`.
 3. Copy `.env.example` to `.env` and configure the backend URL and credentials.
-4. Implement quality tools under `tools/quality/` and expose them only through `agents/validation_safety.py`.
-
-No agent graph or quality tool behavior is implemented yet.
+4. Run `python -m pytest -q` from this directory.
