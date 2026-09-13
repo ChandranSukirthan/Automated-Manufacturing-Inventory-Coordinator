@@ -1,11 +1,15 @@
 """Environment-backed settings for the LangGraph workspace."""
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dataclasses import dataclass
+import os
 
 
-class Settings(BaseSettings):
-	backend_base_url: str = "http://localhost:5070/api"
-	backend_timeout_seconds: float = 30.0
-	backend_access_token: str = ""
-
-	model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+@dataclass(frozen=True)
+class Settings:
+	backend_base_url: str = os.getenv(
+		"BACKEND_BASE_URL", "http://localhost:5070/api"
+	)
+	backend_timeout_seconds: float = float(
+		os.getenv("BACKEND_TIMEOUT_SECONDS", "30")
+	)
+	backend_access_token: str = os.getenv("BACKEND_ACCESS_TOKEN", "")

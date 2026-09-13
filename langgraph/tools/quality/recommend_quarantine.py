@@ -9,7 +9,9 @@ from .check_related_inventory import BatchReader, check_related_inventory
 
 
 def recommend_quarantine(
-    defect: dict[str, Any], client: BatchReader
+    defect: dict[str, Any],
+    client: BatchReader,
+    related_inventory: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine defect assessment and API inventory data into a recommendation.
 
@@ -17,7 +19,7 @@ def recommend_quarantine(
     endpoint and never changes inventory or quarantine state.
     """
     context = analyze_defect_context(defect)
-    inventory = check_related_inventory(context["batchId"], client)
+    inventory = related_inventory or check_related_inventory(context["batchId"], client)
     return {
         "batchId": context["batchId"],
         "quarantineRequired": context["quarantineRequired"],

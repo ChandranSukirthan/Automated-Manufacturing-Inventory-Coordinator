@@ -46,6 +46,15 @@ Part 2 implements three read-only tools:
 
 The tools never call PostgreSQL, mutate inventory, or mutate quarantine state. The ASP.NET Core API remains the source of truth.
 
+## Part 3 Validation/Safety integration
+
+`agents/validation_safety.py` runs the quality tools in order, then applies a
+read-only safety gate for inventory status, purchase-order fields, and supplied
+business rules. An already quarantined roll always returns `valid: false` with
+`riskLevel: HIGH`; the recommendation cannot override that result. Any later
+business-data mutation remains the responsibility of deterministic ASP.NET Core
+validation.
+
 ## Setup
 
 1. Create a Python environment.
