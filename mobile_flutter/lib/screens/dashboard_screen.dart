@@ -5,10 +5,6 @@ import '../services/api_client.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'batch_scan_screen.dart';
-import 'defect_form_screen.dart';
-import 'defects_screen.dart';
-import 'quarantine_history_screen.dart';
-import 'quarantine_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({required this.service, super.key});
@@ -40,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final liveSummary = summary.copyWith(
         totalDefects: defects.length,
         highSeverityDefects: defects
-            .where((defect) => defect.severity == 'HIGH' || defect.severity == 'CRITICAL')
+            .where((defect) => defect.severity == 'HIGH' || defect.severity == 'Critical')
             .length,
         openDefects: defects.where((defect) => defect.status == 'Open').length,
         quarantinedBatches: active.map((record) => record.batchId).toSet().length,
@@ -85,14 +81,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             'A live view of the inspection floor.',
             style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 14),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Chip(
-              avatar: Icon(Icons.circle, size: 10, color: Colors.green),
-              label: Text('System online'),
-            ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -146,149 +134,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          _OperationalPanel(
-            title: 'Defect Risk',
-            icon: Icons.warning_amber_rounded,
-            value: summary.highSeverityDefects > 0
-                ? 'Attention required'
-                : 'Stable',
-            detail: '${summary.highSeverityDefects} high priority',
-            color: summary.highSeverityDefects > 0
-                ? Colors.deepOrange
-                : Colors.teal,
-          ),
-          const SizedBox(height: 12),
-          _OperationalPanel(
-            title: 'Quality Flow',
-            icon: Icons.sync_alt,
-            value: summary.quarantinedBatches == 0
-                ? 'No active holds'
-                : '${summary.quarantinedBatches} batches on hold',
-            detail: '${summary.affectedInventory} inventory affected',
-            color: summary.quarantinedBatches == 0
-                ? Colors.teal
-                : Colors.amber.shade800,
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Quick actions',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _QuickAction(
-            icon: Icons.fact_check_outlined,
-            label: 'Review defect reports',
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DefectsScreen(service: widget.service),
-              ),
-            ),
-          ),
-          _QuickAction(
-            icon: Icons.inventory_2_outlined,
-            label: 'Open quarantine queue',
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => QuarantineScreen(service: widget.service),
-              ),
-            ),
-          ),
-          _QuickAction(
-            icon: Icons.add_task,
-            label: 'Log a new defect',
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DefectFormScreen(service: widget.service),
-              ),
-            ),
-          ),
-          _QuickAction(
-            icon: Icons.history,
-            label: 'View quarantine history',
-            onTap: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => QuarantineHistoryScreen(service: widget.service),
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
-}
-
-class _OperationalPanel extends StatelessWidget {
-  const _OperationalPanel({
-    required this.title,
-    required this.icon,
-    required this.value,
-    required this.detail,
-    required this.color,
-  });
-
-  final String title;
-  final IconData icon;
-  final String value;
-  final String detail;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(detail, style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    child: ListTile(
-      leading: Icon(icon),
-      title: Text(label),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    ),
-  );
 }

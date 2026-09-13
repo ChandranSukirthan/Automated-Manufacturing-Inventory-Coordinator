@@ -6,7 +6,7 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 import QANavigation from '../../components/Dashboard/QANavigation';
 
 const PAGE_SIZE = 8;
-const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
 const statuses = ['Active', 'Released'];
 
 export default function QuarantineManagementPage() {

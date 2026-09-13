@@ -7,7 +7,7 @@ import QANavigation from '../../components/Dashboard/QANavigation';
 
 const PAGE_SIZE = 8;
 const productTypes = ['BoxPouch', 'BiscuitPackaging', 'TeaBag', 'Bag', 'Can', 'Bottle'];
-const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
 const statuses = ['Open', 'InReview', 'Resolved', 'Closed'];
 
 export default function DefectReportsPage() {

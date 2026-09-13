@@ -24,14 +24,14 @@ void main() {
       'id': 'defect-1',
       'batchId': 'BATCH-001',
       'productType': 'BoxPouch',
-      'severity': 'CRITICAL',
+      'severity': 'Critical',
       'description': 'Seal failure',
       'createdAt': '2026-09-12T06:00:00Z',
       'status': 'Open',
       'reportedByUserId': 'user-1',
     });
 
-    expect(defect.severity, 'CRITICAL');
+    expect(defect.severity, 'Critical');
     expect(defect.reportedByUserId, 'user-1');
     expect(defect.description, 'Seal failure');
   });

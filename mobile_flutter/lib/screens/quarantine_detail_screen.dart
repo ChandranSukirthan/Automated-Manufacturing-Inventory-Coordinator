@@ -25,7 +25,6 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
   bool _loading = true;
   bool _releasing = false;
   BatchDetails? _batch;
-  DefectReport? _defect;
 
   @override
   void initState() {
@@ -40,17 +39,11 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     });
     try {
       final record = await widget.service.getQuarantine(widget.quarantineId);
-      final results = await Future.wait([
-        widget.service.getBatch(record.batchId),
-        widget.service.getDefect(record.defectReportId),
-      ]);
-      final batch = results[0] as BatchDetails;
-      final defect = results[1] as DefectReport;
+      final batch = await widget.service.getBatch(record.batchId);
       if (mounted) {
         setState(() {
           _record = record;
           _batch = batch;
-          _defect = defect;
         });
       }
     } on ApiException catch (exception) {
@@ -141,7 +134,6 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
             _Info(label: 'Defect', value: record.defectReportId),
             _Info(label: 'Batch', value: record.batchId),
             _Info(label: 'Inventory', value: record.inventoryRollId),
-            _Info(label: 'Severity', value: _defect?.severity ?? 'Unknown'),
             _Info(
               label: 'Inventory status',
               value: _batch?.inventoryRolls

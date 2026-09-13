@@ -5,6 +5,6 @@ namespace ManufacturingCoordinator.Enums
         LOW,
         MEDIUM,
         HIGH,
-        CRITICAL
+        Critical
     }
 }

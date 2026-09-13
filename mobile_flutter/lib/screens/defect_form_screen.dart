@@ -26,7 +26,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _batch = TextEditingController();
   final _description = TextEditingController();
-  final _severityValues = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+  final _severityValues = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
   final _statusValues = ['Open', 'InReview', 'Resolved', 'Closed'];
   final _productValues = [
     'BoxPouch',

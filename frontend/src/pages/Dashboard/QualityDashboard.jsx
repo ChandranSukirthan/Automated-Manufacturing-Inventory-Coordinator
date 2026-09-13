@@ -42,7 +42,7 @@ export default function QualityDashboard() {
         setSummary({
           ...summaryData,
           totalDefects: defects.length,
-          highSeverityDefects: defects.filter((defect) => ['HIGH', 'CRITICAL'].includes(defect.severity)).length,
+          highSeverityDefects: defects.filter((defect) => ['HIGH', 'Critical'].includes(defect.severity)).length,
           openDefects: defects.filter((defect) => defect.status === 'Open').length,
           quarantinedBatches: new Set(activeQuarantines.map((record) => record.batchId)).size,
           affectedInventory: new Set(activeQuarantines.map((record) => record.inventoryRollId)).size,
