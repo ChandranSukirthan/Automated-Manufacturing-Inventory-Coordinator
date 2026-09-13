@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Data;
@@ -215,21 +216,58 @@ namespace ManufacturingCoordinator.Api.Services
                 });
             }
 
-            // 3. FastAPI — OFFLINE until Agentic AI service is deployed
-            services.Add(new ServiceHealthDto
+            // 3. FastAPI & 4. Agentic AI — Ping Python microservice
+            bool isAiOnline = false;
+            string? aiErrorMessage = null;
+            try
             {
-                Name = "FastAPI",
-                Status = "OFFLINE",
-                Message = "FastAPI service is not yet deployed."
-            });
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var response = await httpClient.GetAsync("http://127.0.0.1:8000/health");
+                if (response.IsSuccessStatusCode)
+                {
+                    isAiOnline = true;
+                }
+                else
+                {
+                    aiErrorMessage = $"FastAPI returned HTTP {(int)response.StatusCode}";
+                }
+            }
+            catch (Exception ex)
+            {
+                isAiOnline = false;
+                aiErrorMessage = ex.Message;
+            }
 
-            // 4. Agentic AI — OFFLINE until AI service is deployed
-            services.Add(new ServiceHealthDto
+            if (isAiOnline)
             {
-                Name = "Agentic AI",
-                Status = "OFFLINE",
-                Message = "Agentic AI service is not yet deployed."
-            });
+                services.Add(new ServiceHealthDto
+                {
+                    Name = "FastAPI",
+                    Status = "ONLINE",
+                    Message = "FastAPI service is running on port 8000."
+                });
+                services.Add(new ServiceHealthDto
+                {
+                    Name = "Agentic AI",
+                    Status = "ONLINE",
+                    Message = "LangGraph Planner Agent is active."
+                });
+            }
+            else
+            {
+                services.Add(new ServiceHealthDto
+                {
+                    Name = "FastAPI",
+                    Status = "OFFLINE",
+                    Message = aiErrorMessage ?? "FastAPI service is not reachable on port 8000."
+                });
+                services.Add(new ServiceHealthDto
+                {
+                    Name = "Agentic AI",
+                    Status = "OFFLINE",
+                    Message = "Agentic AI service is not running."
+                });
+            }
 
             // 5. External Integrations
             services.Add(new ServiceHealthDto
