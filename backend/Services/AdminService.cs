@@ -11,6 +11,7 @@ using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
+using ManufacturingCoordinator.Models.Production;
 
 namespace ManufacturingCoordinator.Api.Services
 {
@@ -179,6 +180,171 @@ namespace ManufacturingCoordinator.Api.Services
                 CompletedAt = w.CompletedAt,
                 FinalOutcome = w.FinalOutcome
             };
+        }
+
+        public async Task<AgentWorkflowDto> ApproveWorkflowAsync(string workflowId)
+        {
+            try
+            {
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                await httpClient.PostAsync($"http://127.0.0.1:8000/api/workflows/{workflowId}/approve", null);
+            }
+            catch
+            {
+                // Fallback to direct DB update if microservice offline
+            }
+
+            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId);
+            if (w == null)
+                throw new AuthException($"Workflow '{workflowId}' not found.", HttpStatusCode.NotFound);
+
+            w.Status = WorkflowStatus.Completed;
+            w.ApprovalStatus = ApprovalStatus.Approved;
+            w.CurrentAgent = "Execution";
+            w.CompletedAt = DateTime.UtcNow;
+
+            // Domain Action: Machine Maintenance Overhaul
+            if (w.Objective.Contains("overhaul", StringComparison.OrdinalIgnoreCase) ||
+                w.Objective.Contains("maintenance", StringComparison.OrdinalIgnoreCase) ||
+                w.Objective.Contains("machine", StringComparison.OrdinalIgnoreCase))
+            {
+                var allMachines = await _db.Machines.ToListAsync();
+
+                // 1. Find machine whose name appears in the objective (longest name first)
+                Machine? targetMachine = null;
+                foreach (var m in allMachines.OrderByDescending(x => x.Name.Length))
+                {
+                    if (!string.IsNullOrWhiteSpace(m.Name) && 
+                        w.Objective.Contains(m.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetMachine = m;
+                        break;
+                    }
+                }
+
+                // 2. Fallback: match by significant keywords/tokens
+                if (targetMachine == null)
+                {
+                    var ignoreWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        "schedule", "urgent", "preventive", "overhaul", "maintenance", "machine", "for", "the", "and", "with"
+                    };
+
+                    var words = w.Objective.Split(new[] { ' ', ',', '.', ';', ':', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                                           .Where(word => word.Length > 2 && !ignoreWords.Contains(word));
+
+                    foreach (var word in words)
+                    {
+                        var match = allMachines.FirstOrDefault(m => m.Name.Contains(word, StringComparison.OrdinalIgnoreCase));
+                        if (match != null)
+                        {
+                            targetMachine = match;
+                            break;
+                        }
+                    }
+                }
+
+                // 3. Execution or Safe Failure
+                if (targetMachine != null)
+                {
+                    targetMachine.Status = MachineStatus.UnderMaintenance;
+                    targetMachine.UpdatedAt = DateTime.UtcNow;
+
+                    var maintLog = new MaintenanceLog
+                    {
+                        Id = Guid.NewGuid(),
+                        MachineId = targetMachine.Id,
+                        Description = $"Preventive overhaul authorized & executed via AI Workflow {w.WorkflowId}.",
+                        PerformedBy = "IT Admin / Autonomous Scheduler",
+                        PerformedAt = DateTime.UtcNow,
+                        Type = MaintenanceType.Preventive,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _db.MaintenanceLogs.AddAsync(maintLog);
+
+                    w.FinalOutcome = $"Overhaul authorized and executed. {targetMachine.Name} placed Under Maintenance and preventive service log registered.";
+                }
+                else
+                {
+                    // SAFE FAILURE: Strictly do NOT modify any innocent machines!
+                    w.Status = WorkflowStatus.Failed;
+                    w.ApprovalStatus = ApprovalStatus.Rejected;
+                    w.FinalOutcome = "Execution halted (Safe Failure): Target machine was not found in the factory equipment directory. No physical equipment was modified.";
+                }
+            }
+            else if (string.IsNullOrEmpty(w.FinalOutcome) || w.FinalOutcome.Contains("PO-DRAFT"))
+            {
+                w.FinalOutcome = "Approved by IT Admin. Requisition queued and production schedule reconciled.";
+            }
+
+            await _db.SaveChangesAsync();
+
+            return new AgentWorkflowDto
+            {
+                Id = w.Id,
+                WorkflowId = w.WorkflowId,
+                Objective = w.Objective,
+                CurrentAgent = w.CurrentAgent,
+                Status = w.Status,
+                ApprovalStatus = w.ApprovalStatus,
+                StartedAt = w.StartedAt,
+                CompletedAt = w.CompletedAt,
+                FinalOutcome = w.FinalOutcome
+            };
+        }
+
+        public async Task<AgentWorkflowDto> RejectWorkflowAsync(string workflowId)
+        {
+            try
+            {
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var content = new StringContent("{\"reason\":\"Rejected by IT Admin\"}", System.Text.Encoding.UTF8, "application/json");
+                await httpClient.PostAsync($"http://127.0.0.1:8000/api/workflows/{workflowId}/reject", content);
+            }
+            catch
+            {
+            }
+
+            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId);
+            if (w == null)
+                throw new AuthException($"Workflow '{workflowId}' not found.", HttpStatusCode.NotFound);
+
+            w.Status = WorkflowStatus.Failed;
+            w.ApprovalStatus = ApprovalStatus.Rejected;
+            w.CompletedAt = DateTime.UtcNow;
+            w.FinalOutcome = "Workflow execution rejected by human administrator.";
+
+            await _db.SaveChangesAsync();
+
+            return new AgentWorkflowDto
+            {
+                Id = w.Id,
+                WorkflowId = w.WorkflowId,
+                Objective = w.Objective,
+                CurrentAgent = w.CurrentAgent,
+                Status = w.Status,
+                ApprovalStatus = w.ApprovalStatus,
+                StartedAt = w.StartedAt,
+                CompletedAt = w.CompletedAt,
+                FinalOutcome = w.FinalOutcome
+            };
+        }
+
+        public async Task<object> TriggerWorkflowAsync(string objective, string? workflowId)
+        {
+            try
+            {
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var json = System.Text.Json.JsonSerializer.Serialize(new { objective, workflowId });
+                var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+                var response = await httpClient.PostAsync("http://127.0.0.1:8000/api/workflows/run", content);
+                var responseString = await response.Content.ReadAsStringAsync();
+                return System.Text.Json.JsonSerializer.Deserialize<object>(responseString) ?? new { message = "Workflow dispatched" };
+            }
+            catch (Exception ex)
+            {
+                throw new AuthException($"Could not communicate with Python AI microservice: {ex.Message}", HttpStatusCode.ServiceUnavailable);
+            }
         }
 
         // ========== System Health ==========

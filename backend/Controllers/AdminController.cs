@@ -155,6 +155,27 @@ namespace ManufacturingCoordinator.Api.Controllers
             return Ok(workflow);
         }
 
+        [HttpPost("agent-workflows/{workflowId}/approve")]
+        public async Task<IActionResult> ApproveWorkflow(string workflowId)
+        {
+            var workflow = await _adminService.ApproveWorkflowAsync(workflowId);
+            return Ok(workflow);
+        }
+
+        [HttpPost("agent-workflows/{workflowId}/reject")]
+        public async Task<IActionResult> RejectWorkflow(string workflowId)
+        {
+            var workflow = await _adminService.RejectWorkflowAsync(workflowId);
+            return Ok(workflow);
+        }
+
+        [HttpPost("agent-workflows/trigger")]
+        public async Task<IActionResult> TriggerWorkflow([FromBody] TriggerWorkflowDto dto)
+        {
+            var result = await _adminService.TriggerWorkflowAsync(dto.Objective, dto.WorkflowId);
+            return Ok(result);
+        }
+
         // ========== System Health ==========
 
         [HttpGet("system-health")]

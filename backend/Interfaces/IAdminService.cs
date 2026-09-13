@@ -22,6 +22,9 @@ namespace ManufacturingCoordinator.Api.Interfaces
         // Agent Workflows
         Task<List<AgentWorkflowDto>> GetAllWorkflowsAsync();
         Task<AgentWorkflowDto> GetWorkflowByIdAsync(Guid id);
+        Task<AgentWorkflowDto> ApproveWorkflowAsync(string workflowId);
+        Task<AgentWorkflowDto> RejectWorkflowAsync(string workflowId);
+        Task<object> TriggerWorkflowAsync(string objective, string? workflowId);
 
         // System Health
         Task<SystemHealthDto> GetSystemHealthAsync();
