@@ -21,12 +21,16 @@ TestResults/
 
 # Environment variables
 .env
-.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 *.secret.json
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.py[cod]
 appsettings.Development.json
 appsettings.Local.json
 
