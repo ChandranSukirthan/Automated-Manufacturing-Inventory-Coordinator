@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
+from psycopg import OperationalError
 
 from ai.agents.quality_agent import run_quality_validation
 from ai.core.state import AgentState
@@ -27,6 +28,6 @@ def quality_recommendation(defect: DefectInput) -> dict:
     }
     try:
         result = run_quality_validation(state)
-    except (ValueError, ConnectionError) as error:
+    except (ValueError, ConnectionError, OperationalError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return result["quality_data"]["validation"]
