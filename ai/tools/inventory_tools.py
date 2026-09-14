@@ -239,3 +239,4 @@ INVENTORY_TOOLS = [
     calculate_burn_rate,
     detect_low_stock,
 ]
+

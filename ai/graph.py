@@ -127,3 +127,4 @@ def run_data_extraction_workflow(material_id_or_batch: str, workflow_id: Optiona
             "requiredQuantity": 2000.0
         }
         return initial_state
+

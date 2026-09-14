@@ -94,3 +94,4 @@ class ToolErrorOutput(BaseModel):
     materialId: str
     error: str
     safeFallback: bool = True
+
