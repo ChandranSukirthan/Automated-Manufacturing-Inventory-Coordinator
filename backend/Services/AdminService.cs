@@ -210,38 +210,55 @@ namespace ManufacturingCoordinator.Api.Services
             {
                 var allMachines = await _db.Machines.ToListAsync();
 
-                // 1. Find machine whose name appears in the objective (longest name first)
+                // 1. Direct GUID Match in objective (if autonomous alert embedded Machine ID)
                 Machine? targetMachine = null;
-                foreach (var m in allMachines.OrderByDescending(x => x.Name.Length))
+                foreach (var m in allMachines)
                 {
-                    if (!string.IsNullOrWhiteSpace(m.Name) && 
-                        w.Objective.Contains(m.Name, StringComparison.OrdinalIgnoreCase))
+                    if (w.Objective.Contains(m.Id.ToString(), StringComparison.OrdinalIgnoreCase))
                     {
                         targetMachine = m;
                         break;
                     }
                 }
 
-                // 2. Fallback: match by significant keywords/tokens
+                // 2. Name / Keyword Match prioritizing ACTUALLY OVERDUE machines
                 if (targetMachine == null)
                 {
-                    var ignoreWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        "schedule", "urgent", "preventive", "overhaul", "maintenance", "machine", "for", "the", "and", "with"
-                    };
+                    var candidates = allMachines
+                        .Where(m => !string.IsNullOrWhiteSpace(m.Name) && 
+                                    m.Name.Trim().Length > 1 &&
+                                    w.Objective.Contains(m.Name, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
 
-                    var words = w.Objective.Split(new[] { ' ', ',', '.', ';', ':', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
-                                           .Where(word => word.Length > 2 && !ignoreWords.Contains(word));
-
-                    foreach (var word in words)
+                    if (!candidates.Any())
                     {
-                        var match = allMachines.FirstOrDefault(m => m.Name.Contains(word, StringComparison.OrdinalIgnoreCase));
-                        if (match != null)
+                        var ignoreWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                         {
-                            targetMachine = match;
-                            break;
+                            "schedule", "urgent", "preventive", "overhaul", "maintenance", "machine", 
+                            "for", "the", "and", "with", "string", "telemetry", "alert", "requesting", "approval", "autonomous"
+                        };
+
+                        var words = w.Objective.Split(new[] { ' ', ',', '.', ';', ':', '-', '_', '[', ']' }, StringSplitOptions.RemoveEmptyEntries)
+                                               .Where(word => word.Length > 2 && !ignoreWords.Contains(word));
+
+                        foreach (var word in words)
+                        {
+                            var tokenCandidates = allMachines.Where(m => m.Name.Contains(word, StringComparison.OrdinalIgnoreCase)).ToList();
+                            if (tokenCandidates.Any())
+                            {
+                                candidates = tokenCandidates;
+                                break;
+                            }
                         }
                     }
+
+                    // CRITICAL: Always prioritize the candidate that is ACTUALLY OVERDUE (UptimeHours >= MaintenanceIntervalHours)
+                    var overdueMatch = candidates
+                        .Where(m => m.UptimeHours >= m.MaintenanceIntervalHours)
+                        .OrderByDescending(m => m.UptimeHours)
+                        .FirstOrDefault();
+
+                    targetMachine = overdueMatch ?? candidates.FirstOrDefault();
                 }
 
                 // 3. Execution or Safe Failure

@@ -12,28 +12,41 @@ import {
   CheckCircle2, 
   ArrowRight,
   RefreshCw,
-  Loader2
+  Loader2,
+  Sparkles,
+  Check
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import machineService from '../../services/machineService';
 import shiftService from '../../services/shiftService';
+import adminService from '../../services/adminService';
 
 export default function ProductionDashboard() {
   const [machines, setMachines] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [pendingWorkflows, setPendingWorkflows] = useState([]);
+  const [approvingId, setApprovingId] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [machinesData, shiftsData] = await Promise.all([
+      const [machinesData, shiftsData, workflowsData] = await Promise.all([
         machineService.getAll(),
-        shiftService.getAll()
+        shiftService.getAll(),
+        adminService.getAgentWorkflows().catch(() => [])
       ]);
       setMachines(machinesData);
       setShifts(shiftsData);
+      if (Array.isArray(workflowsData)) {
+        const pending = workflowsData.filter(
+          w => (w.status === 3 || w.approvalStatus === 0) && w.status !== 1 && w.status !== 2
+        );
+        setPendingWorkflows(pending);
+      }
     } catch (err) {
       console.error(err);
       setError('Failed to load production data.');
@@ -41,6 +54,35 @@ export default function ProductionDashboard() {
       setLoading(false);
     }
   };
+
+  const handleQuickApprove = async (workflowId) => {
+    setApprovingId(workflowId);
+    setError('');
+    setSuccessMsg('');
+    try {
+      await adminService.approveWorkflow(workflowId);
+      setSuccessMsg(`Workflow ${workflowId} approved! Target machine placed under maintenance.`);
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || `Failed to approve workflow ${workflowId}.`);
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const activeAlertWorkflows = pendingWorkflows.filter(pw => {
+    const matchedMachine = machines.find(m => 
+      (m.id && pw.objective && pw.objective.toLowerCase().includes(m.id.toLowerCase())) ||
+      (m.name && m.name.trim().length > 2 && m.name.toLowerCase() !== 'string' && pw.objective && pw.objective.toLowerCase().includes(m.name.toLowerCase()))
+    );
+
+    if (matchedMachine) {
+      const isOverdue = matchedMachine.isMaintenanceDue || (matchedMachine.uptimeHours >= matchedMachine.maintenanceIntervalHours);
+      return matchedMachine.status === 0 && isOverdue;
+    }
+    return false;
+  });
 
   useEffect(() => {
     fetchData();
@@ -76,6 +118,67 @@ export default function ProductionDashboard() {
           <span>Refresh Telemetry</span>
         </button>
       </div>
+
+      {/* Success Notification */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Autonomous AI Telemetry Alert Banner */}
+      {activeAlertWorkflows.length > 0 && (
+        <div className="space-y-3">
+          {activeAlertWorkflows.map(pw => (
+            <div 
+              key={pw.id}
+              className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 backdrop-blur-xl shadow-lg shadow-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                      {pw.workflowId}
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-200">Autonomous AI Telemetry Alert</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 animate-pulse">
+                      ACTION REQUIRED
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-200 mt-1 font-medium leading-relaxed">
+                    {pw.objective}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={() => handleQuickApprove(pw.workflowId)}
+                  disabled={approvingId === pw.workflowId}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                >
+                  {approvingId === pw.workflowId ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>Approve & Place Under Maintenance</span>
+                </button>
+                <Link
+                  to="/admin/agent-workflows"
+                  className="px-3.5 py-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-xl border border-white/10 text-xs font-semibold transition-colors"
+                >
+                  View Pipeline
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">

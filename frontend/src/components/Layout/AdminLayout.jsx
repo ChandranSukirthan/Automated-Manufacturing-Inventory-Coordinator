@@ -19,12 +19,38 @@ import {
   Factory
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import adminService from '../../services/adminService';
 
 export default function AdminLayout({ children, title, subtitle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [pendingWfCount, setPendingWfCount] = useState(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkPendingWorkflows = async () => {
+      try {
+        const workflows = await adminService.getAgentWorkflows();
+        if (isMounted && Array.isArray(workflows)) {
+          const pending = workflows.filter(
+            w => (w.status === 3 || w.approvalStatus === 0) && w.status !== 1 && w.status !== 2
+          ).length;
+          setPendingWfCount(pending);
+        }
+      } catch {
+        // Silently ignore if unauthenticated or error
+      }
+    };
+
+    checkPendingWorkflows();
+    const interval = setInterval(checkPendingWorkflows, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -131,7 +157,14 @@ export default function AdminLayout({ children, title, subtitle }) {
                         <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-brand-400'}`} />
                         <span>{item.label}</span>
                       </div>
-                      {isActive && <ChevronRight className="w-4 h-4 text-white/70" />}
+                      <div className="flex items-center gap-1.5">
+                        {item.path === '/admin/agent-workflows' && pendingWfCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse shadow-sm shadow-amber-500/20">
+                            {pendingWfCount}
+                          </span>
+                        )}
+                        {isActive && <ChevronRight className="w-4 h-4 text-white/70" />}
+                      </div>
                     </Link>
                   );
                 })}

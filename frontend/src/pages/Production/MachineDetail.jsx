@@ -12,11 +12,15 @@ import {
   Loader2,
   User,
   Activity,
-  Plus
+  Plus,
+  Sparkles,
+  Check,
+  Bot
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import machineService from '../../services/machineService';
 import maintenanceService from '../../services/maintenanceService';
+import adminService from '../../services/adminService';
 
 export default function MachineDetail() {
   const { id } = useParams();
@@ -26,6 +30,9 @@ export default function MachineDetail() {
   const [calculating, setCalculating] = useState(false);
   const [calcResult, setCalcResult] = useState(null);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [pendingWorkflow, setPendingWorkflow] = useState(null);
+  const [approvingWf, setApprovingWf] = useState(false);
 
   // Add Log modal state
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -38,17 +45,50 @@ export default function MachineDetail() {
     setLoading(true);
     setError('');
     try {
-      const [machineData, logsData] = await Promise.all([
+      const [machineData, logsData, workflowsData] = await Promise.all([
         machineService.getById(id),
-        maintenanceService.getByMachineId(id)
+        maintenanceService.getByMachineId(id),
+        adminService.getAgentWorkflows().catch(() => [])
       ]);
       setMachine(machineData);
       setLogs(logsData);
+
+      if (Array.isArray(workflowsData) && machineData) {
+        const isOverdue = machineData.isMaintenanceDue || (machineData.uptimeHours >= machineData.maintenanceIntervalHours);
+        if (machineData.status === 0 && isOverdue) {
+          const match = workflowsData.find(w => 
+            (w.status === 3 || w.approvalStatus === 0) &&
+            w.status !== 1 && w.status !== 2 &&
+            ((w.objective && machineData.id && w.objective.toLowerCase().includes(machineData.id.toLowerCase())) ||
+             (machineData.name && machineData.name.trim().length > 2 && machineData.name.toLowerCase() !== 'string' &&
+              w.objective && w.objective.toLowerCase().includes(machineData.name.toLowerCase())))
+          );
+          setPendingWorkflow(match || null);
+        } else {
+          setPendingWorkflow(null);
+        }
+      }
     } catch (err) {
       console.error(err);
       setError('Failed to load machine details or maintenance records.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveWorkflow = async (workflowId) => {
+    setApprovingWf(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      await adminService.approveWorkflow(workflowId);
+      setSuccessMsg(`AI Workflow ${workflowId} approved! Equipment has been placed Under Maintenance.`);
+      await fetchMachineData();
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || `Failed to approve workflow ${workflowId}.`);
+    } finally {
+      setApprovingWf(false);
     }
   };
 
@@ -163,6 +203,66 @@ export default function MachineDetail() {
           </button>
         </div>
       </div>
+
+      {/* Success Notification */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-3 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Autonomous AI Telemetry Alert Box */}
+      {pendingWorkflow && (
+        <div className="p-6 rounded-3xl bg-amber-500/10 border border-amber-500/40 text-white backdrop-blur-xl shadow-xl shadow-amber-500/10 animate-in fade-in space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                <Sparkles className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-lg border border-amber-500/40">
+                    {pendingWorkflow.workflowId}
+                  </span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-200">Autonomous Overhaul Authorization</span>
+                </div>
+                <h4 className="text-base font-bold text-white mt-1">Autonomous Maintenance Overhaul Awaiting Approval</h4>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-400 text-slate-950 uppercase tracking-wider animate-pulse self-start sm:self-auto">
+              ACTION REQUIRED
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2">
+            <p className="text-sm text-slate-200 font-medium">
+              {pendingWorkflow.objective}
+            </p>
+            <p className="text-xs text-slate-400">
+              Supervised by <strong className="text-white">{pendingWorkflow.currentAgent}</strong>. Approving will automatically switch machine status to <strong className="text-amber-400">Under Maintenance</strong> and register a preventive overhaul record in the maintenance ledger.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={() => handleApproveWorkflow(pendingWorkflow.workflowId)}
+              disabled={approvingWf}
+              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-600/30 disabled:opacity-50"
+            >
+              {approvingWf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              <span>Approve & Place Under Maintenance</span>
+            </button>
+
+            <Link
+              to="/admin/agent-workflows"
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-white/10 text-sm font-semibold transition-colors"
+            >
+              View in AI Workflows Console
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Live Calculation Banner if triggered */}
       {calcResult && (
