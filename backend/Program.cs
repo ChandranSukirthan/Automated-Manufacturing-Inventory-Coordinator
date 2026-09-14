@@ -106,15 +106,16 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS for React frontend
+// CORS for React frontend & mobile clients
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ReactFrontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .SetIsOriginAllowed(_ => true)
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -131,7 +132,10 @@ app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("ReactFrontend");
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

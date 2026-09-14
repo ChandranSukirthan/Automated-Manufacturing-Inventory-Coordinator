@@ -4,10 +4,11 @@ import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loade
 import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import { useAuth } from '../../context/AuthContext';
+import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, googleLogin, googleRegister } = useAuth();
   const [formData, setFormData] = useState({ 
     name: '', 
     email: '', 
@@ -41,6 +42,10 @@ export default function Signup() {
       setError('Please enter a valid email address containing "@".');
       return;
     }
+    if (formData.password.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -62,7 +67,7 @@ export default function Signup() {
         navigate('/otp-verify', { state: { email: formData.email } });
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+      setError(parseErrorMessage(err, 'Registration failed. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -80,7 +85,7 @@ export default function Signup() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleLogin(credentialResponse.credential);
+      const data = await googleLogin(credentialResponse.credential);
       if (data.requiresRoleSelection) {
         setGoogleTokenId(credentialResponse.credential);
         setShowRoleModal(true);
@@ -88,7 +93,7 @@ export default function Signup() {
         routeUserByRole(data.authResponse.user.role);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Google Sign-In failed.');
+      setError(parseErrorMessage(err, 'Google Sign-In failed.'));
     } finally {
       setLoading(false);
     }
@@ -98,10 +103,10 @@ export default function Signup() {
     setError('');
     setLoading(true);
     try {
-      const data = await useAuth().googleRegister(googleTokenId, parseInt(selectedRole, 10));
+      const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      setError(parseErrorMessage(err, 'Registration failed.'));
     } finally {
       setLoading(false);
     }

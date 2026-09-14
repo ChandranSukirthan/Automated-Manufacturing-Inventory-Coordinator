@@ -8,6 +8,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
 import OTPVerification from './pages/Auth/OTPVerification';
+import ForgotPassword from './pages/Auth/ForgotPassword';
 
 // Production Pages (Student 4)
 import ProductionDashboard from './pages/Production/ProductionDashboard';
@@ -38,6 +39,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/otp-verify" element={<OTPVerification />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Legacy / Shared Dashboards */}
           <Route path="/dashboard/admin" element={<Navigate to="/admin" replace />} />
