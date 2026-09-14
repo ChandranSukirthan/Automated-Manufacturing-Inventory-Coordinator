@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_name: str = "inventory_coordinator"
     db_user: str = "postgres"
-    db_password: str
+    db_password: str = ""
     openai_api_key: str = ""
     fastapi_port: int = 8000
 

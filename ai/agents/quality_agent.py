@@ -32,8 +32,20 @@ def run_quality_validation(
         }
         requires_approval = False
     else:
-        outcome = recommendation
-        requires_approval = recommendation["quarantineRequired"]
+        reason = _validate_purchase_order(
+            state.get("purchasing_data", {}).get("purchase_order"),
+            state.get("purchasing_data", {}).get("business_rules"),
+        )
+        if reason:
+            outcome = {
+                "valid": False,
+                "riskLevel": recommendation["riskLevel"],
+                "reason": reason,
+            }
+            requires_approval = False
+        else:
+            outcome = recommendation
+            requires_approval = recommendation["quarantineRequired"]
 
     tool_results = dict(state.get("tool_results", {}))
     tool_results["recommend_quarantine"] = recommendation
@@ -62,6 +74,48 @@ def _has_quarantined_inventory(
         with connect(settings.database_url) as owned_connection:
             return _query_has_quarantined_inventory(batch_id, owned_connection)
     return _query_has_quarantined_inventory(batch_id, connection)
+
+
+def _validate_purchase_order(
+    purchase_order: dict[str, Any] | None,
+    business_rules: dict[str, Any] | None,
+) -> str | None:
+    if purchase_order is None:
+        return None
+
+    supplier = str(purchase_order.get("supplier", "")).strip()
+    if not supplier:
+        return "Supplier is required"
+
+    quantity = _number(purchase_order.get("quantity"))
+    if quantity is None or quantity <= 0:
+        return "Quantity must be greater than zero"
+
+    budget = _number(purchase_order.get("budget"))
+    if budget is None or budget < 0:
+        return "Budget must be zero or greater"
+
+    rules = business_rules or {}
+    allowed_suppliers = rules.get("allowedSuppliers")
+    if allowed_suppliers and supplier not in allowed_suppliers:
+        return "Supplier is not allowed by business rules"
+
+    max_quantity = _number(rules.get("maxQuantity"))
+    if max_quantity is not None and quantity > max_quantity:
+        return "Quantity exceeds the business rule limit"
+
+    max_budget = _number(rules.get("maxBudget"))
+    if max_budget is not None and budget > max_budget:
+        return "Budget exceeds the business rule limit"
+
+    return None
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return None if value is None or isinstance(value, bool) else float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _query_has_quarantined_inventory(

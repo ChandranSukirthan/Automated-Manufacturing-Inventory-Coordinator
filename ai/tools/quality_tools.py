@@ -94,6 +94,10 @@ def _check_related_inventory(
     batch_id: str, connection: Connection[Any]
 ) -> dict[str, Any]:
     with connection.cursor() as cursor:
+        cursor.execute('SELECT 1 FROM "Batches" WHERE "Id" = %s LIMIT 1', (batch_id,))
+        if cursor.fetchone() is None:
+            raise ValueError(f"Batch was not found: {batch_id}")
+
         cursor.execute(
             'SELECT "Id" FROM "InventoryRolls" WHERE "BatchId" = %s ORDER BY "Id"',
             (batch_id,),
