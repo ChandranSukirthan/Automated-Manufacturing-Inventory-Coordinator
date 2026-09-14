@@ -37,12 +37,7 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await login(formData.email, formData.password);
-      const roleInt = data.user.role;
-      if (roleInt === 3) navigate('/dashboard/admin');
-      else if (roleInt === 0) navigate('/dashboard/worker');
-      else if (roleInt === 2) navigate('/quality');
-      else if (roleInt === 1) navigate('/dashboard/admin'); // default manager to admin or manager route if it exists
-      else navigate('/');
+      routeUserByRole(data.user.role);
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -50,11 +45,12 @@ export default function Login() {
     }
   };
 
-  const routeUserByRole = (roleInt) => {
-    if (roleInt === 3) navigate('/dashboard/admin');
-    else if (roleInt === 0) navigate('/dashboard/worker');
-    else if (roleInt === 2) navigate('/quality');
-    else if (roleInt === 1) navigate('/dashboard/admin');
+  const routeUserByRole = (roleValue) => {
+    const role = String(roleValue).trim().toLowerCase();
+    if (role === 'qualityinspector' || role === '2') navigate('/quality');
+    else if (role === 'floorworker' || role === '0') navigate('/dashboard/worker');
+    else if (role === 'itadmin' || role === '3') navigate('/dashboard/admin');
+    else if (role === 'supplychainmanager' || role === '1') navigate('/dashboard/admin');
     else navigate('/');
   };
 

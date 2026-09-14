@@ -40,6 +40,9 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   String _product = 'BoxPouch';
   String _status = 'Open';
   bool _saving = false;
+  bool _analyzing = false;
+  String? _aiError;
+  QualityRecommendation? _recommendation;
 
   bool get _isEditing => widget.defect != null;
 
@@ -105,6 +108,28 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     }
   }
 
+  Future<void> _analyzeWithAi() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _analyzing = true;
+      _aiError = null;
+      _recommendation = null;
+    });
+    try {
+      final recommendation = await widget.service.analyzeDefect(
+        batchId: _batch.text.trim(),
+        productType: _product,
+        severity: _severity,
+        description: _description.text.trim(),
+      );
+      if (mounted) setState(() => _recommendation = recommendation);
+    } on ApiException catch (exception) {
+      if (mounted) setState(() => _aiError = exception.message);
+    } finally {
+      if (mounted) setState(() => _analyzing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -164,6 +189,39 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             validator: _required,
           ),
           const SizedBox(height: 24),
+          if (_aiError != null)
+            Text(_aiError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (_recommendation != null) ...[
+            const SizedBox(height: 16),
+            Card(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AI Recommendation', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    Text('Risk level: ${_recommendation!.riskLevel}'),
+                    Text('Quarantine required: ${_recommendation!.quarantineRequired ? 'YES' : 'NO'}'),
+                    Text('Affected inventory: ${_recommendation!.affectedInventory.isEmpty ? 'None' : _recommendation!.affectedInventory.join(', ')}'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: _saving || _analyzing ? null : _analyzeWithAi,
+            icon: _analyzing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.auto_awesome_outlined),
+            label: Text(_analyzing ? 'Analyzing...' : 'Analyze with AI'),
+          ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: _saving ? null : _save,
             icon: _saving

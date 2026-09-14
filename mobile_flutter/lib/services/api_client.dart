@@ -25,6 +25,11 @@ class ApiClient {
                   ))
               .replaceAll(RegExp(r'/$'), '');
 
+  final String aiBaseUrl = const String.fromEnvironment(
+    'AI_API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  ).replaceAll(RegExp(r'/$'), '');
+
   final SessionStorage storage;
   final String baseUrl;
   Future<void> Function()? onSessionExpired;
@@ -32,6 +37,8 @@ class ApiClient {
   Future<dynamic> get(String path) => _request('GET', path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
+    Future<dynamic> postAi(String path, [Map<String, dynamic>? body]) =>
+      _request('POST', path, body, true, aiBaseUrl);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
       _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);
@@ -41,6 +48,7 @@ class ApiClient {
     String path, [
     Map<String, dynamic>? body,
     bool retry = true,
+    String? rootUrl,
   ]) async {
     final session = await storage.read();
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -48,7 +56,7 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${session.accessToken}';
     }
 
-    final uri = Uri.parse('$baseUrl$path');
+    final uri = Uri.parse('${rootUrl ?? baseUrl}$path');
     final encodedBody = body == null ? null : jsonEncode(body);
     http.Response response;
     try {
@@ -67,7 +75,7 @@ class ApiClient {
 
     if (response.statusCode == 401 && retry && session != null) {
       final refreshed = await _refresh(session.refreshToken);
-      if (refreshed) return _request(method, path, body, false);
+      if (refreshed) return _request(method, path, body, false, rootUrl);
       await onSessionExpired?.call();
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

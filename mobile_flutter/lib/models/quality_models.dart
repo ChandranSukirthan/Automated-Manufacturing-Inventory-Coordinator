@@ -51,6 +51,30 @@ class QualitySummary {
   );
 }
 
+class QualityRecommendation {
+  const QualityRecommendation({
+    required this.batchId,
+    required this.quarantineRequired,
+    required this.affectedInventory,
+    required this.riskLevel,
+  });
+
+  final String batchId;
+  final bool quarantineRequired;
+  final List<String> affectedInventory;
+  final String riskLevel;
+
+  factory QualityRecommendation.fromJson(Map<String, dynamic> json) =>
+      QualityRecommendation(
+        batchId: json['batchId']?.toString() ?? '',
+        quarantineRequired: json['quarantineRequired'] as bool? ?? false,
+        affectedInventory: (json['affectedInventory'] as List<dynamic>? ?? [])
+            .map((item) => item.toString())
+            .toList(),
+        riskLevel: json['riskLevel']?.toString() ?? 'LOW',
+      );
+}
+
 class BatchDetails {
   const BatchDetails({
     required this.id,

@@ -24,6 +24,9 @@ export default function DefectFormPage() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiRecommendation, setAiRecommendation] = useState(null);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -95,6 +98,31 @@ export default function DefectFormPage() {
     }
   };
 
+  const handleAnalyzeWithAi = async () => {
+    const validationError = validate();
+    if (validationError) {
+      setAiError(validationError);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError('');
+    setAiRecommendation(null);
+    try {
+      const recommendation = await defectService.analyzeWithAi({
+        batchId: form.batchId.trim(),
+        productType: form.productType,
+        severity: form.severity,
+        description: form.description.trim()
+      });
+      setAiRecommendation(recommendation);
+    } catch (err) {
+      setAiError(parseErrorMessage(err, 'Unable to analyze the defect with AI. Ensure the AI service is running.'));
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
       <div className="max-w-3xl mx-auto">
@@ -108,6 +136,7 @@ export default function DefectFormPage() {
         </div>
 
         {error && <div className="mb-4 p-3 rounded bg-red-500/10 text-red-300 border border-red-500/30">{error}</div>}
+        {aiError && <div className="mb-4 p-3 rounded bg-amber-500/10 text-amber-200 border border-amber-500/30">{aiError}</div>}
 
         <form onSubmit={handleSubmit} className="bg-slate-900/60 rounded-3xl border border-slate-800 p-8 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
@@ -145,11 +174,22 @@ export default function DefectFormPage() {
 
           <div className="flex justify-end gap-3">
             <button type="button" onClick={() => navigate('/quality/defects')} className="px-5 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={handleAnalyzeWithAi} disabled={loading || aiLoading} className="px-5 py-3 rounded-xl border border-cyan-400 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-60">
+              {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
+            </button>
             <button type="submit" disabled={loading} className="px-5 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 disabled:opacity-60">
               {loading ? 'Saving...' : isEdit ? 'Update Defect' : 'Create Defect'}
             </button>
           </div>
         </form>
+        {aiRecommendation && <section className="mt-6 rounded-3xl border border-cyan-500/30 bg-cyan-500/10 p-6" aria-live="polite">
+          <p className="text-cyan-300 uppercase tracking-wide text-sm font-semibold">AI Recommendation</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div><p className="text-sm text-slate-400">Risk Level</p><p className="text-2xl font-bold text-white">{aiRecommendation.riskLevel}</p></div>
+            <div><p className="text-sm text-slate-400">Quarantine Required</p><p className="text-2xl font-bold text-white">{aiRecommendation.quarantineRequired ? 'YES' : 'NO'}</p></div>
+            <div><p className="text-sm text-slate-400">Affected Inventory</p><p className="mt-1 text-white">{aiRecommendation.affectedInventory?.length ? aiRecommendation.affectedInventory.join(', ') : 'None'}</p></div>
+          </div>
+        </section>}
       </div>
     </div>
   );

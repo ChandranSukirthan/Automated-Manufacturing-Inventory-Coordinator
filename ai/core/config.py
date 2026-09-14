@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / "backend" / ".env"
 
 
 class Settings(BaseSettings):
@@ -10,7 +15,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     fastapi_port: int = 8000
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 
     @property
     def database_url(self) -> str:

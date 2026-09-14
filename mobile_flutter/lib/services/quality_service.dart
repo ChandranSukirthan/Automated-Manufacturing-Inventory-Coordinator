@@ -34,6 +34,20 @@ class QualityService {
     await api.get('/defects/$id') as Map<String, dynamic>,
   );
 
+  Future<QualityRecommendation> analyzeDefect({
+    required String batchId,
+    required String productType,
+    required String severity,
+    required String description,
+  }) async => QualityRecommendation.fromJson(
+    await api.postAi('/quality/recommendation', {
+      'batchId': batchId,
+      'productType': productType,
+      'severity': severity,
+      'description': description,
+    }) as Map<String, dynamic>,
+  );
+
   Future<DefectReport> createDefect({
     required String batchId,
     required String productType,
