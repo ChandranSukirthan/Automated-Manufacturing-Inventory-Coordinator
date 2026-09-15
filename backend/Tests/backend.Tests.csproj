@@ -17,6 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\backend\ManufacturingCoordinator.Api.csproj" />
+    <ProjectReference Include="..\\ManufacturingCoordinator.Api.csproj" />
   </ItemGroup>
 </Project>
