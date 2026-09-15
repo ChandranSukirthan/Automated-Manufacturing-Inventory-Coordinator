@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using ManufacturingCoordinator.Api.DTOs.Authentication;
+using System;
 
 namespace ManufacturingCoordinator.Api.Interfaces
 {
@@ -14,5 +15,7 @@ namespace ManufacturingCoordinator.Api.Interfaces
         Task<MessageResponseDto> ResetPasswordAsync(ResetPasswordRequestDto request);
         Task<GoogleLoginResponseDto> GoogleLoginAsync(GoogleLoginRequestDto request);
         Task<AuthResponseDto> GoogleRegisterAsync(GoogleRegisterRequestDto request);
+        Task<UserSummaryDto?> GetProfileAsync(Guid userId);
+        Task<UserSummaryDto> UpdateProfileAsync(Guid userId, UpdateProfileRequestDto request);
     }
 }

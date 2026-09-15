@@ -7,6 +7,7 @@ import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
 import OTPVerification from './pages/Auth/OTPVerification';
 import ForgotPassword from './pages/Auth/ForgotPassword';
+import ProfilePage from './pages/Profile/ProfilePage';
 
 // Production Pages (Student 4)
 import ProductionDashboard from './pages/Production/ProductionDashboard';
@@ -44,6 +45,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/otp-verify" element={<OTPVerification />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/dashboard/admin" element={<Navigate to="/admin" replace />} />
           <Route path="/dashboard/worker" element={<WorkerDashboard />} />
           <Route element={<ProtectedRoute allowedRoles={['QualityInspector']} />}>

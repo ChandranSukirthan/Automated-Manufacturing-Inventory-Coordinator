@@ -5,7 +5,8 @@ const links = [
   { label: 'Dashboard', to: '/quality' },
   { label: 'Defect Reports', to: '/quality/defects' },
   { label: 'Quarantine Management', to: '/quality/quarantine' },
-  { label: 'Quarantine History', to: '/quality/quarantine/history' }
+  { label: 'Quarantine History', to: '/quality/quarantine/history' },
+  { label: 'Profile', to: '/profile' }
 ];
 
 export default function QANavigation() {
