@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
@@ -8,9 +9,14 @@ import '../widgets/app_widgets.dart';
 import 'batch_scan_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({required this.service, super.key});
+  const DashboardScreen({
+    required this.service,
+    required this.appState,
+    super.key,
+  });
 
   final QualityService service;
+  final AppState appState;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -33,16 +39,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final defects = await widget.service.getDefects();
       final quarantines = await widget.service.getQuarantines();
       final active = quarantines.where((record) => record.status == 'Active');
-      final released = quarantines.where((record) => record.status == 'Released');
+      final released = quarantines.where(
+        (record) => record.status == 'Released',
+      );
       final liveSummary = summary.copyWith(
         totalDefects: defects.length,
         highSeverityDefects: defects
-            .where((defect) => defect.severity == 'HIGH' || defect.severity == 'Critical')
+            .where(
+              (defect) =>
+                  defect.severity == 'HIGH' || defect.severity == 'Critical',
+            )
             .length,
         openDefects: defects.where((defect) => defect.status == 'Open').length,
-        quarantinedBatches: active.map((record) => record.batchId).toSet().length,
-        affectedInventory: active.map((record) => record.inventoryRollId).toSet().length,
-        releasedInventory: released.map((record) => record.inventoryRollId).toSet().length,
+        quarantinedBatches: active
+            .map((record) => record.batchId)
+            .toSet()
+            .length,
+        affectedInventory: active
+            .map((record) => record.inventoryRollId)
+            .toSet()
+            .length,
+        releasedInventory: released
+            .map((record) => record.inventoryRollId)
+            .toSet()
+            .length,
       );
       if (mounted) {
         setState(() => _summary = liveSummary);
@@ -53,7 +73,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (exception) {
       if (mounted) {
-        setState(() => _error = 'Unable to load the quality dashboard: $exception');
+        setState(
+          () => _error = 'Unable to load the quality dashboard: $exception',
+        );
       }
     }
   }
@@ -92,7 +114,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () => Navigator.push<void>(
               context,
               MaterialPageRoute(
-                builder: (_) => BatchScanScreen(service: widget.service),
+                builder: (_) => BatchScanScreen(
+                  service: widget.service,
+                  appState: widget.appState,
+                ),
               ),
             ),
             icon: const Icon(Icons.qr_code_scanner),

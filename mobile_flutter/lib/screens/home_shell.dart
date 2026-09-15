@@ -31,7 +31,10 @@ class _HomeShellState extends State<HomeShell> {
     final isQualityInspector = user.isQualityInspector;
     final screens = isQualityInspector
         ? [
-            DashboardScreen(service: widget.qualityService),
+            DashboardScreen(
+              service: widget.qualityService,
+              appState: widget.appState,
+            ),
             DefectsScreen(service: widget.qualityService),
             QuarantineScreen(service: widget.qualityService),
             QuarantineHistoryScreen(service: widget.qualityService),
