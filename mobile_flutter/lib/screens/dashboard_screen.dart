@@ -50,6 +50,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() => _error = exception.message);
       }
+    } catch (exception) {
+      if (mounted) {
+        setState(() => _error = 'Unable to load the quality dashboard: $exception');
+      }
     }
   }
 

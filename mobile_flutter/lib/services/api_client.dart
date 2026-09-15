@@ -16,6 +16,8 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
+  static const requestTimeout = Duration(seconds: 15);
+
   ApiClient({required this.storage, String? baseUrl, this.onSessionExpired})
     : baseUrl =
           (baseUrl ??
@@ -61,10 +63,16 @@ class ApiClient {
     http.Response response;
     try {
       response = switch (method) {
-        'GET' => await http.get(uri, headers: headers),
-        'POST' => await http.post(uri, headers: headers, body: encodedBody),
-        'PUT' => await http.put(uri, headers: headers, body: encodedBody),
-        'DELETE' => await http.delete(uri, headers: headers),
+        'GET' => await http.get(uri, headers: headers).timeout(requestTimeout),
+        'POST' => await http
+          .post(uri, headers: headers, body: encodedBody)
+          .timeout(requestTimeout),
+        'PUT' => await http
+          .put(uri, headers: headers, body: encodedBody)
+          .timeout(requestTimeout),
+        'DELETE' => await http
+          .delete(uri, headers: headers)
+          .timeout(requestTimeout),
         _ => throw const ApiException('Unsupported request method.'),
       };
     } catch (_) {

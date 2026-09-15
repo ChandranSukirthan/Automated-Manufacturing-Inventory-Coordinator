@@ -57,6 +57,16 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDefectReportService, DefectReportService>();
 builder.Services.AddScoped<IQuarantineService, QuarantineService>();
 
+// Student 4 — Production & Admin Services
+builder.Services.AddScoped<IMachineService, MachineService>();
+builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
+builder.Services.AddScoped<IShiftService, ShiftService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+
+// HttpContextAccessor (for audit log IP capture)
+builder.Services.AddHttpContextAccessor();
+
 // Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -138,5 +148,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Seed initial users & mock data if database is empty
+await DbInitializer.SeedAsync(app.Services);
 
 app.Run();

@@ -19,6 +19,15 @@ obj/
 TestResults/
 *.log
 
+# Python / AI Service
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+*.egg-info/
+
 # Environment variables
 .env
 .env.local
@@ -55,3 +64,5 @@ Thumbs.db
 
 # Antigravity/Gemini (if applicable)
 .gemini/
+
+GIT_COMMIT_PLAN.md
