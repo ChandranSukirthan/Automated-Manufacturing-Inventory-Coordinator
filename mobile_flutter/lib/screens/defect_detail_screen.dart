@@ -28,7 +28,6 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
   bool _loading = true;
   bool _quarantining = false;
   List<QuarantineRecord> _affectedInventory = [];
-  final _inventoryRollId = TextEditingController();
   final _reason = TextEditingController();
 
   @override
@@ -39,7 +38,6 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
 
   @override
   void dispose() {
-    _inventoryRollId.dispose();
     _reason.dispose();
     super.dispose();
   }
@@ -94,10 +92,9 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       _error = null;
     });
     try {
-      final record = await widget.service.quarantineDefect(
+      final records = await widget.service.quarantineDefect(
         widget.defectId,
         _reason.text.trim(),
-        _inventoryRollId.text.trim(),
       );
       if (mounted) {
         await Navigator.push<void>(
@@ -105,7 +102,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
           MaterialPageRoute(
             builder: (_) => QuarantineDetailScreen(
               service: widget.service,
-              quarantineId: record.id,
+              quarantineId: records.first.id,
             ),
           ),
         );
@@ -200,15 +197,8 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Leave the inventory ID blank to use this defect\'s batch ID.',
+              'Affected inventory rolls are selected automatically from this defect.',
               style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _inventoryRollId,
-              decoration: const InputDecoration(
-                labelText: 'Inventory roll ID (optional)',
-              ),
             ),
             const SizedBox(height: 12),
             TextField(

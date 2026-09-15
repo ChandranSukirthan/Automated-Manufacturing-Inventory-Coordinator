@@ -6,8 +6,6 @@ namespace ManufacturingCoordinator.Api.DTOs.Quality
 {
     public class CreateQuarantineDto
     {
-        public string? InventoryRollId { get; set; }
-
         [Required]
         public string Reason { get; set; } = string.Empty;
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Api.DTOs.Quality;
@@ -41,7 +42,7 @@ namespace ManufacturingCoordinator.Api.Services
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<QuarantineDto> QuarantineDefectAsync(Guid defectId, CreateQuarantineDto dto)
+        public async Task<IReadOnlyList<QuarantineDto>> QuarantineDefectAsync(Guid defectId, CreateQuarantineDto dto)
         {
             var defect = await _db.DefectReports.FirstOrDefaultAsync(d => d.Id == defectId);
             if (defect == null)
@@ -54,57 +55,66 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("A quarantine reason is required.");
             }
 
-            InventoryRoll? inventoryRoll;
-            if (string.IsNullOrWhiteSpace(dto.InventoryRollId))
-            {
-                inventoryRoll = await _db.InventoryRolls
-                    .FirstOrDefaultAsync(i => i.BatchId == defect.BatchId && i.Status == InventoryStatus.Available);
-            }
-            else
-            {
-                inventoryRoll = await _db.InventoryRolls
-                    .FirstOrDefaultAsync(i => i.Id == dto.InventoryRollId.Trim());
-            }
+            var affectedInventory = DeserializeInventory(defect.AffectedInventoryJson)
+                .Select(id => id.Trim())
+                .Where(id => id.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var targetRollIds = affectedInventory.Count > 0
+                ? affectedInventory
+                : await _db.InventoryRolls
+                    .Where(i => i.BatchId == defect.BatchId && i.Status == InventoryStatus.Available)
+                    .Select(i => i.Id)
+                    .ToListAsync();
 
-            if (inventoryRoll == null)
+            if (targetRollIds.Count == 0)
             {
                 throw new AuthException("Inventory roll was not found.", HttpStatusCode.NotFound);
             }
 
-            if (inventoryRoll.BatchId != defect.BatchId)
+            var inventoryRolls = await _db.InventoryRolls
+                .Where(i => targetRollIds.Contains(i.Id))
+                .ToListAsync();
+
+            if (inventoryRolls.Count != targetRollIds.Count || inventoryRolls.Any(i => i.BatchId != defect.BatchId))
             {
                 throw new AuthException("Inventory roll does not belong to the defect batch.");
             }
 
-            if (inventoryRoll.Status != InventoryStatus.Available)
+            if (inventoryRolls.Any(i => i.Status != InventoryStatus.Available))
             {
                 throw new AuthException("Inventory roll is not available for quarantine.", HttpStatusCode.Conflict);
             }
 
-            var inventoryRollId = inventoryRoll.Id;
-
             var alreadyQuarantined = await _db.Quarantines.AnyAsync(q =>
-                q.InventoryRollId == inventoryRollId && q.Status == QuarantineStatus.Active);
+                targetRollIds.Contains(q.InventoryRollId) && q.Status == QuarantineStatus.Active);
             if (alreadyQuarantined)
             {
                 throw new AuthException("This inventory is already quarantined.", HttpStatusCode.Conflict);
             }
 
-            var quarantine = new Quarantine
+            var quarantines = inventoryRolls.Select(inventoryRoll => new Quarantine
             {
                 DefectReportId = defect.Id,
-                InventoryRollId = inventoryRollId,
+                InventoryRollId = inventoryRoll.Id,
                 Reason = dto.Reason.Trim(),
                 Status = QuarantineStatus.Active,
                 CreatedAt = DateTime.UtcNow
-            };
+            }).ToList();
 
-            inventoryRoll.Status = InventoryStatus.Quarantined;
-            _db.Quarantines.Add(quarantine);
+            foreach (var inventoryRoll in inventoryRolls)
+            {
+                inventoryRoll.Status = InventoryStatus.Quarantined;
+            }
+
+            _db.Quarantines.AddRange(quarantines);
             await _db.SaveChangesAsync();
 
-            quarantine.DefectReport = defect;
-            return ToDto(quarantine);
+            return quarantines.Select(quarantine =>
+            {
+                quarantine.DefectReport = defect;
+                return ToDto(quarantine);
+            }).ToList();
         }
 
         public async Task<QuarantineDto?> ReleaseAsync(Guid id)
@@ -167,6 +177,20 @@ namespace ManufacturingCoordinator.Api.Services
                 CreatedAt = quarantine.CreatedAt,
                 ReleasedAt = quarantine.ReleasedAt
             };
+        }
+
+        private static List<string> DeserializeInventory(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return new List<string>();
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(value) ?? new List<string>();
+            }
+            catch (JsonException)
+            {
+                return new List<string>();
+            }
         }
     }
 }

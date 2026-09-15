@@ -95,15 +95,12 @@ class QualityService {
         await api.get('/quarantine/$id') as Map<String, dynamic>,
       );
 
-  Future<QuarantineRecord> quarantineDefect(
+  Future<List<QuarantineRecord>> quarantineDefect(
     String defectId,
     String reason,
-    String inventoryRollId,
-  ) async => QuarantineRecord.fromJson(
-    await api.post('/defects/$defectId/quarantine', {
-      'reason': reason,
-      if (inventoryRollId.trim().isNotEmpty) 'inventoryRollId': inventoryRollId,
-    }) as Map<String, dynamic>,
+  ) async => _list(
+    await api.post('/defects/$defectId/quarantine', {'reason': reason}),
+    QuarantineRecord.fromJson,
   );
 
   Future<QuarantineRecord> releaseQuarantine(String id) async =>
