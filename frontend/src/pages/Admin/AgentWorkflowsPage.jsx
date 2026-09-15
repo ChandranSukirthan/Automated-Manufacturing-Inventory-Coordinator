@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Bot, 
   Search, 
@@ -7,14 +7,12 @@ import {
   AlertCircle, 
   Hourglass, 
   ShieldCheck, 
-  ArrowRight, 
   Loader2, 
   RefreshCw,
   AlertTriangle,
   Play,
   Check,
   X,
-  PlusCircle,
   Sparkles
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
@@ -51,7 +49,10 @@ export default function AgentWorkflowsPage() {
   };
 
   useEffect(() => {
-    fetchWorkflows();
+    const timer = setTimeout(() => {
+      void fetchWorkflows();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleApprove = async (workflowId) => {

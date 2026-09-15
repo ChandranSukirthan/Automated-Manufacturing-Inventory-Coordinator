@@ -1,14 +1,5 @@
-import React from 'react';
 import { 
   ShieldCheck, 
-  Users, 
-  Package, 
-  CheckSquare, 
-  Cpu, 
-  Lock, 
-  FileText, 
-  Bot, 
-  Activity,
   Check,
   X
 } from 'lucide-react';

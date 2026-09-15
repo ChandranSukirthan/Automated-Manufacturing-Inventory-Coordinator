@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Cpu, 
@@ -8,7 +8,6 @@ import {
   CheckCircle2, 
   Trash2, 
   Edit, 
-  Wrench, 
   ExternalLink,
   Loader2,
   X,
@@ -116,7 +115,10 @@ export default function MachineList() {
   });
 
   useEffect(() => {
-    fetchMachines();
+    const timer = setTimeout(() => {
+      void fetchMachines();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const openCreateModal = () => {

@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from core.state import AgentState, WorkflowStatus
+from ai.core.state import AgentState, WorkflowStatus
 
 
 def purchasing_node(state: AgentState) -> Dict[str, Any]:

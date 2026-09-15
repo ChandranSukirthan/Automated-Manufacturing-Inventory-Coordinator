@@ -1,21 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
-  Cpu, 
   ArrowLeft, 
   Wrench, 
   Calculator, 
-  Clock, 
   Calendar, 
   CheckCircle2, 
   AlertTriangle, 
   Loader2,
   User,
-  Activity,
   Plus,
   Sparkles,
   Check,
-  Bot
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import machineService from '../../services/machineService';
@@ -41,7 +37,7 @@ export default function MachineDetail() {
   const [logType, setLogType] = useState(0); // Scheduled = 0
   const [submittingLog, setSubmittingLog] = useState(false);
 
-  const fetchMachineData = async () => {
+  const fetchMachineData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -74,7 +70,7 @@ export default function MachineDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   const handleApproveWorkflow = async (workflowId) => {
     setApprovingWf(true);
@@ -93,8 +89,11 @@ export default function MachineDetail() {
   };
 
   useEffect(() => {
-    fetchMachineData();
-  }, [id]);
+    const timer = setTimeout(() => {
+      void fetchMachineData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchMachineData]);
 
   const handleCalculateMaintenance = async () => {
     setCalculating(true);

@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Users, 
   Plus, 
   Search, 
   CheckCircle2, 
-  XCircle, 
   AlertTriangle, 
   Shield, 
   Edit, 
@@ -12,9 +11,6 @@ import {
   UserX, 
   Loader2,
   X,
-  Mail,
-  Lock,
-  User as UserIcon
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import adminService from '../../services/adminService';
@@ -61,7 +57,10 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    const timer = setTimeout(() => {
+      void fetchUsers();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleCreateUser = async (e) => {

@@ -4,12 +4,12 @@ from typing import Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 import psycopg
 
-from core.state import AgentState, WorkflowStatus, ApprovalStatus
-from core.config import settings
-from agents.planner import planner_node
-from agents.data_extraction import data_extraction_node, production_analysis_node
-from agents.purchasing import purchasing_node
-from agents.validation import validation_node, execution_node
+from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
+from ai.core.config import settings
+from ai.agents.planner import planner_node
+from ai.agents.data_extraction import data_extraction_node, production_analysis_node
+from ai.agents.purchasing import purchasing_node
+from ai.agents.validation import validation_node, execution_node
 
 
 def sync_to_database(state: AgentState) -> None:

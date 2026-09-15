@@ -35,6 +35,11 @@ venv/
 .env.test.local
 .env.production.local
 *.secret.json
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.py[cod]
 appsettings.Development.json
 appsettings.Local.json
 

@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from core.state import AgentState, WorkflowStatus, ApprovalStatus
+from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 
 
 def validation_node(state: AgentState) -> Dict[str, Any]:

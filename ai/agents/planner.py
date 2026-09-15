@@ -1,8 +1,8 @@
 import json
 import re
 from typing import List, Dict, Any
-from core.state import AgentState, WorkflowStatus, ApprovalStatus
-from core.config import settings
+from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
+from ai.core.config import settings
 
 # Optional OpenAI integration if user configures a real key
 def _generate_plan_llm(objective: str) -> List[str]:

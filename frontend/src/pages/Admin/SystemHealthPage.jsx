@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Activity, 
   RefreshCw, 
-  CheckCircle2, 
-  XCircle, 
   AlertTriangle, 
   Server, 
   Database, 
@@ -11,8 +9,6 @@ import {
   Layers, 
   Globe, 
   Loader2,
-  Clock,
-  ShieldCheck
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import adminService from '../../services/adminService';
@@ -43,7 +39,10 @@ export default function SystemHealthPage() {
   };
 
   useEffect(() => {
-    fetchHealth();
+    const timer = setTimeout(() => {
+      void fetchHealth();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const getServiceIcon = (name) => {

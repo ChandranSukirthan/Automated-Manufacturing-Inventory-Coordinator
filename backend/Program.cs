@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization;
 
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
@@ -20,7 +21,7 @@ var dbHost = Env.GetString("DB_HOST", "localhost");
 var dbPort = Env.GetString("DB_PORT", "5432");
 var dbName = Env.GetString("DB_NAME", "inventory_coordinator");
 var dbUser = Env.GetString("DB_USER", "postgres");
-var dbPass = Env.GetString("DB_PASSWORD", "Sukir@211002");
+var dbPass = Env.GetString("DB_PASSWORD", "bid7650");
 builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 
 builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
@@ -31,7 +32,11 @@ builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? bui
 builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
 
 // Controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // PostgreSQL + Entity Framework Core
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -49,6 +54,8 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDefectReportService, DefectReportService>();
+builder.Services.AddScoped<IQuarantineService, QuarantineService>();
 
 // Student 4 — Production & Admin Services
 builder.Services.AddScoped<IMachineService, MachineService>();

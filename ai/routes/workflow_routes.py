@@ -2,14 +2,14 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from core.state import WorkflowStatus, ApprovalStatus
-from graph.workflow import (
+from ai.core.state import WorkflowStatus, ApprovalStatus
+from ai.graph.workflow import (
     run_workflow,
     approve_and_resume,
     reject_workflow,
     WORKFLOW_SESSIONS,
 )
-from tools.production_tools import (
+from ai.tools.production_tools import (
     query_production_schedule,
     calculate_machine_uptime,
     check_maintenance_requirement,

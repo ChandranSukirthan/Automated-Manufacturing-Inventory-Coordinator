@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/ManufacturingCoordinator.Api.csproj": {}
+    "C:\\Users\\uthay\\Desktop\\Automated-Manufacturing-Inventory-Coordinator\\backend\\ManufacturingCoordinator.Api.csproj": {}
   },
   "projects": {
-    "/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/ManufacturingCoordinator.Api.csproj": {
+    "C:\\Users\\uthay\\Desktop\\Automated-Manufacturing-Inventory-Coordinator\\backend\\ManufacturingCoordinator.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/ManufacturingCoordinator.Api.csproj",
+        "projectUniqueName": "C:\\Users\\uthay\\Desktop\\Automated-Manufacturing-Inventory-Coordinator\\backend\\ManufacturingCoordinator.Api.csproj",
         "projectName": "ManufacturingCoordinator.Api",
-        "projectPath": "/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/ManufacturingCoordinator.Api.csproj",
-        "packagesPath": "/Users/sukirthanchandrakumar/.nuget/packages/",
-        "outputPath": "/Volumes/Campus/SEF-Project/Automated-Manufacturing-Inventory-Coordinator/backend/obj/",
+        "projectPath": "C:\\Users\\uthay\\Desktop\\Automated-Manufacturing-Inventory-Coordinator\\backend\\ManufacturingCoordinator.Api.csproj",
+        "packagesPath": "C:\\Users\\uthay\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\uthay\\Desktop\\Automated-Manufacturing-Inventory-Coordinator\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/Users/sukirthanchandrakumar/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\uthay\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -93,7 +93,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.423/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.425/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

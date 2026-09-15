@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Wrench, 
   Plus, 
   AlertTriangle, 
   CheckCircle2, 
-  Clock, 
-  Search, 
   Calendar, 
   Cpu, 
   User, 
@@ -24,7 +22,6 @@ export default function MaintenancePage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -36,13 +33,13 @@ export default function MaintenancePage() {
   const [type, setType] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchFleet = async () => {
+  const fetchFleet = useCallback(async () => {
     setLoading(true);
     try {
       const data = await machineService.getAll();
       setMachines(data);
-      if (data.length > 0 && !selectedMachineId) {
-        setSelectedMachineId(data[0].id);
+      if (data.length > 0) {
+        setSelectedMachineId(currentId => currentId || data[0].id);
       }
     } catch (err) {
       console.error(err);
@@ -50,11 +47,14 @@ export default function MaintenancePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchFleet();
-  }, []);
+    const timer = setTimeout(() => {
+      void fetchFleet();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchFleet]);
 
   // Fetch logs whenever selected machine changes
   useEffect(() => {

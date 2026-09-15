@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
-  FileText, 
-  Search, 
   Filter, 
   CheckCircle2, 
   XCircle, 
@@ -28,7 +26,7 @@ export default function AuditLogsPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const fetchLogs = async (customParams = null) => {
+  const fetchLogs = useCallback(async (customParams = null) => {
     setLoading(true);
     setError('');
     try {
@@ -53,11 +51,14 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [actionFilter, entityFilter, fromDate, toDate, userFilter]);
 
   useEffect(() => {
-    fetchLogs();
-  }, []);
+    const timer = setTimeout(() => {
+      void fetchLogs();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchLogs]);
 
   const handleResetFilters = () => {
     setUserFilter('');

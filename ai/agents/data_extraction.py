@@ -1,6 +1,6 @@
 from typing import Dict, Any
-from core.state import AgentState, WorkflowStatus
-from tools.production_tools import (
+from ai.core.state import AgentState, WorkflowStatus
+from ai.tools.production_tools import (
     query_production_schedule,
     calculate_machine_uptime,
     check_maintenance_requirement,

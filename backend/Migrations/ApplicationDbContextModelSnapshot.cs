@@ -252,6 +252,43 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Inventory.Batch", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ProductType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Batches");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Inventory.InventoryRoll", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("BatchId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId", "Status");
+
+                    b.ToTable("InventoryRolls");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.Production.Machine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -381,6 +418,93 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("Shifts");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Quality.DefectReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BatchId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ProductType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReportedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Open");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportedByUserId");
+
+                    b.ToTable("DefectReports");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Quality.Quarantine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<Guid>("DefectReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InventoryRollId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Active");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefectReportId");
+
+                    b.HasIndex("InventoryRollId", "Status");
+
+                    b.ToTable("Quarantines");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.Authentication.OtpVerification", b =>
                 {
                     b.HasOne("ManufacturingCoordinator.Models.Authentication.User", "User")
@@ -403,6 +527,17 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Inventory.InventoryRoll", b =>
+                {
+                    b.HasOne("ManufacturingCoordinator.Models.Inventory.Batch", "Batch")
+                        .WithMany("InventoryRolls")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.Production.MaintenanceLog", b =>
                 {
                     b.HasOne("ManufacturingCoordinator.Models.Production.Machine", "Machine")
@@ -414,11 +549,37 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Navigation("Machine");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Quality.DefectReport", b =>
+                {
+                    b.HasOne("ManufacturingCoordinator.Models.Authentication.User", "ReportedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReportedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ReportedByUser");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Quality.Quarantine", b =>
+                {
+                    b.HasOne("ManufacturingCoordinator.Models.Quality.DefectReport", "DefectReport")
+                        .WithMany()
+                        .HasForeignKey("DefectReportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DefectReport");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.Authentication.User", b =>
                 {
                     b.Navigation("OtpVerifications");
 
                     b.Navigation("RefreshTokens");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.Inventory.Batch", b =>
+                {
+                    b.Navigation("InventoryRolls");
                 });
 
             modelBuilder.Entity("ManufacturingCoordinator.Models.Production.Machine", b =>

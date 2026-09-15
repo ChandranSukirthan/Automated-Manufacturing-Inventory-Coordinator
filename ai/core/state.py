@@ -1,38 +1,41 @@
-from enum import Enum
-from typing import TypedDict, Optional, List, Dict, Any
+from enum import StrEnum
+from typing import Any, TypedDict
 
 
-class WorkflowStatus(str, Enum):
+class WorkflowStatus(StrEnum):
+    RUNNING = "Running"
+    COMPLETED = "Completed"
+    FAILED = "Failed"
+    WAITING_FOR_APPROVAL = "WaitingForApproval"
     Running = "Running"
     Completed = "Completed"
     Failed = "Failed"
     WaitingForApproval = "WaitingForApproval"
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(StrEnum):
+    PENDING = "Pending"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
     Pending = "Pending"
     Approved = "Approved"
     Rejected = "Rejected"
 
 
 class AgentState(TypedDict, total=False):
-    """
-    State shared across all nodes in the LangGraph workflow.
-    Note: Hidden chain-of-thought is strictly omitted to respect audit requirements.
-    """
     workflow_id: str
     objective: str
-    plan: List[str]
+    plan: list[str]
     current_agent: str
     status: WorkflowStatus
     approval_status: ApprovalStatus
-    completed_steps: List[str]
-    tool_results: Dict[str, Any]
-    inventory_data: Dict[str, Any]
-    production_data: Dict[str, Any]
-    purchasing_data: Dict[str, Any]
-    validation_results: Dict[str, Any]
-    final_outcome: Optional[str]
-    errors: List[str]
+    inventory_data: dict[str, Any]
+    production_data: dict[str, Any]
+    purchasing_data: dict[str, Any]
+    quality_data: dict[str, Any]
+    validation_results: dict[str, Any]
+    completed_steps: list[str]
+    tool_results: dict[str, Any]
+    final_outcome: str | None
+    errors: list[str]
     requires_approval: bool
-

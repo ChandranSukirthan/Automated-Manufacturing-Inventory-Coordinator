@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, Shield, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
-import { useAuth } from '../../context/AuthContext';
-import { parseErrorMessage } from '../../utils/errorHandler';
+import { useAuth } from '../../context/useAuth';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -42,10 +41,6 @@ export default function Signup() {
       setError('Please enter a valid email address containing "@".');
       return;
     }
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long.');
-      return;
-    }
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -60,14 +55,14 @@ export default function Signup() {
         Role: parseInt(formData.role, 10)
       };
       
-      const data = await register(payload);
+      await register(payload);
       setSuccessMsg('Registration successful! Redirecting to email verification...');
       
       setTimeout(() => {
         navigate('/otp-verify', { state: { email: formData.email } });
       }, 1500);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Registration failed. Please try again.'));
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -76,7 +71,7 @@ export default function Signup() {
   const routeUserByRole = (roleInt) => {
     if (roleInt === 3) navigate('/dashboard/admin');
     else if (roleInt === 0) navigate('/dashboard/worker');
-    else if (roleInt === 2) navigate('/dashboard/quality');
+    else if (roleInt === 2) navigate('/quality');
     else if (roleInt === 1) navigate('/dashboard/admin');
     else navigate('/');
   };
@@ -93,7 +88,7 @@ export default function Signup() {
         routeUserByRole(data.authResponse.user.role);
       }
     } catch (err) {
-      setError(parseErrorMessage(err, 'Google Sign-In failed.'));
+      setError(err.response?.data?.message || 'Google Sign-In failed.');
     } finally {
       setLoading(false);
     }
@@ -106,7 +101,7 @@ export default function Signup() {
       const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Registration failed.'));
+      setError(err.response?.data?.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }

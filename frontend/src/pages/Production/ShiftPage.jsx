@@ -1,14 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Clock, 
   Plus, 
   SlidersHorizontal, 
   AlertTriangle, 
   CheckCircle2, 
-  Calendar, 
-  Boxes, 
-  Target, 
-  TrendingUp, 
   Edit, 
   Loader2,
   X
@@ -52,7 +48,10 @@ export default function ShiftPage() {
   };
 
   useEffect(() => {
-    fetchShifts();
+    const timer = setTimeout(() => {
+      void fetchShifts();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const openCreateModal = () => {

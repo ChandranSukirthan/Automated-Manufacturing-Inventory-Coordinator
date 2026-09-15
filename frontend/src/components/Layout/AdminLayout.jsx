@@ -18,7 +18,7 @@ import {
   User as UserIcon,
   Factory
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import adminService from '../../services/adminService';
 
 export default function AdminLayout({ children, title, subtitle }) {

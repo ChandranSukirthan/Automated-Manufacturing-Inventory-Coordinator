@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
+using ManufacturingCoordinator.Models.Inventory;
+using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Models.Production;
 using ManufacturingCoordinator.Models.Administration;
 
@@ -16,6 +19,12 @@ namespace ManufacturingCoordinator.Data
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<OtpVerification> OtpVerifications { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+
+        // QA / Defect Reporting
+        public DbSet<DefectReport> DefectReports { get; set; } = null!;
+        public DbSet<Quarantine> Quarantines { get; set; } = null!;
+        public DbSet<Batch> Batches { get; set; } = null!;
+        public DbSet<InventoryRoll> InventoryRolls { get; set; } = null!;
 
         // Production (Student 4)
         public DbSet<Machine> Machines { get; set; } = null!;
@@ -120,6 +129,87 @@ namespace ManufacturingCoordinator.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 entity.HasIndex(r => r.TokenHash);
+            });
+
+            // ---- DefectReport ----
+            modelBuilder.Entity<DefectReport>(entity =>
+            {
+                entity.HasKey(d => d.Id);
+
+                entity.Property(d => d.BatchId)
+                    .IsRequired()
+                    .HasMaxLength(80);
+
+                entity.Property(d => d.ProductType)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Severity)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Description)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(d => d.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(DefectStatus.Open);
+
+                entity.Property(d => d.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(d => d.ReportedByUser)
+                    .WithMany()
+                    .HasForeignKey(d => d.ReportedByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<Batch>(entity =>
+            {
+                entity.HasKey(b => b.Id);
+                entity.Property(b => b.Id).HasMaxLength(80);
+                entity.Property(b => b.ProductType).HasConversion<string>().IsRequired();
+            });
+
+            modelBuilder.Entity<InventoryRoll>(entity =>
+            {
+                entity.HasKey(i => i.Id);
+                entity.Property(i => i.Id).HasMaxLength(120);
+                entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
+                entity.Property(i => i.Status).HasConversion<string>().IsRequired();
+                entity.HasOne(i => i.Batch)
+                    .WithMany(b => b.InventoryRolls)
+                    .HasForeignKey(i => i.BatchId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(i => new { i.BatchId, i.Status });
+            });
+
+            modelBuilder.Entity<Quarantine>(entity =>
+            {
+                entity.HasKey(q => q.Id);
+
+                entity.Property(q => q.InventoryRollId)
+                    .IsRequired()
+                    .HasMaxLength(120);
+
+                entity.Property(q => q.Reason)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(q => q.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(QuarantineStatus.Active);
+
+                entity.Property(q => q.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(q => q.DefectReport)
+                    .WithMany()
+                    .HasForeignKey(q => q.DefectReportId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(q => new { q.InventoryRollId, q.Status });
             });
 
             // ---- Machine (Student 4) ----

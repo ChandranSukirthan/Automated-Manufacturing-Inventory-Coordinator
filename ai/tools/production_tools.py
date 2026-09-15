@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import psycopg
-from core.config import settings
+from ai.core.config import settings
 
 
 def get_db_connection():
