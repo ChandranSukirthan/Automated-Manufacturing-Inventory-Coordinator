@@ -439,6 +439,12 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("AffectedInventoryJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]");
+
                     b.Property<string>("ProductType")
                         .IsRequired()
                         .HasColumnType("text");

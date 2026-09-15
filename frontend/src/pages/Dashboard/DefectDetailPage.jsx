@@ -24,8 +24,11 @@ export default function DefectDetailPage() {
           defectService.getById(id),
           quarantineService.getAll()
         ]);
+        const savedInventory = data.affectedInventory?.length
+          ? data.affectedInventory
+          : quarantineData.filter((record) => record.defectReportId === id).map((record) => record.inventoryRollId);
         setDefect(data);
-        setAffectedInventory(quarantineData.filter((record) => record.defectReportId === id));
+        setAffectedInventory(savedInventory);
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load defect.'));
       } finally {
@@ -119,7 +122,7 @@ export default function DefectDetailPage() {
 
           <div>
             <div className="text-slate-400 text-sm">Affected Inventory</div>
-            <div className="text-slate-300">{affectedInventory.map((record) => record.inventoryRollId).join(', ') || 'None'}</div>
+            <div className="text-slate-300">{(defect.affectedInventory?.length ? defect.affectedInventory : affectedInventory).join(', ') || 'None'}</div>
           </div>
         </div>
       </div>

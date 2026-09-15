@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Api.DTOs.Quality;
@@ -34,6 +35,7 @@ namespace ManufacturingCoordinator.Api.Services
                     ProductType = d.ProductType,
                     Severity = d.Severity,
                     Description = d.Description,
+                    AffectedInventory = DeserializeInventory(d.AffectedInventoryJson),
                     CreatedAt = d.CreatedAt,
                     Status = d.Status
                 })
@@ -55,6 +57,7 @@ namespace ManufacturingCoordinator.Api.Services
                 ProductType = defect.ProductType,
                 Severity = defect.Severity,
                 Description = defect.Description,
+                AffectedInventory = DeserializeInventory(defect.AffectedInventoryJson),
                 CreatedAt = defect.CreatedAt,
                 Status = defect.Status
             };
@@ -79,7 +82,8 @@ namespace ManufacturingCoordinator.Api.Services
 
             ValidateEnums(dto.ProductType, dto.Severity, dto.Status);
 
-            var batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == dto.BatchId.Trim());
+            var batchId = dto.BatchId.Trim();
+            var batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == batchId);
             if (batch == null)
             {
                 throw new AuthException("Batch was not found.", HttpStatusCode.NotFound);
@@ -90,13 +94,20 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("Product type does not match the selected batch.");
             }
 
+            var existingDefect = await _db.DefectReports.AnyAsync(d => d.BatchId == batchId);
+            if (existingDefect)
+            {
+                throw new AuthException("A defect has already been created for this batch.", HttpStatusCode.Conflict);
+            }
+
             var report = new DefectReport
             {
-                BatchId = dto.BatchId.Trim(),
+                BatchId = batchId,
                 ReportedByUserId = reportedByUserId,
                 ProductType = dto.ProductType,
                 Severity = dto.Severity,
                 Description = dto.Description.Trim(),
+                AffectedInventoryJson = JsonSerializer.Serialize(dto.AffectedInventory ?? new List<string>()),
                 Status = dto.Status,
                 CreatedAt = DateTime.UtcNow
             };
@@ -112,6 +123,7 @@ namespace ManufacturingCoordinator.Api.Services
                 ProductType = report.ProductType,
                 Severity = report.Severity,
                 Description = report.Description,
+                AffectedInventory = DeserializeInventory(report.AffectedInventoryJson),
                 CreatedAt = report.CreatedAt,
                 Status = report.Status
             };
@@ -140,15 +152,31 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("Product type does not match the selected batch.");
             }
 
+            var anotherDefectWithSameBatch = await _db.DefectReports.AnyAsync(d => d.BatchId == batchId && d.Id != id);
+            if (anotherDefectWithSameBatch)
+            {
+                throw new AuthException("A defect has already been created for this batch.", HttpStatusCode.Conflict);
+            }
+
             report.BatchId = batchId;
             report.ProductType = productType;
             report.Severity = severity;
-            if (!string.IsNullOrWhiteSpace(dto.Description)) report.Description = dto.Description.Trim();
+
+            if (!string.IsNullOrWhiteSpace(dto.Description))
+            {
+                report.Description = dto.Description.Trim();
+            }
+
             if (string.IsNullOrWhiteSpace(report.Description))
             {
                 throw new AuthException("Description is required.");
             }
+
             report.Status = status;
+            if (dto.AffectedInventory != null)
+            {
+                report.AffectedInventoryJson = JsonSerializer.Serialize(dto.AffectedInventory);
+            }
 
             await _db.SaveChangesAsync();
 
@@ -160,6 +188,7 @@ namespace ManufacturingCoordinator.Api.Services
                 ProductType = report.ProductType,
                 Severity = report.Severity,
                 Description = report.Description,
+                AffectedInventory = DeserializeInventory(report.AffectedInventoryJson),
                 CreatedAt = report.CreatedAt,
                 Status = report.Status
             };
@@ -185,6 +214,20 @@ namespace ManufacturingCoordinator.Api.Services
             if (!Enum.IsDefined(productType)) throw new AuthException("Invalid product type.");
             if (!Enum.IsDefined(severity)) throw new AuthException("Invalid defect severity.");
             if (!Enum.IsDefined(status)) throw new AuthException("Invalid defect status.");
+        }
+
+        private static List<string> DeserializeInventory(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return new List<string>();
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<string>>(value) ?? new List<string>();
+            }
+            catch (JsonException)
+            {
+                return new List<string>();
+            }
         }
     }
 }

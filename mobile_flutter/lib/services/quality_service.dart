@@ -54,6 +54,7 @@ class QualityService {
     required String severity,
     required String description,
     String status = 'Open',
+    List<String> affectedInventory = const [],
   }) async => DefectReport.fromJson(
     await api.post('/defects', {
       'batchId': batchId,
@@ -61,6 +62,7 @@ class QualityService {
       'severity': severity,
       'description': description,
       'status': status,
+      'affectedInventory': affectedInventory,
     }) as Map<String, dynamic>,
   );
 
@@ -71,6 +73,7 @@ class QualityService {
     required String severity,
     required String description,
     required String status,
+    List<String> affectedInventory = const [],
   }) async => DefectReport.fromJson(
     await api.put('/defects/$id', {
       'batchId': batchId,
@@ -78,6 +81,7 @@ class QualityService {
       'severity': severity,
       'description': description,
       'status': status,
+      'affectedInventory': affectedInventory,
     }) as Map<String, dynamic>,
   );
 

@@ -152,6 +152,10 @@ namespace ManufacturingCoordinator.Data
                     .IsRequired()
                     .HasMaxLength(1000);
 
+                entity.Property(d => d.AffectedInventoryJson)
+                    .IsRequired()
+                    .HasDefaultValue("[]");
+
                 entity.Property(d => d.Status)
                     .HasConversion<string>()
                     .HasDefaultValue(DefectStatus.Open);

@@ -62,6 +62,14 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
       _product = defect.productType;
       _severity = defect.severity;
       _status = defect.status;
+      if (defect.affectedInventory.isNotEmpty) {
+        _recommendation = QualityRecommendation(
+          batchId: defect.batchId,
+          quarantineRequired: false,
+          affectedInventory: defect.affectedInventory,
+          riskLevel: defect.severity.toUpperCase(),
+        );
+      }
     }
   }
 
@@ -76,6 +84,8 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      final affectedInventory = _recommendation?.affectedInventory ?? const [];
+
       if (_isEditing) {
         await widget.service.updateDefect(
           id: widget.defect!.id,
@@ -84,6 +94,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           severity: _severity,
           description: _description.text.trim(),
           status: _status,
+          affectedInventory: affectedInventory,
         );
       } else {
         await widget.service.createDefect(
@@ -92,6 +103,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           severity: _severity,
           description: _description.text.trim(),
           status: _status,
+          affectedInventory: affectedInventory,
         );
       }
       if (mounted) {

@@ -123,6 +123,7 @@ class DefectReport {
     required this.createdAt,
     required this.status,
     this.reportedByUserId,
+    this.affectedInventory = const [],
   });
 
   final String id;
@@ -133,6 +134,7 @@ class DefectReport {
   final DateTime createdAt;
   final String status;
   final String? reportedByUserId;
+  final List<String> affectedInventory;
 
   factory DefectReport.fromJson(Map<String, dynamic> json) => DefectReport(
     id: json['id']?.toString() ?? '',
@@ -144,6 +146,9 @@ class DefectReport {
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     status: json['status'] as String? ?? '',
     reportedByUserId: json['reportedByUserId']?.toString(),
+    affectedInventory: (json['affectedInventory'] as List<dynamic>? ?? [])
+        .map((item) => item.toString())
+        .toList(),
   );
 }
 
@@ -155,6 +160,7 @@ extension DefectReportCopy on DefectReport {
     String? description,
     String? status,
     String? reportedByUserId,
+    List<String>? affectedInventory,
   }) => DefectReport(
     id: id,
     batchId: batchId ?? this.batchId,
@@ -164,6 +170,7 @@ extension DefectReportCopy on DefectReport {
     createdAt: createdAt,
     status: status ?? this.status,
     reportedByUserId: reportedByUserId ?? this.reportedByUserId,
+    affectedInventory: affectedInventory ?? this.affectedInventory,
   );
 }
 

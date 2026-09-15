@@ -186,13 +186,12 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
             ),
             _DetailRow(
               label: 'Affected inventory',
-              value: _affectedInventory
-                      .map((record) => record.inventoryRollId)
-                      .join(', ') .trim().isEmpty
-                  ? 'None'
-                  : _affectedInventory
-                      .map((record) => record.inventoryRollId)
-                      .join(', '),
+              value: (defect.affectedInventory.isNotEmpty
+                      ? defect.affectedInventory
+                      : _affectedInventory
+                          .map((record) => record.inventoryRollId)
+                          .toList())
+                  .join(', '),
             ),
             const SizedBox(height: 20),
             Text(
