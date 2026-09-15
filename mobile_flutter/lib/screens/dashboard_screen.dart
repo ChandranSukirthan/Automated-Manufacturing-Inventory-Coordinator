@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -109,32 +110,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
               MetricCard(
                 label: 'Total defects',
                 value: summary.totalDefects,
-                color: Colors.indigo,
+                color: AppColors.primary,
               ),
               MetricCard(
                 label: 'High severity',
                 value: summary.highSeverityDefects,
-                color: Colors.deepOrange,
+                color: AppColors.danger,
               ),
               MetricCard(
                 label: 'Open defects',
                 value: summary.openDefects,
-                color: Colors.amber.shade800,
+                color: AppColors.violet,
               ),
               MetricCard(
                 label: 'Quarantined batches',
                 value: summary.quarantinedBatches,
-                color: Colors.red,
+                color: AppColors.warning,
               ),
               MetricCard(
                 label: 'Affected inventory',
                 value: summary.affectedInventory,
-                color: Colors.orange,
+                color: AppColors.orange,
               ),
               MetricCard(
                 label: 'Released inventory',
                 value: summary.releasedInventory,
-                color: Colors.teal,
+                color: AppColors.info,
               ),
             ],
           ),

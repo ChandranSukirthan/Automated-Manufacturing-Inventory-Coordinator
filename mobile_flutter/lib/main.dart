@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_state.dart';
+import 'app_colors.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/api_client.dart';
@@ -38,20 +39,30 @@ class ManufacturingApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF145A64),
-          brightness: Brightness.light,
+          seedColor: AppColors.primary,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: AppColors.primary,
+          onPrimary: AppColors.background,
+          secondary: AppColors.info,
+          onSecondary: AppColors.background,
+          tertiary: AppColors.warning,
+          error: AppColors.error,
+          onError: AppColors.strongText,
+          surface: AppColors.surface,
+          onSurface: AppColors.primaryText,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F7F8),
+        scaffoldBackgroundColor: AppColors.background,
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: AppColors.background,
         ),
         cardTheme: const CardThemeData(
           margin: EdgeInsets.only(bottom: 12),
           elevation: 0,
-          color: Colors.white,
+          color: AppColors.surface,
         ),
       ),
       home: appState.isLoading

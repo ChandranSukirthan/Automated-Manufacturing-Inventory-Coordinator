@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -177,13 +178,17 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: const TextStyle(color: AppColors.errorText),
               ),
             ],
             if (active) ...[
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: _releasing ? null : _release,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.background,
+                ),
                 icon: _releasing
                     ? const SizedBox.square(
                         dimension: 18,

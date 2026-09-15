@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -222,12 +223,16 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: const TextStyle(color: AppColors.errorText),
               ),
             ],
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _quarantining ? null : _quarantine,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.warningAction,
+                foregroundColor: AppColors.background,
+              ),
               icon: _quarantining
                   ? const SizedBox.square(
                       dimension: 18,
