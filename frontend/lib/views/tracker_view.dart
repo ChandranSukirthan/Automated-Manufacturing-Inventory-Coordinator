@@ -53,7 +53,7 @@ class _TrackerViewState extends State<TrackerView> {
 
   Future<void> _fetchAlerts() async {
     try {
-      final response = await http.get(Uri.parse('http://localhost:5158/api/Inventory/alerts'));
+      final response = await http.get(Uri.parse('http://localhost:5070/api/Inventory/alerts'));
       if (response.statusCode == 200) {
         final List<dynamic> alertsJson = json.decode(response.body);
         

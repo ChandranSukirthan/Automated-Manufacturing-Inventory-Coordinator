@@ -47,8 +47,8 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
     });
 
     try {
-      final invResponse = await http.get(Uri.parse('http://localhost:5158/api/Inventory'));
-      final alertsResponse = await http.get(Uri.parse('http://localhost:5158/api/Inventory/alerts'));
+      final invResponse = await http.get(Uri.parse('http://localhost:5070/api/Inventory'));
+      final alertsResponse = await http.get(Uri.parse('http://localhost:5070/api/Inventory/alerts'));
 
       if (invResponse.statusCode == 200 && alertsResponse.statusCode == 200) {
         setState(() {
@@ -70,7 +70,7 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
   Future<void> _updateAlertStatus(int id, String status) async {
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:5158/api/Inventory/alerts/$id'),
+        Uri.parse('http://localhost:5070/api/Inventory/alerts/$id'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'status': status}),
       );

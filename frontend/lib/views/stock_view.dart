@@ -57,7 +57,7 @@ class _StockViewState extends State<StockView> {
     });
 
     try {
-      final response = await http.get(Uri.parse('http://localhost:5158/api/Inventory'));
+      final response = await http.get(Uri.parse('http://localhost:5070/api/Inventory'));
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
@@ -110,15 +110,23 @@ class _StockViewState extends State<StockView> {
     );
 
     try {
+      // Create a dynamic instruction for the AI based on what is typed in the search bar
+      String agentObjective = _searchQuery.isNotEmpty
+          ? 'Analyze inventory and replenish low stock for $_searchQuery.'
+          : 'Analyze all current inventory and replenish any low stock materials.';
+
       final response = await http.post(
-        Uri.parse('http://localhost:8000/api/agent/extract-data'),
+        Uri.parse('http://localhost:8000/api/workflows/run'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'batchName': 'BoxPouch'}),
+        body: json.encode({
+          'objective': agentObjective,
+          'workflowId': 'WF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}' // Generates a random ID like WF-123456
+        }),
       );
 
       if (context.mounted) Navigator.pop(context);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final result = json.decode(response.body);
         final requiresApproval = result['requiresApproval'] == true;
         final agentMessage = result['agentMessage'] ?? 'Analysis complete.';
@@ -261,7 +269,7 @@ class _StockViewState extends State<StockView> {
                   
                   try {
                     final response = await http.post(
-                      Uri.parse('http://localhost:5158/api/Inventory'),
+                      Uri.parse('http://localhost:5070/api/Inventory'),
                       headers: {'Content-Type': 'application/json'},
                       body: json.encode({
                         'sku': sku,

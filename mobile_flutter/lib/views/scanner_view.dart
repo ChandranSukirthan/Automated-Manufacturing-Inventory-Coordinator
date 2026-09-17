@@ -31,7 +31,7 @@ class _ScannerViewState extends State<ScannerView> {
   Future<void> _registerScannedRoll(String rollId) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:5158/api/Inventory/rolls'),
+        Uri.parse('http://localhost:5070/api/Inventory/rolls'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'qrCodeId': rollId, 'status': 'Scanned'}),
       );

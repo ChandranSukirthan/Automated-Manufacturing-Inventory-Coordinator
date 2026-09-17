@@ -1,8 +1,8 @@
 {
   "Version": 1,
-  "Hash": "7/yvsnDRTixX0vVer35KSjS1HzfM4rGxA/gc1emwSdw=",
-  "Source": "backend",
-  "BasePath": "_content/backend",
+  "Hash": "QWz/Ho9ZkEXkoBc2rRhRLytFUOjEPpIfL6gMPsVXLqk=",
+  "Source": "ManufacturingCoordinator.Api",
+  "BasePath": "_content/ManufacturingCoordinator.Api",
   "Mode": "Default",
   "ManifestType": "Build",
   "ReferencedProjectsConfiguration": [],

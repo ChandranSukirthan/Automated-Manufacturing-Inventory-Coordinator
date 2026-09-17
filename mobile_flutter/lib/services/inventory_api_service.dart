@@ -65,9 +65,9 @@ class InventoryApiService {
   String get baseUrl {
     // Android emulator maps 10.0.2.2 to the host machine's localhost
     if (!kIsWeb && Platform.isAndroid) {
-      return 'http://10.0.2.2:5158/api/Inventory';
+      return 'http://10.0.2.2:5070/api/Inventory';
     }
-    return 'http://localhost:5158/api/Inventory';
+    return 'http://localhost:5070/api/Inventory';
   }
 
   Future<List<InventoryItemModel>> fetchInventory() async {
