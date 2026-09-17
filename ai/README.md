@@ -23,8 +23,8 @@ Built with **FastAPI**, **LangGraph**, and **PostgreSQL** on **Port 8000**.
 
 ### 2. Environment Configuration
 Create a `.env` file in the `ai/` directory from `.env.example`:
-```bash
-cp .env.example .env
+```powershell
+copy .env.example .env
 ```
 Update `.env` with your PostgreSQL password and OpenAI API key:
 ```ini
@@ -52,6 +52,10 @@ pip install -r requirements.txt
 
 Start the FastAPI application with live reload:
 ```powershell
+py main.py
+```
+Or equivalently using `uvicorn` directly:
+```powershell
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
@@ -77,8 +81,9 @@ pytest tests/test_golden.py -v
 | `POST` | `/api/workflows/{workflow_id}/approve` | Resumes a paused workflow after IT Admin authorization |
 | `POST` | `/api/workflows/{workflow_id}/reject` | Rejects a paused workflow at the human approval gate |
 | `GET` | `/api/workflows/{workflow_id}` | Fetches real-time status and telemetry of an active workflow |
+| `GET` | `/api/workflows` | Lists all active workflow sessions |
 | `GET` | `/api/tools/production-schedule` | Queries shift targets and equipment assignments |
 | `GET` | `/api/tools/machine-uptime` | Evaluates machine operating hours and remaining service time |
-| `GET` | `/api/tools/maintenance-requirement` | Evaluates if a machine is overdue for preventive maintenance |
+| `POST` | `/api/tools/check-maintenance` | Evaluates if a machine is overdue for preventive maintenance |
 | `POST` | `/api/tools/production-impact` | Computes output adjustments due to material constraints |
-| `GET` | `/health` | Health check endpoint for ASP.NET Core backend |
+| `GET` | `/health` | Health check endpoint (used by the ASP.NET Core backend to verify AI service status) |
