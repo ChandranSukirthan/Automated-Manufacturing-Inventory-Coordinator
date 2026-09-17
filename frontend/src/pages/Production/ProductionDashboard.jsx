@@ -42,7 +42,9 @@ export default function ProductionDashboard() {
       setShifts(shiftsData);
       if (Array.isArray(workflowsData)) {
         const pending = workflowsData.filter(
-          w => (w.status === 3 || w.approvalStatus === 0) && w.status !== 1 && w.status !== 2
+          w => (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
+               w.status !== 1 && w.status !== 'Completed' &&
+               w.status !== 2 && w.status !== 'Failed'
         );
         setPendingWorkflows(pending);
       }
@@ -78,7 +80,7 @@ export default function ProductionDashboard() {
 
     if (matchedMachine) {
       const isOverdue = matchedMachine.isMaintenanceDue || (matchedMachine.uptimeHours >= matchedMachine.maintenanceIntervalHours);
-      return matchedMachine.status === 0 && isOverdue;
+      return (matchedMachine.status === 0 || matchedMachine.status === 'Operational') && isOverdue;
     }
     return false;
   });
@@ -91,13 +93,13 @@ export default function ProductionDashboard() {
   }, []);
 
   // Compute metrics from current active or most recent shift
-  const currentShift = shifts.find(s => s.status === 1) || shifts[0] || null; // 1 = InProgress
+  const currentShift = shifts.find(s => s.status === 1 || s.status === 'InProgress') || shifts[0] || null; // 1 = InProgress
   const totalTarget = currentShift ? currentShift.productionTarget : 0;
   const availableMaterial = currentShift ? currentShift.availableMaterial : 0;
   const adjustedOutput = currentShift ? currentShift.adjustedOutput : 0;
   const maxPossibleOutput = Math.min(totalTarget, availableMaterial);
 
-  const operationalMachines = machines.filter(m => m.status === 0).length;
+  const operationalMachines = machines.filter(m => m.status === 0 || m.status === 'Operational').length;
   const maintenanceDueMachines = machines.filter(m => m.isMaintenanceDue).length;
 
   return (
@@ -360,8 +362,8 @@ export default function ProductionDashboard() {
                 <div key={machine.id} className="py-3.5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={`w-3 h-3 rounded-full shrink-0 ${
-                      machine.status === 0 ? 'bg-emerald-400 shadow-md shadow-emerald-500/40' :
-                      machine.status === 1 ? 'bg-amber-400 shadow-md shadow-amber-500/40' :
+                      (machine.status === 0 || machine.status === 'Operational') ? 'bg-emerald-400 shadow-md shadow-emerald-500/40' :
+                      (machine.status === 1 || machine.status === 'UnderMaintenance') ? 'bg-amber-400 shadow-md shadow-amber-500/40' :
                       'bg-slate-500'
                     }`} />
                     <div className="truncate">

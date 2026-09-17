@@ -35,7 +35,9 @@ export default function AdminLayout({ children, title, subtitle }) {
         const workflows = await adminService.getAgentWorkflows();
         if (isMounted && Array.isArray(workflows)) {
           const pending = workflows.filter(
-            w => (w.status === 3 || w.approvalStatus === 0) && w.status !== 1 && w.status !== 2
+            w => (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
+                 w.status !== 1 && w.status !== 'Completed' &&
+                 w.status !== 2 && w.status !== 'Failed'
           ).length;
           setPendingWfCount(pending);
         }
@@ -82,11 +84,20 @@ export default function AdminLayout({ children, title, subtitle }) {
 
   const getRoleLabel = (role) => {
     switch (role) {
-      case 0: return 'Floor Worker';
-      case 1: return 'Supply Chain Mgr';
-      case 2: return 'Quality Inspector';
-      case 3: return 'IT Admin';
-      default: return 'User';
+      case 0:
+      case 'FloorWorker':
+        return 'Floor Worker';
+      case 1:
+      case 'SupplyChainManager':
+        return 'Supply Chain Mgr';
+      case 2:
+      case 'QualityInspector':
+        return 'Quality Inspector';
+      case 3:
+      case 'ITAdmin':
+        return 'IT Admin';
+      default:
+        return role || 'User';
     }
   };
 

@@ -159,3 +159,48 @@ def test_api_trigger_and_approve_workflow():
     approved_data = approve_resp.json()
     assert approved_data["status"] == "Completed"
 
+
+# =======================================================
+# 6. Cross-Agent Quality & Coordinator Validation Test
+# =======================================================
+def test_cross_agent_quality_and_planner_coordination():
+    """
+    Cross-Agent Collaboration Test:
+    Verifies that Agent 4 (Validation/Safety) integrates Nithushan's Quality Agent.
+    When a defect is attached to the state, the Validation Agent runs
+    the Quality Agent validation and requires quarantine approval.
+    """
+    from agents.validation import validation_node
+
+    state = {
+        "purchasing_data": {
+            "draft_po": {
+                "poNumber": "PO-DRAFT-2026-004",
+                "supplier": "Apex Polymer Solutions Ltd",
+                "quantity": 4000,
+                "estimatedCostUsd": 5800.0,
+            }
+        },
+        "production_data": {"impact": {"adjustedOutput": 6000, "plannedOutput": 10000}},
+        "quality_data": {
+            "defect": {
+                "batchId": "BATCH-QA-01",
+                "productType": "BoxPouch",
+                "severity": "High",
+                "description": "Contaminated seal defect",
+            }
+        },
+        "completed_steps": [],
+        "errors": []
+    }
+
+    result = validation_node(state)
+
+    # Must require approval due to High severity defect quarantine recommendation
+    assert result["requires_approval"] is True
+    assert result["status"] == WorkflowStatus.WaitingForApproval
+    assert "quality_data" in result
+    assert result["validation_results"]["qualitySafetyStatus"] == "QUARANTINE_REQUIRED"
+    assert any("Quality Agent: Quarantine required" in step for step in result["completed_steps"])
+
+

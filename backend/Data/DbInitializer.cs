@@ -7,6 +7,8 @@ using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
 using ManufacturingCoordinator.Models.Production;
 using ManufacturingCoordinator.Models.Administration;
+using ManufacturingCoordinator.Models.Inventory;
+using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
 
 namespace ManufacturingCoordinator.Data
@@ -257,6 +259,119 @@ namespace ManufacturingCoordinator.Data
                 };
 
                 await db.AuditLogs.AddRangeAsync(auditLogs);
+                await db.SaveChangesAsync();
+            }
+
+            // 6. Seed Batches, InventoryRolls, DefectReports & Quarantines (Quality & Inventory)
+            if (!await db.Batches.AnyAsync())
+            {
+                var batch1 = new Batch
+                {
+                    Id = "BATCH001",
+                    ProductType = ProductType.BoxPouch
+                };
+
+                var batch2 = new Batch
+                {
+                    Id = "BATCH002",
+                    ProductType = ProductType.BiscuitPackaging
+                };
+
+                var batch3 = new Batch
+                {
+                    Id = "BATCH003",
+                    ProductType = ProductType.TeaBag
+                };
+
+                await db.Batches.AddRangeAsync(batch1, batch2, batch3);
+                await db.SaveChangesAsync();
+
+                var roll1 = new InventoryRoll
+                {
+                    Id = "ROLL-001",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll2 = new InventoryRoll
+                {
+                    Id = "ROLL-002",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Quarantined
+                };
+
+                var roll3 = new InventoryRoll
+                {
+                    Id = "ROLL-003",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll4 = new InventoryRoll
+                {
+                    Id = "ROLL-004",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll5 = new InventoryRoll
+                {
+                    Id = "ROLL-005",
+                    BatchId = batch3.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                await db.InventoryRolls.AddRangeAsync(roll1, roll2, roll3, roll4, roll5);
+                await db.SaveChangesAsync();
+
+                var qualityUser = await db.Users.FirstOrDefaultAsync(u => u.Email == "quality@amic.com");
+
+                var defect1 = new DefectReport
+                {
+                    BatchId = batch1.Id,
+                    ProductType = ProductType.BoxPouch,
+                    Severity = DefectSeverity.HIGH,
+                    Description = "Edge sealing delamination and micro-perforations observed along roll perimeter.",
+                    Status = DefectStatus.Open,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2)
+                };
+
+                var defect2 = new DefectReport
+                {
+                    BatchId = batch2.Id,
+                    ProductType = ProductType.BiscuitPackaging,
+                    Severity = DefectSeverity.MEDIUM,
+                    Description = "Color misalignment and minor ink smudging on secondary packaging film.",
+                    Status = DefectStatus.InReview,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                };
+
+                await db.DefectReports.AddRangeAsync(defect1, defect2);
+                await db.SaveChangesAsync();
+
+                var quarantine1 = new Quarantine
+                {
+                    DefectReportId = defect1.Id,
+                    InventoryRollId = roll2.Id,
+                    Reason = "Roll quarantined due to severe delamination risk on sealing line.",
+                    Status = QuarantineStatus.Active,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1),
+                    ReleasedAt = null
+                };
+
+                var quarantine2 = new Quarantine
+                {
+                    DefectReportId = defect2.Id,
+                    InventoryRollId = roll3.Id,
+                    Reason = "Temporary hold for ink smear inspection. Batch cleared after lab chromatography test.",
+                    Status = QuarantineStatus.Released,
+                    CreatedAt = DateTime.UtcNow.AddDays(-4),
+                    ReleasedAt = DateTime.UtcNow.AddDays(-3)
+                };
+
+                await db.Quarantines.AddRangeAsync(quarantine1, quarantine2);
                 await db.SaveChangesAsync();
             }
         }

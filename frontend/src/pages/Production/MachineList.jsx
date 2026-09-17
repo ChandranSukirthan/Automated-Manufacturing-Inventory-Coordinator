@@ -49,7 +49,9 @@ export default function MachineList() {
       setMachines(machinesData);
       if (Array.isArray(workflowsData)) {
         const pending = workflowsData.filter(
-          w => (w.status === 3 || w.approvalStatus === 0) && w.status !== 1 && w.status !== 2
+          w => (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
+               w.status !== 1 && w.status !== 'Completed' &&
+               w.status !== 2 && w.status !== 'Failed'
         );
         setPendingWorkflows(pending);
       }
@@ -77,12 +79,19 @@ export default function MachineList() {
     }
   };
 
+  const parseMachineStatus = (s) => {
+    if (s === 'Operational' || s === 0) return 0;
+    if (s === 'UnderMaintenance' || s === 1) return 1;
+    if (s === 'Offline' || s === 2) return 2;
+    return 0;
+  };
+
   const getPendingWorkflowForMachine = (machine) => {
     if (!machine || !pendingWorkflows.length) return null;
 
-    // RULE 1: The machine MUST be overdue AND currently Operational (status 0)
+    // RULE 1: The machine MUST be overdue AND currently Operational
     const isOverdue = machine.isMaintenanceDue || (machine.uptimeHours >= machine.maintenanceIntervalHours);
-    if (!isOverdue || machine.status !== 0) return null;
+    if (!isOverdue || (machine.status !== 0 && machine.status !== 'Operational')) return null;
 
     // RULE 2: Match by exact Machine GUID embedded in workflow objective
     const idMatch = pendingWorkflows.find(w => 
@@ -109,7 +118,7 @@ export default function MachineList() {
 
     if (matchedMachine) {
       const isOverdue = matchedMachine.isMaintenanceDue || (matchedMachine.uptimeHours >= matchedMachine.maintenanceIntervalHours);
-      return matchedMachine.status === 0 && isOverdue;
+      return (matchedMachine.status === 0 || matchedMachine.status === 'Operational') && isOverdue;
     }
     return false;
   });
@@ -137,7 +146,7 @@ export default function MachineList() {
     setEditingMachine(machine);
     setFormData({
       name: machine.name,
-      status: machine.status,
+      status: parseMachineStatus(machine.status),
       uptimeHours: machine.uptimeHours,
       maintenanceIntervalHours: machine.maintenanceIntervalHours,
       location: machine.location || ''
@@ -195,13 +204,16 @@ export default function MachineList() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 0:
+      case 'Operational':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Operational</span>;
       case 1:
+      case 'UnderMaintenance':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Under Maintenance</span>;
       case 2:
+      case 'Offline':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">Offline</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">Unknown</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">{status || 'Unknown'}</span>;
     }
   };
 

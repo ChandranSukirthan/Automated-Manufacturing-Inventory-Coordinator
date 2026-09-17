@@ -116,28 +116,35 @@ export default function AgentWorkflowsPage() {
   const getWorkflowStatusBadge = (status) => {
     switch (status) {
       case 0:
+      case 'Running':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">RUNNING</span>;
       case 1:
+      case 'Completed':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">COMPLETED</span>;
       case 2:
+      case 'Failed':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">FAILED</span>;
       case 3:
+      case 'WaitingForApproval':
         return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">WAITING_FOR_APPROVAL</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">UNKNOWN</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">{status || 'UNKNOWN'}</span>;
     }
   };
 
   const getApprovalBadge = (approval) => {
     switch (approval) {
       case 0:
+      case 'Pending':
         return <span className="text-amber-400 font-semibold text-xs flex items-center gap-1"><Hourglass className="w-3.5 h-3.5" /> Pending</span>;
       case 1:
+      case 'Approved':
         return <span className="text-emerald-400 font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Approved</span>;
       case 2:
+      case 'Rejected':
         return <span className="text-red-400 font-semibold text-xs flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Rejected</span>;
       default:
-        return <span className="text-slate-400 text-xs">None</span>;
+        return <span className="text-slate-400 text-xs">{approval || 'None'}</span>;
     }
   };
 
@@ -221,7 +228,9 @@ export default function AgentWorkflowsPage() {
           </div>
         ) : (
           filteredWorkflows.map((wf) => {
-            const isWaitingApproval = (wf.status === 3 || wf.approvalStatus === 0) && wf.status !== 1 && wf.status !== 2;
+            const isWaitingApproval = (wf.status === 3 || wf.status === 'WaitingForApproval' || wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
+              wf.status !== 1 && wf.status !== 'Completed' &&
+              wf.status !== 2 && wf.status !== 'Failed';
             const isApproveLoading = actionLoading[wf.workflowId] === 'approve';
             const isRejectLoading = actionLoading[wf.workflowId] === 'reject';
 
