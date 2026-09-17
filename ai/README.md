@@ -1,7 +1,7 @@
 # AMIC Production AI Microservice
 
 Agentic AI Coordinator service for **Automated Manufacturing Inventory Coordinator (AMIC)**.  
-Built with **FastAPI**, **LangGraph**, and **PostgreSQL** on **Port 5070**.
+Built with **FastAPI**, **LangGraph**, and **PostgreSQL** on **Port 8000**.
 
 ---
 
@@ -34,7 +34,7 @@ DB_NAME=inventory_coordinator
 DB_USER=postgres
 DB_PASSWORD=your_password
 FASTAPI_HOST=127.0.0.1
-FASTAPI_PORT=5070
+FASTAPI_PORT=8000
 OPENAI_API_KEY=your_openai_api_key
 ```
 
@@ -56,11 +56,11 @@ py main.py
 ```
 Or equivalently using `uvicorn` directly:
 ```powershell
-uvicorn main:app --host 127.0.0.1 --port 5070 --reload
+uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-* **Interactive Swagger Documentation:** [http://127.0.0.1:5070/docs](http://127.0.0.1:5070/docs)
-* **Service Health Check:** [http://127.0.0.1:5070/health](http://127.0.0.1:5070/health)
+* **Interactive Swagger Documentation:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+* **Service Health Check:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
 ---
 
