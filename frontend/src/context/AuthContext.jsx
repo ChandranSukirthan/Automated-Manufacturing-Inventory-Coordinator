@@ -62,12 +62,20 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateProfile = async (fullName) => {
+    const updatedUser = await authService.updateProfile(fullName);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   const value = {
     user,
     login,
     register,
     googleLogin,
     googleRegister,
+    updateProfile,
     logout,
     isAuthenticated: !!user
   };

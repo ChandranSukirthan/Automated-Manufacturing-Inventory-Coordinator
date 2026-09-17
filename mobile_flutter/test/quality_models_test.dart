@@ -29,11 +29,13 @@ void main() {
       'createdAt': '2026-09-12T06:00:00Z',
       'status': 'Open',
       'reportedByUserId': 'user-1',
+      'affectedInventory': ['ROLL-001', 'ROLL-002'],
     });
 
     expect(defect.severity, 'Critical');
     expect(defect.reportedByUserId, 'user-1');
     expect(defect.description, 'Seal failure');
+    expect(defect.affectedInventory, ['ROLL-001', 'ROLL-002']);
   });
 
   test('supports the derived quality dashboard metrics', () {

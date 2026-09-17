@@ -116,7 +116,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
                             subtitle: Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
-                                '${defect.productType}\n${defect.description}',
+                                '${defect.productType}\n${defect.description}\nAffected inventory: ${defect.affectedInventory.isEmpty ? 'None' : defect.affectedInventory.join(', ')}',
                               ),
                             ),
                             leading: CircleAvatar(

@@ -45,6 +45,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<UserSummary> updateProfile(String fullName) async {
+    final updatedUser = await auth.updateProfile(fullName.trim());
+    final currentSession = session;
+    if (currentSession != null) {
+      session = AuthSession(
+        accessToken: currentSession.accessToken,
+        refreshToken: currentSession.refreshToken,
+        user: updatedUser,
+      );
+      await storage.save(session!);
+      notifyListeners();
+    }
+    return updatedUser;
+  }
+
   Future<void> expireSession() async {
     await storage.clear();
     session = null;

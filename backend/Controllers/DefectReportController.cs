@@ -114,11 +114,7 @@ namespace ManufacturingCoordinator.Api.Controllers
             var created = await _quarantineService.QuarantineDefectAsync(
                 id,
                 dto ?? new CreateQuarantineDto());
-            return CreatedAtAction(
-                nameof(QuarantineController.GetById),
-                "Quarantine",
-                new { id = created.Id },
-                created);
+            return Ok(created);
         }
     }
 }

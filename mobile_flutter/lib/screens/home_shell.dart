@@ -7,6 +7,7 @@ import 'defects_screen.dart';
 import 'quarantine_screen.dart';
 import 'quarantine_history_screen.dart';
 import 'role_dashboard_screen.dart';
+import 'profile_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -31,7 +32,10 @@ class _HomeShellState extends State<HomeShell> {
     final isQualityInspector = user.isQualityInspector;
     final screens = isQualityInspector
         ? [
-            DashboardScreen(service: widget.qualityService),
+            DashboardScreen(
+              service: widget.qualityService,
+              appState: widget.appState,
+            ),
             DefectsScreen(service: widget.qualityService),
             QuarantineScreen(service: widget.qualityService),
             QuarantineHistoryScreen(service: widget.qualityService),
@@ -52,12 +56,24 @@ class _HomeShellState extends State<HomeShell> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle_outlined),
             onSelected: (value) async {
-              if (value == 'logout') await widget.appState.logout();
+              if (value == 'logout') {
+                await widget.appState.logout();
+                return;
+              }
+              if (value != 'profile' || !mounted) return;
+
+              await Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProfileScreen(appState: widget.appState),
+                ),
+              );
+              if (mounted) setState(() {});
             },
             itemBuilder: (_) => [
               PopupMenuItem<String>(
                 value: 'profile',
-                enabled: false,
+                enabled: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

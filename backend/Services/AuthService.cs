@@ -100,6 +100,32 @@ namespace ManufacturingCoordinator.Api.Services
             };
         }
 
+        public async Task<UserSummaryDto?> GetProfileAsync(Guid userId)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(item => item.Id == userId);
+            return user == null ? null : ToUserSummary(user);
+        }
+
+        public async Task<UserSummaryDto> UpdateProfileAsync(Guid userId, UpdateProfileRequestDto request)
+        {
+            var user = await _db.Users.FirstOrDefaultAsync(item => item.Id == userId);
+            if (user == null)
+            {
+                throw new AuthException("User profile was not found.", HttpStatusCode.NotFound);
+            }
+
+            var fullName = request.FullName.Trim();
+            if (fullName.Length == 0)
+            {
+                throw new AuthException("Full name is required.");
+            }
+
+            user.FullName = fullName;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return ToUserSummary(user);
+        }
+
         public async Task<MessageResponseDto> VerifyOtpAsync(VerifyOtpRequestDto request)
         {
             var emailNormalized = request.Email.Trim().ToLowerInvariant();
@@ -445,13 +471,18 @@ namespace ManufacturingCoordinator.Api.Services
                 AccessToken = accessToken,
                 RefreshToken = rawRefreshToken,
                 AccessTokenExpiresAt = expiresAt,
-                User = new UserSummaryDto
-                {
-                    Id = user.Id,
-                    FullName = user.FullName,
-                    Email = user.Email,
-                    Role = user.Role
-                }
+                User = ToUserSummary(user)
+            };
+        }
+
+        private static UserSummaryDto ToUserSummary(User user)
+        {
+            return new UserSummaryDto
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                Role = user.Role
             };
         }
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
+
 class MetricCard extends StatelessWidget {
   const MetricCard({
     required this.label,
@@ -55,7 +57,7 @@ class StateMessage extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 44, color: Theme.of(context).colorScheme.primary),
+          Icon(icon, size: 44, color: AppColors.primary),
           const SizedBox(height: 14),
           Text(message, textAlign: TextAlign.center),
           if (action != null) ...[
@@ -80,15 +82,15 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final lower = value.toLowerCase();
     final color =
-        lower.contains('high') ||
-            lower.contains('active') ||
-            lower.contains('open')
-        ? Colors.deepOrange
+        lower.contains('high') || lower.contains('active')
+        ? AppColors.warningText
+        : lower.contains('open')
+        ? AppColors.violet
         : lower.contains('released') ||
               lower.contains('resolved') ||
               lower.contains('closed')
-        ? Colors.teal
-        : Colors.indigo;
+        ? AppColors.primaryTextLight
+        : AppColors.info;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(

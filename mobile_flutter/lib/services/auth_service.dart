@@ -52,4 +52,12 @@ class AuthService {
   }
 
   Future<void> logout() => storage.clear();
+
+  Future<UserSummary> getProfile() async => UserSummary.fromJson(
+    await api.get('/auth/profile') as Map<String, dynamic>,
+  );
+
+  Future<UserSummary> updateProfile(String fullName) async => UserSummary.fromJson(
+    await api.put('/auth/profile', {'fullName': fullName}) as Map<String, dynamic>,
+  );
 }

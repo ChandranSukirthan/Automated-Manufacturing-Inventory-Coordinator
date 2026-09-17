@@ -11,6 +11,7 @@ namespace ManufacturingCoordinator.Models.Quality
         public ProductType ProductType { get; set; }
         public DefectSeverity Severity { get; set; }
         public string Description { get; set; } = string.Empty;
+        public string AffectedInventoryJson { get; set; } = "[]";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DefectStatus Status { get; set; } = DefectStatus.Open;
 
