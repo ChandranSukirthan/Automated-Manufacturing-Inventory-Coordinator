@@ -71,6 +71,13 @@ export default function ShiftPage() {
     setIsModalOpen(true);
   };
 
+  const parseShiftStatus = (s) => {
+    if (s === 'Planned' || s === 0) return 0;
+    if (s === 'InProgress' || s === 1) return 1;
+    if (s === 'Completed' || s === 2) return 2;
+    return 0;
+  };
+
   const openEditModal = (shift) => {
     setEditingShift(shift);
     setFormData({
@@ -78,7 +85,7 @@ export default function ShiftPage() {
       productionTarget: shift.productionTarget,
       availableMaterial: shift.availableMaterial,
       actualOutput: shift.actualOutput,
-      status: shift.status,
+      status: parseShiftStatus(shift.status),
       startTime: new Date(shift.startTime).toISOString().slice(0, 16),
       endTime: new Date(shift.endTime).toISOString().slice(0, 16)
     });
@@ -140,13 +147,16 @@ export default function ShiftPage() {
   const getStatusBadge = (status) => {
     switch (status) {
       case 0:
+      case 'Planned':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Planned</span>;
       case 1:
+      case 'InProgress':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 animate-pulse">In Progress</span>;
       case 2:
+      case 'Completed':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-white/10">Completed</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">Scheduled</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">{status || 'Scheduled'}</span>;
     }
   };
 

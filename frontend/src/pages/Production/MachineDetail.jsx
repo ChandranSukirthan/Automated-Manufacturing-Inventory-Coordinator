@@ -51,10 +51,11 @@ export default function MachineDetail() {
 
       if (Array.isArray(workflowsData) && machineData) {
         const isOverdue = machineData.isMaintenanceDue || (machineData.uptimeHours >= machineData.maintenanceIntervalHours);
-        if (machineData.status === 0 && isOverdue) {
+        if ((machineData.status === 0 || machineData.status === 'Operational') && isOverdue) {
           const match = workflowsData.find(w => 
-            (w.status === 3 || w.approvalStatus === 0) &&
-            w.status !== 1 && w.status !== 2 &&
+            (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
+            w.status !== 1 && w.status !== 'Completed' &&
+            w.status !== 2 && w.status !== 'Failed' &&
             ((w.objective && machineData.id && w.objective.toLowerCase().includes(machineData.id.toLowerCase())) ||
              (machineData.name && machineData.name.trim().length > 2 && machineData.name.toLowerCase() !== 'string' &&
               w.objective && w.objective.toLowerCase().includes(machineData.name.toLowerCase())))
@@ -132,13 +133,16 @@ export default function MachineDetail() {
   const getMaintenanceTypeBadge = (type) => {
     switch (type) {
       case 0:
+      case 'Scheduled':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Scheduled</span>;
       case 1:
+      case 'Emergency':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">Emergency</span>;
       case 2:
+      case 'Preventive':
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Preventive</span>;
       default:
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">Routine</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">{type || 'Routine'}</span>;
     }
   };
 
@@ -309,11 +313,12 @@ export default function MachineDetail() {
           <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-1">Fleet Status</span>
           <div className="flex items-center gap-2 mt-2">
             <div className={`w-3 h-3 rounded-full ${
-              machine.status === 0 ? 'bg-emerald-400 shadow-lg shadow-emerald-500/50' :
-              machine.status === 1 ? 'bg-amber-400 shadow-lg shadow-amber-500/50' : 'bg-red-400'
+              (machine.status === 0 || machine.status === 'Operational') ? 'bg-emerald-400 shadow-lg shadow-emerald-500/50' :
+              (machine.status === 1 || machine.status === 'UnderMaintenance') ? 'bg-amber-400 shadow-lg shadow-amber-500/50' : 'bg-red-400'
             }`} />
             <span className="text-lg font-bold text-white">
-              {machine.status === 0 ? 'Operational' : machine.status === 1 ? 'Under Maintenance' : 'Offline'}
+              {(machine.status === 0 || machine.status === 'Operational') ? 'Operational' :
+               (machine.status === 1 || machine.status === 'UnderMaintenance') ? 'Under Maintenance' : 'Offline'}
             </span>
           </div>
         </div>

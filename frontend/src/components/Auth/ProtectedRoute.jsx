@@ -2,20 +2,39 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { ShieldAlert } from 'lucide-react';
 
+const ROLE_MAP = {
+  0: 'FloorWorker',
+  1: 'SupplyChainManager',
+  2: 'QualityInspector',
+  3: 'ITAdmin',
+  '0': 'FloorWorker',
+  '1': 'SupplyChainManager',
+  '2': 'QualityInspector',
+  '3': 'ITAdmin',
+  'floorworker': 'FloorWorker',
+  'supplychainmanager': 'SupplyChainManager',
+  'qualityinspector': 'QualityInspector',
+  'itadmin': 'ITAdmin',
+  'system admin': 'ITAdmin',
+};
+
+const normalizeRole = (r) => {
+  if (r === null || r === undefined) return '';
+  if (typeof r === 'object') r = r.name || r.id || '';
+  const key = String(r).trim().toLowerCase();
+  return ROLE_MAP[key] || ROLE_MAP[r] || String(r);
+};
+
 export default function ProtectedRoute({ children, allowedRoles, requiredRole = null }) {
   const { user } = useAuth();
   const location = useLocation();
 
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
 
-  const role = user.role;
-  const matchesRole = (allowedRole) => (
-    role === allowedRole ||
-    role === String(allowedRole) ||
-    role?.name === allowedRole ||
-    role?.id === allowedRole ||
-    role?.id === Number(allowedRole)
-  );
+  const userRole = normalizeRole(user.role);
+  const matchesRole = (allowedRole) => {
+    return userRole.toLowerCase() === normalizeRole(allowedRole).toLowerCase();
+  };
   const isAllowed = requiredRole === null
     ? (!allowedRoles || allowedRoles.some(matchesRole))
     : matchesRole(requiredRole);

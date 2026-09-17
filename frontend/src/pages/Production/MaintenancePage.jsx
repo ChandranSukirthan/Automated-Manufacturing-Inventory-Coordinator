@@ -120,13 +120,16 @@ export default function MaintenancePage() {
   const getMaintenanceTypeBadge = (typeVal) => {
     switch (typeVal) {
       case 0:
+      case 'Scheduled':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Scheduled</span>;
       case 1:
+      case 'Emergency':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">Emergency</span>;
       case 2:
+      case 'Preventive':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Preventive</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">Routine</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300">{typeVal || 'Routine'}</span>;
     }
   };
 

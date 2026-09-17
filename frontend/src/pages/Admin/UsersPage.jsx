@@ -142,18 +142,30 @@ export default function UsersPage() {
     }
   };
 
+  const parseUserRole = (r) => {
+    if (r === 'FloorWorker' || r === 0) return 0;
+    if (r === 'SupplyChainManager' || r === 1) return 1;
+    if (r === 'QualityInspector' || r === 2) return 2;
+    if (r === 'ITAdmin' || r === 3) return 3;
+    return 0;
+  };
+
   const getRoleBadge = (role) => {
     switch (role) {
       case 0:
+      case 'FloorWorker':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-white/10">Floor Worker</span>;
       case 1:
+      case 'SupplyChainManager':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">Supply Chain Manager</span>;
       case 2:
+      case 'QualityInspector':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">Quality Inspector</span>;
       case 3:
+      case 'ITAdmin':
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">IT Admin</span>;
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">User</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400">{role || 'User'}</span>;
     }
   };
 
@@ -288,7 +300,7 @@ export default function UsersPage() {
                         <button
                           onClick={() => {
                             setSelectedUser(u);
-                            setSelectedRole(u.role);
+                            setSelectedRole(parseUserRole(u.role));
                             setIsRoleModalOpen(true);
                           }}
                           title="Assign new role"
