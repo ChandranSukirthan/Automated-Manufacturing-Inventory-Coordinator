@@ -63,3 +63,4 @@ namespace backend.Dtos
         public decimal RequiredQuantity { get; set; } = 2000m;
     }
 }
+
