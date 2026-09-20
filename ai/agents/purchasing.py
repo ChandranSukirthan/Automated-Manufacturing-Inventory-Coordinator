@@ -22,9 +22,13 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
     inv_data = state.get("inventory_data", {})
     prod_data = state.get("production_data", {})
+    impact = prod_data.get("impact", {})
 
     material_id = inv_data.get("materialId") or inv_data.get("itemCode", "RM-STEEL-001")
-    required_quantity = float(inv_data.get("requiredQuantity", 2000))
+    base_qty = float(inv_data.get("requiredQuantity", 2000))
+    # Inter-agent cooperation: If Production Agent detected a material shortfall, reconcile it!
+    shortfall = float(impact.get("plannedOutput", 0) - impact.get("adjustedOutput", 0))
+    required_quantity = max(base_qty, shortfall) if shortfall > 0 else base_qty
 
     # Tool 1: query_supplier_rates()
     available_suppliers = query_supplier_rates(material_id)

@@ -23,7 +23,20 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
     tool_results = dict(state.get("tool_results", {}))
 
     try:
-        material_id = state.get("inventory_data", {}).get("itemCode") or "RM-STEEL-001"
+        import re
+        import psycopg
+        from ai.core.config import settings
+
+        inv_input = state.get("inventory_data", {})
+        obj = state.get("objective", "")
+        material_match = re.search(r"\b(RM[A-Z0-9_-]*)\b", obj, re.IGNORECASE)
+
+        material_id = (
+            inv_input.get("materialId")
+            or inv_input.get("itemCode")
+            or (material_match.group(1).upper() if material_match else None)
+            or "RM-STEEL-001"
+        )
 
         # Tool 1: get_inventory_levels()
         levels = get_inventory_levels.invoke({"materialId": material_id})
@@ -50,12 +63,36 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         curr_stock = levels.get("currentStock", 350.0)
         min_stock = levels.get("minimumStock", 200.0)
         max_stock = levels.get("maximumStock", 1000.0)
-        req_qty = max(500, int(max_stock - curr_stock))
+        req_qty = inv_input.get("requiredQuantity") or max(500, int(max_stock - curr_stock))
+
+        # Query real material name from PostgreSQL RawMaterials table
+        item_name = levels.get("itemName") or "Industrial Raw Material"
+        try:
+            with psycopg.connect(
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                dbname=settings.DB_NAME,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                connect_timeout=2
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (material_id, f"%{material_id}%"))
+                    row = cur.fetchone()
+                    if row:
+                        item_name = row[0]
+        except Exception:
+            if "STEEL" in material_id:
+                item_name = "Cold Rolled Steel Sheet"
+            elif "ALUM" in material_id:
+                item_name = "High-Tensile Aluminum Rod"
+            elif "POLY" in material_id:
+                item_name = "Industrial Polypropylene Pellets"
 
         inventory_data = {
             "materialId": material_id,
             "itemCode": material_id,
-            "itemName": "Cold Rolled Steel Sheet",
+            "itemName": item_name,
             "currentStock": curr_stock,
             "availableQuantity": curr_stock,
             "minimumStock": min_stock,

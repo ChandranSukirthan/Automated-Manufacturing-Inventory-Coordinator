@@ -28,6 +28,8 @@ class RunWorkflowRequest(BaseModel):
         description="The business objective for the Planner agent."
     )
     workflowId: Optional[str] = Field(None, example="WF-1004")
+    material_id: Optional[str] = Field(None, example="RM-STEEL-001")
+    required_quantity: Optional[float] = Field(None, example=2000.0)
 
 
 class RejectWorkflowRequest(BaseModel):
@@ -47,11 +49,17 @@ class ProductionImpactRequest(BaseModel):
 
 # Workflow Endpoints
 @router.post("/run", status_code=status.HTTP_201_CREATED)
+@router.post("/trigger", status_code=status.HTTP_201_CREATED)
 def trigger_workflow(request: RunWorkflowRequest):
     """
     Triggers a multi-agent autonomous workflow via the Planner/Coordinator agent.
     """
-    result = run_workflow(objective=request.objective, workflow_id=request.workflowId)
+    result = run_workflow(
+        objective=request.objective,
+        workflow_id=request.workflowId,
+        material_id=request.material_id,
+        required_quantity=request.required_quantity
+    )
     return result
 
 
