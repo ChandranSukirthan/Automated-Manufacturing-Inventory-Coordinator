@@ -37,49 +37,59 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
             machine_id=schedule.get("machineId", "M001")
         )
 
-        # Query real material inventory from PostgreSQL RawMaterials table
-        inventory_data = None
-        from ai.tools.production_tools import get_db_connection
-        conn = get_db_connection()
-        if conn:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute('SELECT "SkuCode", "Name", "UnitOfMeasure", "ReorderThreshold" FROM "RawMaterials" ORDER BY "Id" ASC LIMIT 1')
-                    rm = cur.fetchone()
-                    if rm:
-                        sku_code, name, uom, reorder_thresh = rm[0], rm[1], rm[2], float(rm[3])
-                        # Available stock is simulated from threshold to test realistic shortage triggers
-                        available_qty = int(reorder_thresh * 0.8)
-                        inventory_data = {
-                            "itemCode": sku_code,
-                            "itemName": name,
-                            "availableQuantity": available_qty,
-                            "reorderThreshold": int(reorder_thresh),
-                            "unit": uom,
-                            "burnRatePerHour": 25,
-                            "status": "LOW_STOCK" if available_qty <= reorder_thresh else "OPTIMAL"
-                        }
-            except Exception:
-                pass
-            finally:
-                conn.close()
+        # Student 1: Data Extraction Agent uses inventory tools
+        from ai.tools.inventory_tools import (
+            get_inventory_levels,
+            query_inventory_history,
+            calculate_burn_rate,
+            detect_low_stock
+        )
 
-        if not inventory_data:
-            inventory_data = {
-                "itemCode": "RM-STEEL-001",
-                "itemName": "Cold Rolled Steel Sheet",
-                "availableQuantity": 160,
-                "reorderThreshold": 200,
-                "unit": "KG",
-                "burnRatePerHour": 25,
-                "status": "LOW_STOCK"
-            }
+        material_id = state.get("inventory_data", {}).get("itemCode") or "RM-STEEL-001"
+        levels = get_inventory_levels.invoke({"materialId": material_id})
+        history = query_inventory_history.invoke({"materialId": material_id, "periodDays": 30})
+        burn = calculate_burn_rate.invoke({
+            "consumption": history.get("consumption", 2400.0),
+            "periodDays": history.get("periodDays", 30),
+            "materialId": material_id
+        })
+        low_stock_analysis = detect_low_stock.invoke({
+            "currentStock": levels.get("currentStock", 350.0),
+            "minimumStock": levels.get("minimumStock", 200.0),
+            "burnRate": burn.get("burnRate", 80.0),
+            "supplierLeadTime": 7.0,
+            "materialId": material_id
+        })
 
+        target_output = schedule.get("plannedOutput", 1000)
+        curr_stock = levels.get("currentStock", 350.0)
+        req_qty = max(500, int(target_output - curr_stock)) if target_output > curr_stock else 500
+
+        inventory_data = {
+            "materialId": material_id,
+            "itemCode": material_id,
+            "itemName": "Cold Rolled Steel Sheet",
+            "currentStock": curr_stock,
+            "availableQuantity": curr_stock,
+            "minimumStock": levels.get("minimumStock", 200.0),
+            "reorderThreshold": levels.get("minimumStock", 200.0),
+            "burnRate": burn.get("burnRate", 80.0),
+            "burnRatePerHour": round(burn.get("burnRate", 80.0) / 8.0, 2),
+            "daysRemaining": low_stock_analysis.get("daysRemaining", 4.375),
+            "lowStock": low_stock_analysis.get("lowStock", True),
+            "status": "LOW_STOCK" if low_stock_analysis.get("lowStock", True) else "NORMAL",
+            "requiredQuantity": req_qty,
+            "unit": "KG"
+        }
+
+        tool_results["get_inventory_levels"] = levels
+        tool_results["calculate_burn_rate"] = burn
+        tool_results["detect_low_stock"] = low_stock_analysis
         tool_results["query_production_schedule"] = schedule
         tool_results["calculate_machine_uptime"] = uptime_data
         tool_results["check_maintenance_requirement"] = maintenance_data
 
-        completed.append("Data Extraction: Collected inventory & machine telemetry")
+        completed.append("Data Extraction: Analyzed inventory levels, burn rate & days remaining")
 
         return {
             "current_agent": "Data Extraction",
