@@ -7,7 +7,8 @@ import psycopg
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 from ai.core.config import settings
 from ai.agents.planner import planner_node
-from ai.agents.data_extraction import data_extraction_node, production_analysis_node
+from ai.agents.data_extraction import data_extraction_node
+from ai.agents.production_analysis import production_analysis_node
 from ai.agents.purchasing import purchasing_node
 from ai.agents.validation import validation_node, execution_node
 
