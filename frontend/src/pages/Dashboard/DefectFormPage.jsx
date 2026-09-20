@@ -73,16 +73,13 @@ export default function DefectFormPage() {
 
     setLoading(true);
     try {
-      const affectedInventory = aiRecommendation?.affectedInventory || [];
-
       if (isEdit) {
         await defectService.update(id, {
           batchId: form.batchId,
           productType: form.productType,
           severity: form.severity,
           description: form.description,
-          status: form.status,
-          affectedInventory
+          status: form.status
         });
       } else {
         await defectService.create({
@@ -90,8 +87,7 @@ export default function DefectFormPage() {
           productType: form.productType,
           severity: form.severity,
           description: form.description,
-          status: form.status,
-          affectedInventory
+          status: form.status
         });
       }
       navigate('/quality/defects');
