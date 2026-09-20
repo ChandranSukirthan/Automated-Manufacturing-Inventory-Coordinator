@@ -15,11 +15,16 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import httpx
-import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sklearn.linear_model import LinearRegression
+
+try:
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
+    HAS_ML = True
+except ImportError:
+    HAS_ML = False
 
 import psycopg
 
@@ -123,6 +128,9 @@ async def _send_alert(client: httpx.AsyncClient, item: dict, is_predictive: bool
 
 
 def _consumption_rate(sku: str) -> float:
+    if not HAS_ML:
+        random.seed(sku)
+        return float(random.uniform(15.0, 45.0))
     days = np.array(range(30)).reshape(-1, 1)
     random.seed(sku)
     true_rate = random.uniform(10.0, 50.0)
