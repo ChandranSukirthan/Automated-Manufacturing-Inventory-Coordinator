@@ -47,6 +47,24 @@ namespace backend.Controllers
             return CreatedAtAction(nameof(GetAlerts), new { id = createdAlert.Id }, createdAlert);
         }
 
+        // PUT: api/inventory/alerts/{id}
+        [HttpPut("alerts/{id}")]
+        public async Task<IActionResult> UpdateAlertStatus(int id, [FromBody] UpdateAlertStatusDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto?.Status))
+            {
+                return BadRequest("Status cannot be empty.");
+            }
+
+            var success = await _inventoryService.UpdateAlertStatusAsync(id, dto.Status);
+            if (!success)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
+        }
+
         // PUT: api/inventory/{id}
         [HttpPut("{id}")]
         public async Task<IActionResult> PutItem(int id, [FromBody] InventoryItem item)

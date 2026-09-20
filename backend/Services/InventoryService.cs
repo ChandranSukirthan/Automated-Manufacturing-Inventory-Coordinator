@@ -79,6 +79,19 @@ namespace backend.Services
             };
         }
 
+        public async Task<bool> UpdateAlertStatusAsync(int id, string newStatus)
+        {
+            var alert = await _context.StockAlerts.FindAsync(id);
+            if (alert == null)
+            {
+                return false;
+            }
+
+            alert.Status = newStatus;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item)
         {
             if (id != item.Id)
@@ -128,23 +141,17 @@ namespace backend.Services
 
         public async Task<InventoryItem> GetInventoryItemByIdAsync(int id)
         {
-            // FindAsync searches the database for the primary key (id)
             return await _context.InventoryItems.FindAsync(id);
         }
 
-        // Student A - Implements InventoryRoll creation with Barcode Generation
         public async Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll)
         {
-            // Validate basic required fields or let DB constraints handle it
             if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
             {
                 throw new ArgumentException("RollIdentifier is required.");
             }
 
-            // Phase 2: Automatically generate the QR code URL using the 3rd-party service
             roll.BarcodeUrl = _barcodeService.GenerateQrCodeUrl(roll.RollIdentifier);
-
-            // Set timestamps
             roll.CreatedAt = DateTime.UtcNow;
             roll.UpdatedAt = DateTime.UtcNow;
 
@@ -164,4 +171,3 @@ namespace backend.Services
         }
     }
 }
-  
