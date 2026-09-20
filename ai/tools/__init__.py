@@ -1,3 +1,10 @@
+from .inventory_tools import (
+    get_inventory_levels,
+    query_inventory_history,
+    calculate_burn_rate,
+    detect_low_stock,
+    INVENTORY_TOOLS,
+)
 from .quality_tools import (
     analyze_defect_context,
     check_related_inventory,
@@ -11,6 +18,11 @@ from .production_tools import (
 )
 
 __all__ = [
+    "get_inventory_levels",
+    "query_inventory_history",
+    "calculate_burn_rate",
+    "detect_low_stock",
+    "INVENTORY_TOOLS",
     "analyze_defect_context",
     "check_related_inventory",
     "recommend_quarantine",

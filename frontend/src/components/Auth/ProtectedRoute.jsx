@@ -1,3 +1,4 @@
+import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { ShieldAlert } from 'lucide-react';
@@ -26,8 +27,16 @@ const normalizeRole = (r) => {
 };
 
 export default function ProtectedRoute({ children, allowedRoles, requiredRole = null }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
 
@@ -35,6 +44,7 @@ export default function ProtectedRoute({ children, allowedRoles, requiredRole = 
   const matchesRole = (allowedRole) => {
     return userRole.toLowerCase() === normalizeRole(allowedRole).toLowerCase();
   };
+
   const isAllowed = requiredRole === null
     ? (!allowedRoles || allowedRoles.some(matchesRole))
     : matchesRole(requiredRole);

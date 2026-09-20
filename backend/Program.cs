@@ -1,5 +1,7 @@
 using DotNetEnv;
 using ManufacturingCoordinator.Data;
+using backend.Data;
+using backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +12,7 @@ using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Api.Services;
 using ManufacturingCoordinator.Api.Middleware;
+using ManufacturingCoordinator.Services.PurchaseOrders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +24,7 @@ var dbHost = Env.GetString("DB_HOST", "localhost");
 var dbPort = Env.GetString("DB_PORT", "5432");
 var dbName = Env.GetString("DB_NAME", "inventory_coordinator");
 var dbUser = Env.GetString("DB_USER", "postgres");
-var dbPass = Env.GetString("DB_PASSWORD", "bid7650");
+var dbPass = Env.GetString("DB_PASSWORD", "Sukir@211002");
 builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
 
 builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
@@ -31,33 +34,45 @@ builder.Configuration["JwtSettings:SecretKey"] = Env.GetString("JWT_SECRET_KEY")
 builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? builder.Configuration["JwtSettings:Issuer"];
 builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
 
-// Controllers
+// Controllers with JSON String Enum conversion
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-// PostgreSQL + Entity Framework Core
+// PostgreSQL + Entity Framework Core Contexts
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// Settings
+builder.Services.AddDbContext<ManufacturingContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+);
+
+// Register Inventory & Agent Services (Student 1)
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IBarcodeService, BarcodeService>();
+builder.Services.AddHttpClient<IAgentIntegrationService, AgentIntegrationService>();
+
+// Register Auth Services (Student 1)
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
-
-// Scoped Services
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Register Student 2 - Purchase Order Services
+builder.Services.AddScoped<ISupplierService, SupplierService>();
+builder.Services.AddScoped<IStripeService, StripeService>();
+builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+
+// Register Student 3 - Quality & Defect Services
 builder.Services.AddScoped<IDefectReportService, DefectReportService>();
 builder.Services.AddScoped<IQuarantineService, QuarantineService>();
 
-// Student 4 — Production & Admin Services
+// Register Student 4 - Production & Admin Services
 builder.Services.AddScoped<IMachineService, MachineService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IShiftService, ShiftService>();
@@ -116,6 +131,14 @@ builder.Services.AddSwaggerGen(c =>
 // CORS for React frontend & mobile clients
 builder.Services.AddCors(options =>
 {
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(_ => true)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
     options.AddPolicy("ReactFrontend", policy =>
     {
         policy
@@ -128,16 +151,37 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Swagger
+// Swagger UI
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Automated Manufacturing Inventory API v1");
+    });
+}
+
+// Auto-create database tables on startup & seed
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
+        mfgContext?.Database.EnsureCreated();
+
+        var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        appContext.Database.EnsureCreated();
+        await DbInitializer.SeedAsync(app.Services);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"DB Auto-creation/seed notice: {ex.Message}");
+    }
 }
 
 app.UseMiddleware<ExceptionMiddleware>();
 
-app.UseCors("ReactFrontend");
+app.UseCors("AllowAll");
 
 if (!app.Environment.IsDevelopment())
 {
@@ -148,8 +192,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// Seed initial users & mock data if database is empty
-await DbInitializer.SeedAsync(app.Services);
 
 app.Run();

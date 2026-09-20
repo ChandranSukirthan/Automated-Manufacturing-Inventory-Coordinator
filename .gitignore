@@ -72,3 +72,14 @@ Thumbs.db
 .gemini/
 
 GIT_COMMIT_PLAN.md
+Library/
+.local/
+backend/Library/
+.aspnet/
+backend/.aspnet/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
