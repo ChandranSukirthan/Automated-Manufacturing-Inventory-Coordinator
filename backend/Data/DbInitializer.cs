@@ -3,19 +3,76 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using ManufacturingCoordinator.Data;
+using Microsoft.Extensions.DependencyInjection;
 using ManufacturingCoordinator.Enums;
+using ManufacturingCoordinator.Models.Authentication;
 using ManufacturingCoordinator.Models.PurchaseOrders;
-using backend.Models;
+using ManufacturingCoordinator.Models.Production;
+using ManufacturingCoordinator.Models.Administration;
+using ManufacturingCoordinator.Models.Inventory;
+using ManufacturingCoordinator.Models.Quality;
+using ManufacturingCoordinator.Api.Interfaces;
+using RawMaterial = backend.Models.RawMaterial;
 
 namespace ManufacturingCoordinator.Data
 {
     public static class DbInitializer
     {
+        public static async Task SeedAsync(IServiceProvider serviceProvider)
+        {
+            using var scope = serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
+
+            // 1. Seed Users for all roles
+            var seedUsers = new[]
+            {
+                ("admin@amic.com", "System Admin", "Admin@123", UserRole.ITAdmin),
+                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker),
+                ("manager@amic.com", "Supply Chain Manager", "Manager@123", UserRole.SupplyChainManager),
+                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector)
+            };
+
+            foreach (var (email, name, pwd, role) in seedUsers)
+            {
+                var existing = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+                var hash = passwordHasher != null ? passwordHasher.HashPassword(pwd) : pwd;
+                if (existing != null)
+                {
+                    existing.FullName = name;
+                    if (passwordHasher != null) existing.PasswordHash = hash;
+                    existing.Role = role;
+                    existing.IsEmailVerified = true;
+                    existing.IsActive = true;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    db.Users.Add(new User
+                    {
+                        FullName = name,
+                        Email = email,
+                        PasswordHash = hash,
+                        Role = role,
+                        IsEmailVerified = true,
+                        IsActive = true
+                    });
+                }
+            }
+            await db.SaveChangesAsync();
+
+            await SeedEntitiesAsync(db);
+        }
+
         public static async Task SeedAsync(ApplicationDbContext context)
         {
-            // 1. Seed RawMaterials if table is empty
-            if (!await context.RawMaterials.AnyAsync())
+            await SeedEntitiesAsync(context);
+        }
+
+        private static async Task SeedEntitiesAsync(ApplicationDbContext db)
+        {
+            // 2. Seed RawMaterials
+            if (!await db.RawMaterials.AnyAsync())
             {
                 var materials = new List<RawMaterial>
                 {
@@ -54,12 +111,12 @@ namespace ManufacturingCoordinator.Data
                     }
                 };
 
-                context.RawMaterials.AddRange(materials);
-                await context.SaveChangesAsync();
+                db.RawMaterials.AddRange(materials);
+                await db.SaveChangesAsync();
             }
 
-            // 2. Seed Suppliers if empty
-            if (!await context.Suppliers.AnyAsync())
+            // 3. Seed Suppliers
+            if (!await db.Suppliers.AnyAsync())
             {
                 var suppliers = new List<Supplier>
                 {
@@ -104,20 +161,19 @@ namespace ManufacturingCoordinator.Data
                     }
                 };
 
-                context.Suppliers.AddRange(suppliers);
-                await context.SaveChangesAsync();
+                db.Suppliers.AddRange(suppliers);
+                await db.SaveChangesAsync();
             }
 
-            // 3. Seed Purchase Orders with Order Lines if none exist
-            if (!await context.PurchaseOrders.AnyAsync())
+            // 4. Seed Purchase Orders with Order Lines if none exist
+            if (!await db.PurchaseOrders.AnyAsync())
             {
-                var supplier1 = await context.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-001");
-                var supplier2 = await context.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-002");
-                var material1 = await context.RawMaterials.FirstOrDefaultAsync();
+                var supplier1 = await db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-001");
+                var supplier2 = await db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-002");
+                var material1 = await db.RawMaterials.FirstOrDefaultAsync();
 
                 if (supplier1 != null && material1 != null)
                 {
-                    // Seed a historical completed PO
                     var po1 = new PurchaseOrder
                     {
                         PoNumber = "PO-2026-0001",
@@ -150,11 +206,10 @@ namespace ManufacturingCoordinator.Data
                         }
                     };
 
-                    context.PurchaseOrders.Add(po1);
-                    await context.SaveChangesAsync();
+                    db.PurchaseOrders.Add(po1);
+                    await db.SaveChangesAsync();
 
-                    // Seed an approval audit
-                    context.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                    db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
                     {
                         PurchaseOrderId = po1.Id,
                         Action = "PO approved",
@@ -163,8 +218,7 @@ namespace ManufacturingCoordinator.Data
                         Timestamp = DateTime.UtcNow.AddDays(-10)
                     });
 
-                    // Seed a payment transaction
-                    context.PaymentTransactions.Add(new PaymentTransaction
+                    db.PaymentTransactions.Add(new PaymentTransaction
                     {
                         PurchaseOrderId = po1.Id,
                         TransactionId = "pi_mock_seed_001",
@@ -174,12 +228,11 @@ namespace ManufacturingCoordinator.Data
                         Timestamp = DateTime.UtcNow.AddDays(-10)
                     });
 
-                    await context.SaveChangesAsync();
+                    await db.SaveChangesAsync();
                 }
 
                 if (supplier2 != null && material1 != null)
                 {
-                    // Seed a pending approval PO for manager review ($9,000 > $5,000 threshold)
                     var po2 = new PurchaseOrder
                     {
                         PoNumber = "PO-2026-0002",
@@ -208,10 +261,10 @@ namespace ManufacturingCoordinator.Data
                         }
                     };
 
-                    context.PurchaseOrders.Add(po2);
-                    await context.SaveChangesAsync();
+                    db.PurchaseOrders.Add(po2);
+                    await db.SaveChangesAsync();
 
-                    context.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                    db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
                     {
                         PurchaseOrderId = po2.Id,
                         Action = "PO submitted",
@@ -220,8 +273,317 @@ namespace ManufacturingCoordinator.Data
                         Timestamp = DateTime.UtcNow.AddHours(-1)
                     });
 
-                    await context.SaveChangesAsync();
+                    await db.SaveChangesAsync();
                 }
+            }
+
+            // 5. Seed Machines & Maintenance Logs
+            if (!await db.Machines.AnyAsync())
+            {
+                var cncMachine = new Machine
+                {
+                    Name = "CNC Milling Machine 01",
+                    Status = MachineStatus.Operational,
+                    UptimeHours = 480,
+                    MaintenanceIntervalHours = 500,
+                    Location = "Floor A - Sector 1"
+                };
+
+                var pressMachine = new Machine
+                {
+                    Name = "Hydraulic Press 02",
+                    Status = MachineStatus.UnderMaintenance,
+                    UptimeHours = 510,
+                    MaintenanceIntervalHours = 500,
+                    Location = "Floor B - Sector 2"
+                };
+
+                var welderMachine = new Machine
+                {
+                    Name = "Robotic Welder 03",
+                    Status = MachineStatus.Operational,
+                    UptimeHours = 120,
+                    MaintenanceIntervalHours = 600,
+                    Location = "Floor A - Sector 3"
+                };
+
+                var laserCutter = new Machine
+                {
+                    Name = "Laser Cutter 04",
+                    Status = MachineStatus.Offline,
+                    UptimeHours = 300,
+                    MaintenanceIntervalHours = 400,
+                    Location = "Floor C - Sector 1"
+                };
+
+                await db.Machines.AddRangeAsync(cncMachine, pressMachine, welderMachine, laserCutter);
+                await db.SaveChangesAsync();
+
+                var logs = new List<MaintenanceLog>
+                {
+                    new MaintenanceLog
+                    {
+                        MachineId = pressMachine.Id,
+                        Description = "Hydraulic seal replacement and fluid flush",
+                        PerformedBy = "Senior Tech - John D.",
+                        Type = MaintenanceType.Emergency,
+                        PerformedAt = DateTime.UtcNow.AddHours(-6)
+                    },
+                    new MaintenanceLog
+                    {
+                        MachineId = cncMachine.Id,
+                        Description = "Spindle lubrication and calibration verification",
+                        PerformedBy = "Tech - Sarah M.",
+                        Type = MaintenanceType.Preventive,
+                        PerformedAt = DateTime.UtcNow.AddDays(-3)
+                    }
+                };
+
+                await db.MaintenanceLogs.AddRangeAsync(logs);
+                await db.SaveChangesAsync();
+            }
+
+            // 6. Seed Shifts
+            if (!await db.Shifts.AnyAsync())
+            {
+                var shifts = new List<Shift>
+                {
+                    new Shift
+                    {
+                        Name = "Morning Production Shift A",
+                        ProductionTarget = 1500,
+                        AvailableMaterial = 1400,
+                        AdjustedOutput = 1350,
+                        ActualOutput = 1320,
+                        Status = ShiftStatus.Completed,
+                        StartTime = DateTime.UtcNow.Date.AddHours(6),
+                        EndTime = DateTime.UtcNow.Date.AddHours(14)
+                    },
+                    new Shift
+                    {
+                        Name = "Afternoon Production Shift B",
+                        ProductionTarget = 1800,
+                        AvailableMaterial = 1900,
+                        AdjustedOutput = 1800,
+                        ActualOutput = 950,
+                        Status = ShiftStatus.InProgress,
+                        StartTime = DateTime.UtcNow.Date.AddHours(14),
+                        EndTime = DateTime.UtcNow.Date.AddHours(22)
+                    },
+                    new Shift
+                    {
+                        Name = "Night Maintenance & Output Shift C",
+                        ProductionTarget = 1000,
+                        AvailableMaterial = 1200,
+                        AdjustedOutput = 1000,
+                        ActualOutput = 0,
+                        Status = ShiftStatus.Planned,
+                        StartTime = DateTime.UtcNow.Date.AddHours(22),
+                        EndTime = DateTime.UtcNow.Date.AddDays(1).AddHours(6)
+                    }
+                };
+
+                await db.Shifts.AddRangeAsync(shifts);
+                await db.SaveChangesAsync();
+            }
+
+            // 7. Seed Agent Workflows
+            if (!await db.AgentWorkflows.AnyAsync())
+            {
+                var workflows = new List<AgentWorkflow>
+                {
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1001",
+                        Objective = "Optimize CNC feed rates and verify safety tolerances",
+                        CurrentAgent = "Validation/Safety",
+                        Status = WorkflowStatus.WaitingForApproval,
+                        ApprovalStatus = ApprovalStatus.Pending,
+                        StartedAt = DateTime.UtcNow.AddHours(-3),
+                        FinalOutcome = null
+                    },
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1002",
+                        Objective = "Automated raw material procurement & PO dispatch",
+                        CurrentAgent = "ProcurementAgent",
+                        Status = WorkflowStatus.Completed,
+                        ApprovalStatus = ApprovalStatus.Approved,
+                        StartedAt = DateTime.UtcNow.AddDays(-1),
+                        CompletedAt = DateTime.UtcNow.AddDays(-1).AddMinutes(45),
+                        FinalOutcome = "PO-9021 issued and vendor confirmed receipt."
+                    },
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1003",
+                        Objective = "Anomaly detection & predictive diagnostics for Hydraulic Press 02",
+                        CurrentAgent = "MaintenanceDiagnostics",
+                        Status = WorkflowStatus.Running,
+                        ApprovalStatus = ApprovalStatus.Pending,
+                        StartedAt = DateTime.UtcNow.AddMinutes(-40),
+                        FinalOutcome = null
+                    }
+                };
+
+                await db.AgentWorkflows.AddRangeAsync(workflows);
+                await db.SaveChangesAsync();
+            }
+
+            // 8. Seed Audit Logs
+            if (!await db.AuditLogs.AnyAsync())
+            {
+                var auditLogs = new List<AuditLog>
+                {
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "SEED_DATABASE",
+                        Entity = "System",
+                        EntityId = "INITIAL_SEED",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-10)
+                    },
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "CREATE",
+                        Entity = "Machine",
+                        EntityId = "CNC-01",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-8)
+                    },
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "ADJUST_OUTPUT",
+                        Entity = "Shift",
+                        EntityId = "Shift-Morning-A",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-5)
+                    }
+                };
+
+                await db.AuditLogs.AddRangeAsync(auditLogs);
+                await db.SaveChangesAsync();
+            }
+
+            // 9. Seed Batches, InventoryRolls, DefectReports & Quarantines
+            if (!await db.Batches.AnyAsync())
+            {
+                var batch1 = new Batch
+                {
+                    Id = "BATCH001",
+                    ProductType = ProductType.BoxPouch
+                };
+
+                var batch2 = new Batch
+                {
+                    Id = "BATCH002",
+                    ProductType = ProductType.BiscuitPackaging
+                };
+
+                var batch3 = new Batch
+                {
+                    Id = "BATCH003",
+                    ProductType = ProductType.TeaBag
+                };
+
+                await db.Batches.AddRangeAsync(batch1, batch2, batch3);
+                await db.SaveChangesAsync();
+
+                var roll1 = new InventoryRoll
+                {
+                    Id = "ROLL-001",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll2 = new InventoryRoll
+                {
+                    Id = "ROLL-002",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Quarantined
+                };
+
+                var roll3 = new InventoryRoll
+                {
+                    Id = "ROLL-003",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll4 = new InventoryRoll
+                {
+                    Id = "ROLL-004",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll5 = new InventoryRoll
+                {
+                    Id = "ROLL-005",
+                    BatchId = batch3.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                await db.InventoryRolls.AddRangeAsync(roll1, roll2, roll3, roll4, roll5);
+                await db.SaveChangesAsync();
+
+                var qualityUser = await db.Users.FirstOrDefaultAsync(u => u.Email == "quality@amic.com");
+
+                var defect1 = new DefectReport
+                {
+                    BatchId = batch1.Id,
+                    ProductType = ProductType.BoxPouch,
+                    Severity = DefectSeverity.HIGH,
+                    Description = "Edge sealing delamination and micro-perforations observed along roll perimeter.",
+                    Status = DefectStatus.Open,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2)
+                };
+
+                var defect2 = new DefectReport
+                {
+                    BatchId = batch2.Id,
+                    ProductType = ProductType.BiscuitPackaging,
+                    Severity = DefectSeverity.MEDIUM,
+                    Description = "Color misalignment and minor ink smudging on secondary packaging film.",
+                    Status = DefectStatus.InReview,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                };
+
+                await db.DefectReports.AddRangeAsync(defect1, defect2);
+                await db.SaveChangesAsync();
+
+                var quarantine1 = new Quarantine
+                {
+                    DefectReportId = defect1.Id,
+                    InventoryRollId = roll2.Id,
+                    Reason = "Roll quarantined due to severe delamination risk on sealing line.",
+                    Status = QuarantineStatus.Active,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1),
+                    ReleasedAt = null
+                };
+
+                var quarantine2 = new Quarantine
+                {
+                    DefectReportId = defect2.Id,
+                    InventoryRollId = roll3.Id,
+                    Reason = "Temporary hold for ink smear inspection. Batch cleared after lab chromatography test.",
+                    Status = QuarantineStatus.Released,
+                    CreatedAt = DateTime.UtcNow.AddDays(-4),
+                    ReleasedAt = DateTime.UtcNow.AddDays(-3)
+                };
+
+                await db.Quarantines.AddRangeAsync(quarantine1, quarantine2);
+                await db.SaveChangesAsync();
             }
         }
     }

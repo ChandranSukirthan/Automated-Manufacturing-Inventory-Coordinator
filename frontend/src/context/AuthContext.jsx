@@ -1,79 +1,58 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import { useState } from 'react';
 import authService from '../services/authService';
+import { AuthContext } from './authContext';
 
-const AuthContext = createContext();
+function readStoredUser() {
+  const storedUser = localStorage.getItem('user');
+  const token = localStorage.getItem('accessToken');
 
-export const useAuth = () => useContext(AuthContext);
+  if (!storedUser || !token) return null;
+
+  try {
+    return JSON.parse(storedUser);
+  } catch (error) {
+    console.error('Failed to parse stored user data', error);
+    localStorage.removeItem('user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    return null;
+  }
+}
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check if there's a stored user on initial load
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('accessToken');
-    
-    if (storedUser && token) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Failed to parse stored user data', e);
-        logout();
-      }
-    }
-    setLoading(false);
-  }, []);
+  const [user, setUser] = useState(readStoredUser);
 
   const login = async (email, password) => {
-    try {
-      const data = await authService.login(email, password);
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
-      setUser(data.user);
-      return data;
-    } catch (error) {
-      throw error;
-    }
+    const data = await authService.login(email, password);
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
   };
 
   const register = async (payload) => {
-    try {
-      const data = await authService.register(payload);
-      return data;
-    } catch (error) {
-      throw error;
-    }
+    return authService.register(payload);
   };
 
   const googleLogin = async (tokenId) => {
-    try {
-      const data = await authService.googleLogin(tokenId);
-      if (!data.requiresRoleSelection && data.authResponse) {
-        localStorage.setItem('accessToken', data.authResponse.accessToken);
-        localStorage.setItem('refreshToken', data.authResponse.refreshToken);
-        localStorage.setItem('user', JSON.stringify(data.authResponse.user));
-        setUser(data.authResponse.user);
-      }
-      return data;
-    } catch (error) {
-      throw error;
+    const data = await authService.googleLogin(tokenId);
+    if (!data.requiresRoleSelection && data.authResponse) {
+      localStorage.setItem('accessToken', data.authResponse.accessToken);
+      localStorage.setItem('refreshToken', data.authResponse.refreshToken);
+      localStorage.setItem('user', JSON.stringify(data.authResponse.user));
+      setUser(data.authResponse.user);
     }
+    return data;
   };
 
   const googleRegister = async (tokenId, role) => {
-    try {
-      const data = await authService.googleRegister(tokenId, role);
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      setUser(data.user);
-      return data;
-    } catch (error) {
-      throw error;
-    }
+    const data = await authService.googleRegister(tokenId, role);
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
   };
 
   const logout = () => {
@@ -83,20 +62,30 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateProfile = async (fullName) => {
+    const updatedUser = await authService.updateProfile(fullName);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+    return updatedUser;
+  };
+
   const value = {
     user,
-    loading,
     login,
     register,
     googleLogin,
     googleRegister,
+    updateProfile,
     logout,
     isAuthenticated: !!user
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
+
+export { useAuth } from './useAuth.js';
+

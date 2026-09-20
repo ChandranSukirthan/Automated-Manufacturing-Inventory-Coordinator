@@ -1,4 +1,6 @@
 using System.Threading.Tasks;
+using System;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ManufacturingCoordinator.Api.DTOs.Authentication;
@@ -109,6 +111,31 @@ namespace ManufacturingCoordinator.Api.Controllers
 
             var result = await _authService.RefreshTokenAsync(request);
             return Ok(result);
+        }
+
+        [HttpGet("profile")]
+        [Authorize]
+        public async Task<IActionResult> GetProfile()
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+
+            var profile = await _authService.GetProfileAsync(userId);
+            return profile == null ? NotFound() : Ok(profile);
+        }
+
+        [HttpPut("profile")]
+        [Authorize]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequestDto request)
+        {
+            if (!TryGetUserId(out var userId)) return Unauthorized();
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            return Ok(await _authService.UpdateProfileAsync(userId, request));
+        }
+
+        private bool TryGetUserId(out Guid userId)
+        {
+            return Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
         }
     }
 }

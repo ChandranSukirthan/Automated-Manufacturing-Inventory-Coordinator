@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Timer, AlertCircle, Loader2 } from 'lucide-react';
 import AuthLayout from '../../components/Auth/AuthLayout';
 import authService from '../../services/authService';
-import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function OTPVerification() {
   const navigate = useNavigate();
@@ -14,14 +13,11 @@ export default function OTPVerification() {
   const [timeLeft, setTimeLeft] = useState(180); // 3 minutes
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isExpired, setIsExpired] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const inputRefs = useRef([]);
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      setIsExpired(true);
-      setError('OTP has expired. Please request a new one.');
       return;
     }
 
@@ -31,6 +27,8 @@ export default function OTPVerification() {
 
     return () => clearInterval(timerId);
   }, [timeLeft]);
+
+  const isExpired = timeLeft <= 0;
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
@@ -74,7 +72,7 @@ export default function OTPVerification() {
       const response = await authService.verifyOtp(email, enteredOtp);
       navigate('/login', { state: { message: response.message || 'Account verified successfully. Please log in.' } });
     } catch (err) {
-      setError(parseErrorMessage(err, 'Invalid or expired OTP.'));
+      setError(err.response?.data?.message || 'Invalid or expired OTP.');
     } finally {
       setLoading(false);
     }
@@ -87,11 +85,10 @@ export default function OTPVerification() {
       await authService.resendOtp(email);
       setOtp(['', '', '', '', '', '']);
       setTimeLeft(180);
-      setIsExpired(false);
       setSuccessMessage('A new verification code has been sent to your email.');
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Failed to resend OTP. Please try again.'));
+      setError(err.response?.data?.message || 'Failed to resend OTP. Please try again.');
     }
   };
 

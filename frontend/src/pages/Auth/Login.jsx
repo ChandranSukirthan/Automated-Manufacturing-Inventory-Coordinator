@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Eye, EyeOff, Loader2, Shield } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import AuthLayout from '../../components/Auth/AuthLayout';
-import { useAuth } from '../../context/AuthContext';
-import { parseErrorMessage } from '../../utils/errorHandler';
+import { useAuth } from '../../context/useAuth';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -38,33 +37,20 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await login(formData.email, formData.password);
-      const roleInt = data.user.role;
-      let path = '/';
-      
-      // Role-based routing based on UserRole enum integer
-      // 0: FloorWorker, 1: SupplyChainManager, 2: QualityInspector, 3: ITAdmin
-      if (roleInt === 3) path = '/dashboard/admin';
-      else if (roleInt === 0) path = '/dashboard/worker';
-      else if (roleInt === 2) path = '/dashboard/quality';
-      else if (roleInt === 1) path = '/dashboard/manager'; 
-      
-      if (roleInt === 3) navigate('/dashboard/admin');
-      else if (roleInt === 0) navigate('/dashboard/worker');
-      else if (roleInt === 2) navigate('/dashboard/quality');
-      else if (roleInt === 1) navigate('/dashboard/admin');
-      else navigate('/');
+      routeUserByRole(data.user.role);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Login failed. Please check your credentials.'));
+      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const routeUserByRole = (roleInt) => {
-    if (roleInt === 3) navigate('/dashboard/admin');
-    else if (roleInt === 0) navigate('/dashboard/worker');
-    else if (roleInt === 2) navigate('/dashboard/quality');
-    else if (roleInt === 1) navigate('/dashboard/admin');
+  const routeUserByRole = (roleValue) => {
+    const role = String(roleValue).trim().toLowerCase();
+    if (role === 'qualityinspector' || role === '2') navigate('/quality');
+    else if (role === 'floorworker' || role === '0') navigate('/dashboard/worker');
+    else if (role === 'itadmin' || role === '3') navigate('/dashboard/admin');
+    else if (role === 'supplychainmanager' || role === '1') navigate('/dashboard/admin');
     else navigate('/');
   };
 
@@ -80,7 +66,7 @@ export default function Login() {
         routeUserByRole(data.authResponse.user.role);
       }
     } catch (err) {
-      setError(parseErrorMessage(err, 'Google Login failed.'));
+      setError(err.response?.data?.message || 'Google Login failed.');
     } finally {
       setLoading(false);
     }
@@ -93,7 +79,7 @@ export default function Login() {
       const data = await googleRegister(googleTokenId, parseInt(selectedRole, 10));
       routeUserByRole(data.user.role);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Registration failed.'));
+      setError(err.response?.data?.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -195,7 +181,7 @@ export default function Login() {
             <input type="checkbox" className="w-4 h-4 rounded border-slate-700 bg-slate-900/50 text-brand-500 focus:ring-brand-500 focus:ring-offset-slate-950" />
             <span className="text-slate-400 group-hover:text-slate-300 transition-colors">Remember me</span>
           </label>
-          <Link to="/forgot-password" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</Link>
+          <a href="#" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</a>
         </div>
 
         <button

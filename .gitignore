@@ -11,6 +11,12 @@ yarn-error.log*
 # .NET Backend
 bin/
 obj/
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+backend/bin/
+backend/obj/
 *.user
 *.userosscache
 *.sln.docstates
@@ -19,6 +25,15 @@ obj/
 TestResults/
 *.log
 
+# Python / AI Service
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+*.egg-info/
+
 # Environment variables
 .env
 .env.local
@@ -26,6 +41,11 @@ TestResults/
 .env.test.local
 .env.production.local
 *.secret.json
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.py[cod]
 appsettings.Development.json
 appsettings.Local.json
 
@@ -50,6 +70,8 @@ Thumbs.db
 
 # Antigravity/Gemini (if applicable)
 .gemini/
+
+GIT_COMMIT_PLAN.md
 Library/
 .local/
 backend/Library/

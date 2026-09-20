@@ -1,6 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
 using ManufacturingCoordinator.Models.PurchaseOrders;
+using ManufacturingCoordinator.Models.Inventory;
+using ManufacturingCoordinator.Models.Quality;
+using ManufacturingCoordinator.Models.Production;
+using ManufacturingCoordinator.Models.Administration;
 using backend.Models;
 
 namespace ManufacturingCoordinator.Data
@@ -12,7 +17,7 @@ namespace ManufacturingCoordinator.Data
         {
         }
 
-        // Authentication
+        // Authentication (Student 1)
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<OtpVerification> OtpVerifications { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
@@ -25,6 +30,21 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
+
+        // Student 3 — QA / Defect Reporting & Inventory
+        public DbSet<DefectReport> DefectReports { get; set; } = null!;
+        public DbSet<Quarantine> Quarantines { get; set; } = null!;
+        public DbSet<Batch> Batches { get; set; } = null!;
+        public DbSet<ManufacturingCoordinator.Models.Inventory.InventoryRoll> InventoryRolls { get; set; } = null!;
+
+        // Student 4 — Production
+        public DbSet<Machine> Machines { get; set; } = null!;
+        public DbSet<MaintenanceLog> MaintenanceLogs { get; set; } = null!;
+        public DbSet<Shift> Shifts { get; set; } = null!;
+
+        // Student 4 — Administration
+        public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+        public DbSet<AgentWorkflow> AgentWorkflows { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -93,8 +113,7 @@ namespace ManufacturingCoordinator.Data
                     .HasForeignKey(o => o.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
 
-                // Speeds up lookups during verify: WHERE UserId = ? AND Purpose = ? AND IsUsed = false
-                entity.HasIndex(o => new { o.UserId, o.Purpose, o.IsUsed });
+                entity.HasIndex(o => new { o.UserId, o.Code, o.Purpose });
             });
 
             // ---- RefreshToken ----
@@ -122,7 +141,7 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(r => r.TokenHash);
             });
 
-            // ── Supplier ──────────────────────────────────────────────────────────
+            // ── Supplier (Student 2) ──────────────────────────────────────────────
             modelBuilder.Entity<Supplier>(entity =>
             {
                 entity.HasKey(s => s.Id);
@@ -168,7 +187,192 @@ namespace ManufacturingCoordinator.Data
                     .HasDefaultValueSql("timezone('utc', now())");
             });
 
-            // ── PurchaseOrder ─────────────────────────────────────────────────────
+            // ---- DefectReport (Student 3) ----
+            modelBuilder.Entity<DefectReport>(entity =>
+            {
+                entity.HasKey(d => d.Id);
+
+                entity.Property(d => d.BatchId)
+                    .IsRequired()
+                    .HasMaxLength(80);
+
+                entity.Property(d => d.ProductType)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Severity)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(d => d.Description)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(d => d.AffectedInventoryJson)
+                    .IsRequired()
+                    .HasDefaultValue("[]");
+
+                entity.Property(d => d.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(DefectStatus.Open);
+
+                entity.Property(d => d.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(d => d.ReportedByUser)
+                    .WithMany()
+                    .HasForeignKey(d => d.ReportedByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<Batch>(entity =>
+            {
+                entity.HasKey(b => b.Id);
+                entity.Property(b => b.Id).HasMaxLength(80);
+                entity.Property(b => b.ProductType).HasConversion<string>().IsRequired();
+            });
+
+            modelBuilder.Entity<ManufacturingCoordinator.Models.Inventory.InventoryRoll>(entity =>
+            {
+                entity.HasKey(i => i.Id);
+                entity.Property(i => i.Id).HasMaxLength(120);
+                entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
+                entity.Property(i => i.Status).HasConversion<string>().IsRequired();
+                entity.HasOne(i => i.Batch)
+                    .WithMany(b => b.InventoryRolls)
+                    .HasForeignKey(i => i.BatchId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(i => new { i.BatchId, i.Status });
+            });
+
+            modelBuilder.Entity<Quarantine>(entity =>
+            {
+                entity.HasKey(q => q.Id);
+
+                entity.Property(q => q.InventoryRollId)
+                    .IsRequired()
+                    .HasMaxLength(120);
+
+                entity.Property(q => q.Reason)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(q => q.Status)
+                    .HasConversion<string>()
+                    .HasDefaultValue(QuarantineStatus.Active);
+
+                entity.Property(q => q.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(q => q.DefectReport)
+                    .WithMany()
+                    .HasForeignKey(q => q.DefectReportId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(q => new { q.InventoryRollId, q.Status });
+            });
+
+            // ---- Machine (Student 4) ----
+            modelBuilder.Entity<Machine>(entity =>
+            {
+                entity.HasKey(m => m.Id);
+
+                entity.Property(m => m.Name)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(m => m.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(m => m.UptimeHours)
+                    .IsRequired();
+
+                entity.Property(m => m.MaintenanceIntervalHours)
+                    .IsRequired();
+
+                entity.Property(m => m.Location)
+                    .HasMaxLength(300);
+
+                entity.Property(m => m.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(m => m.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasIndex(m => m.Name);
+            });
+
+            // ---- MaintenanceLog (Student 4) ----
+            modelBuilder.Entity<MaintenanceLog>(entity =>
+            {
+                entity.HasKey(ml => ml.Id);
+
+                entity.Property(ml => ml.Description)
+                    .IsRequired()
+                    .HasMaxLength(1000);
+
+                entity.Property(ml => ml.PerformedBy)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                entity.Property(ml => ml.Type)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(ml => ml.PerformedAt)
+                    .IsRequired();
+
+                entity.Property(ml => ml.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(ml => ml.Machine)
+                    .WithMany(m => m.MaintenanceLogs)
+                    .HasForeignKey(ml => ml.MachineId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(ml => ml.MachineId);
+            });
+
+            // ---- Shift (Student 4) ----
+            modelBuilder.Entity<Shift>(entity =>
+            {
+                entity.HasKey(s => s.Id);
+
+                entity.Property(s => s.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(s => s.ProductionTarget)
+                    .IsRequired();
+
+                entity.Property(s => s.AvailableMaterial)
+                    .IsRequired();
+
+                entity.Property(s => s.AdjustedOutput)
+                    .IsRequired();
+
+                entity.Property(s => s.ActualOutput)
+                    .IsRequired();
+
+                entity.Property(s => s.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(s => s.StartTime)
+                    .IsRequired();
+
+                entity.Property(s => s.EndTime)
+                    .IsRequired();
+
+                entity.Property(s => s.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(s => s.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+            });
+
+            // ── PurchaseOrder (Student 2) ─────────────────────────────────────────
             modelBuilder.Entity<PurchaseOrder>(entity =>
             {
                 entity.HasKey(po => po.Id);
@@ -180,7 +384,6 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(po => po.PoNumber)
                     .IsUnique();
 
-                // Store enum as readable string
                 entity.Property(po => po.Status)
                     .HasConversion<string>()
                     .IsRequired();
@@ -248,7 +451,7 @@ namespace ManufacturingCoordinator.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            // ── PurchaseOrderApproval (Audit) ─────────────────────────────────────
+            // ── PurchaseOrderApproval (Audit - Student 2) ─────────────────────────
             modelBuilder.Entity<PurchaseOrderApproval>(entity =>
             {
                 entity.HasKey(a => a.Id);
@@ -279,7 +482,7 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(a => a.PurchaseOrderId);
             });
 
-            // ── PaymentTransaction ────────────────────────────────────────────────
+            // ── PaymentTransaction (Student 2) ────────────────────────────────────
             modelBuilder.Entity<PaymentTransaction>(entity =>
             {
                 entity.HasKey(pt => pt.Id);
@@ -313,7 +516,7 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(pt => pt.PurchaseOrderId);
             });
 
-            // ── SupplierPerformance ───────────────────────────────────────────────
+            // ── SupplierPerformance (Student 2) ───────────────────────────────────
             modelBuilder.Entity<SupplierPerformance>(entity =>
             {
                 entity.HasKey(sp => sp.Id);
@@ -344,7 +547,7 @@ namespace ManufacturingCoordinator.Data
                 entity.HasIndex(sp => sp.SupplierId);
             });
 
-            // ── OrderLine ─────────────────────────────────────────────────────────
+            // ── OrderLine (Student 2) ─────────────────────────────────────────────
             modelBuilder.Entity<OrderLine>(entity =>
             {
                 entity.HasKey(ol => ol.Id);
@@ -378,20 +581,88 @@ namespace ManufacturingCoordinator.Data
                     .OnDelete(DeleteBehavior.Cascade);
 
                 // FK to RawMaterial (Student 1 entity — in ManufacturingContext)
-                // We reference the table by name since they are in different DbContexts
                 entity.HasOne(ol => ol.RawMaterial)
                     .WithMany()
                     .HasForeignKey(ol => ol.RawMaterialId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ── RawMaterial (Existing table from Student 1) ───────────────────────
+            // ── RawMaterial (Student 1) ───────────────────────────────────────────
             modelBuilder.Entity<RawMaterial>(entity =>
             {
                 entity.ToTable("RawMaterials");
                 entity.HasKey(rm => rm.Id);
                 entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
                 entity.HasIndex(rm => rm.SkuCode).IsUnique();
+            });
+
+            // ---- AuditLog (Student 4) ----
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.HasKey(a => a.Id);
+
+                entity.Property(a => a.UserName)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                entity.Property(a => a.Action)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(a => a.Entity)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(a => a.EntityId)
+                    .HasMaxLength(100);
+
+                entity.Property(a => a.Timestamp)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(a => a.Success)
+                    .HasDefaultValue(true);
+
+                entity.Property(a => a.IpAddress)
+                    .HasMaxLength(50);
+
+                entity.HasIndex(a => a.UserId);
+                entity.HasIndex(a => a.Action);
+                entity.HasIndex(a => a.Entity);
+                entity.HasIndex(a => a.Timestamp);
+            });
+
+            // ---- AgentWorkflow (Student 4) ----
+            modelBuilder.Entity<AgentWorkflow>(entity =>
+            {
+                entity.HasKey(w => w.Id);
+
+                entity.Property(w => w.WorkflowId)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(w => w.WorkflowId)
+                    .IsUnique();
+
+                entity.Property(w => w.Objective)
+                    .IsRequired()
+                    .HasMaxLength(500);
+
+                entity.Property(w => w.CurrentAgent)
+                    .HasMaxLength(200);
+
+                entity.Property(w => w.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(w => w.ApprovalStatus)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(w => w.StartedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(w => w.FinalOutcome)
+                    .HasMaxLength(1000);
             });
         }
     }

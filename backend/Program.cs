@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization;
 
 using ManufacturingCoordinator.Api.Helpers;
 using ManufacturingCoordinator.Api.Interfaces;
@@ -33,8 +34,12 @@ builder.Configuration["JwtSettings:SecretKey"] = Env.GetString("JWT_SECRET_KEY")
 builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? builder.Configuration["JwtSettings:Issuer"];
 builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
 
-// Controllers
-builder.Services.AddControllers();
+// Controllers with JSON String Enum conversion
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // PostgreSQL + Entity Framework Core Contexts
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -45,12 +50,12 @@ builder.Services.AddDbContext<ManufacturingContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
-// Register Inventory & Agent Services
+// Register Inventory & Agent Services (Student 1)
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBarcodeService, BarcodeService>();
 builder.Services.AddHttpClient<IAgentIntegrationService, AgentIntegrationService>();
 
-// Register Auth Services
+// Register Auth Services (Student 1)
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
@@ -62,6 +67,20 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+
+// Register Student 3 - Quality & Defect Services
+builder.Services.AddScoped<IDefectReportService, DefectReportService>();
+builder.Services.AddScoped<IQuarantineService, QuarantineService>();
+
+// Register Student 4 - Production & Admin Services
+builder.Services.AddScoped<IMachineService, MachineService>();
+builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
+builder.Services.AddScoped<IShiftService, ShiftService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+
+// HttpContextAccessor (for audit log IP capture)
+builder.Services.AddHttpContextAccessor();
 
 // Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -109,10 +128,18 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// CORS for React frontend & Flutter mobile clients
+// CORS for React frontend & mobile clients
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(_ => true)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+    options.AddPolicy("ReactFrontend", policy =>
     {
         policy
             .SetIsOriginAllowed(_ => true)
@@ -134,21 +161,21 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Auto-create database tables on startup
+// Auto-create database tables on startup & seed
 using (var scope = app.Services.CreateScope())
 {
     try
     {
-        var mfgContext = scope.ServiceProvider.GetRequiredService<ManufacturingContext>();
-        mfgContext.Database.EnsureCreated();
+        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
+        mfgContext?.Database.EnsureCreated();
 
         var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         appContext.Database.EnsureCreated();
-        DbInitializer.SeedAsync(appContext).GetAwaiter().GetResult();
+        await DbInitializer.SeedAsync(app.Services);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"DB Auto-creation notice: {ex.Message}");
+        Console.WriteLine($"DB Auto-creation/seed notice: {ex.Message}");
     }
 }
 
