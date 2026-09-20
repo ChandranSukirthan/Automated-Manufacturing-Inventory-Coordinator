@@ -49,8 +49,8 @@ export default function Login() {
     const role = String(roleValue).trim().toLowerCase();
     if (role === 'qualityinspector' || role === '2') navigate('/quality');
     else if (role === 'floorworker' || role === '0') navigate('/dashboard/worker');
-    else if (role === 'itadmin' || role === '3') navigate('/dashboard/admin');
-    else if (role === 'supplychainmanager' || role === '1') navigate('/dashboard/admin');
+    else if (role === 'itadmin' || role === '3') navigate('/admin');
+    else if (role === 'supplychainmanager' || role === '1') navigate('/dashboard/manager');
     else navigate('/');
   };
 
