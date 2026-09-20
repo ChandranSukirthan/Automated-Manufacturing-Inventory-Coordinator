@@ -22,7 +22,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=inventory_coordinator
 DB_USER=postgres
-DB_PASSWORD=Sukir@211002
+DB_PASSWORD=123456789
 
 EMAIL_USER=sukirsukirthan347@gmail.com
 EMAIL_PASS=nvle fujf mljh imny
@@ -120,3 +120,4 @@ uvicorn ai.main:app --host 0.0.0.0 --port 8000 --reload
 | Floor Worker | worker@amic.com | Password123! |
 
 > Accounts are seeded on first `dotnet run`. Check `DbInitializer.cs` for details.
+
