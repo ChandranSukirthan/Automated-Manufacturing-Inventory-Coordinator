@@ -67,3 +67,4 @@ def test_agent_cooperation_and_data_passing():
     assert resumed["status"] == WorkflowStatus.Completed
     assert resumed["approval_status"] == ApprovalStatus.Approved
     assert any("Execution: PO" in step for step in resumed["completed_steps"])
+

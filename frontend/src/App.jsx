@@ -168,11 +168,59 @@ function App() {
             }
           />
 
-          {/* Worker Dashboard */}
+          {/* Student 1: Floor Worker Inventory & Stock Tracking Routes */}
           <Route
             path="/dashboard/worker"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/:id"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/rolls"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/stock-levels"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/low-stock"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/history"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
                 <WorkerDashboard />
               </ProtectedRoute>
             }
