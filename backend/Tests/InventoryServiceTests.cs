@@ -120,7 +120,7 @@ namespace backend.Tests
                 CurrentQuantity = 450m,
                 Status = "In Stock"
             });
-            Assert.True(roll.Id > 0);
+            Assert.False(string.IsNullOrEmpty(roll.Id));
             Assert.False(string.IsNullOrEmpty(roll.BarcodeUrl));
 
             // QR CODE LOOKUP

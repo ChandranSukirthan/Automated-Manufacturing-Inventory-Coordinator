@@ -28,11 +28,11 @@ namespace backend.Services
 
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();
-        Task<InventoryRoll?> GetInventoryRollByIdAsync(int id);
+        Task<InventoryRoll?> GetInventoryRollByIdAsync(string id);
         Task<QrLookupResultDto?> GetInventoryRollByQrAsync(string qrCode);
         Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
-        Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll);
-        Task<bool> DeleteInventoryRollAsync(int id);
+        Task<bool> UpdateInventoryRollAsync(string id, InventoryRoll roll);
+        Task<bool> DeleteInventoryRollAsync(string id);
 
         // Student 1: Stock Levels & Business Calculations
         Task<IEnumerable<StockLevelDetailDto>> GetStockLevelsAsync();

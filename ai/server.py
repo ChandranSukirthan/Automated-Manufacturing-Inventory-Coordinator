@@ -66,6 +66,8 @@ async def send_alert(client: httpx.AsyncClient, item: dict, is_predictive: bool 
         logger.debug(f"Inventory alert delivery note: {e}")
 
 
+_server_alerted_skus = set()
+
 async def inventory_monitor_task():
     """Background task checking inventory every CHECK_INTERVAL_SECONDS."""
     logger.info(f"Starting automated inventory monitor task (interval: {CHECK_INTERVAL_SECONDS}s)...")
@@ -82,14 +84,20 @@ async def inventory_monitor_task():
                             sku = item.get("sku", "Unknown")
 
                             if stock_level <= reorder_threshold:
-                                logger.warning(f"Low stock detected for {sku}: {stock_level} <= {reorder_threshold}")
-                                await send_alert(client, item, is_predictive=False)
+                                if sku not in _server_alerted_skus:
+                                    logger.warning(f"Low stock detected for {sku}: {stock_level} <= {reorder_threshold}")
+                                    await send_alert(client, item, is_predictive=False)
+                                    _server_alerted_skus.add(sku)
                             else:
+                                if sku in _server_alerted_skus:
+                                    _server_alerted_skus.discard(sku)
                                 daily_consumption = get_consumption_rate(sku)
                                 predicted_stock = stock_level - (daily_consumption * 5)
                                 if predicted_stock <= reorder_threshold:
-                                    logger.warning(f"Predictive Alert for {sku}: Forecasted below threshold in 5 days.")
-                                    await send_alert(client, item, is_predictive=True)
+                                    if sku not in _server_alerted_skus:
+                                        logger.warning(f"Predictive Alert for {sku}: Forecasted below threshold in 5 days.")
+                                        await send_alert(client, item, is_predictive=True)
+                                        _server_alerted_skus.add(sku)
             except Exception as e:
                 logger.debug(f"Monitor ping note: {e}")
 

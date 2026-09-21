@@ -90,8 +90,11 @@ async def autonomous_equipment_telemetry_scanner():
 
 
 # ── Background Task 2: Inventory Monitor (Student 1/2) ────────────────────
+_active_alerted_skus = set()
+
 async def inventory_monitor_task():
     """Polls /api/inventory every CHECK_INTERVAL_SECONDS and raises alerts for low stock."""
+    """Polls /api/inventory every CHECK_INTERVAL_SECONDS and raises alerts for low stock without spamming duplicates."""
     logger.info(f"Inventory monitor started (interval: {CHECK_INTERVAL_SECONDS}s)")
     async with httpx.AsyncClient() as client:
         while True:
@@ -103,11 +106,17 @@ async def inventory_monitor_task():
                         threshold = item.get("reorderThreshold", 0)
                         sku = item.get("sku", "Unknown")
                         if stock <= threshold:
-                            await _send_alert(client, item, is_predictive=False)
+                            if sku not in _active_alerted_skus:
+                                await _send_alert(client, item, is_predictive=False)
+                                _active_alerted_skus.add(sku)
                         else:
+                            if sku in _active_alerted_skus:
+                                _active_alerted_skus.discard(sku)
                             rate = _consumption_rate(sku)
                             if (stock - rate * 5) <= threshold:
-                                await _send_alert(client, item, is_predictive=True)
+                                if sku not in _active_alerted_skus:
+                                    await _send_alert(client, item, is_predictive=True)
+                                    _active_alerted_skus.add(sku)
             except Exception:
                 pass
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)

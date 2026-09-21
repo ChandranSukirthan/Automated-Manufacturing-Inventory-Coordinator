@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,12 +19,14 @@ using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Api.Interfaces;
+using backend.Data;
 
 namespace ManufacturingCoordinator.Services.PurchaseOrders
 {
     public class PurchaseOrderService : IPurchaseOrderService
     {
         private readonly ApplicationDbContext _context;
+        private readonly ManufacturingContext? _mfgContext;
         private readonly IStripeService _stripeService;
         private readonly IEmailService _emailService;
         private readonly IConfiguration _configuration;
@@ -35,13 +39,15 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             IStripeService stripeService,
             IEmailService emailService,
             IConfiguration configuration,
-            ILogger<PurchaseOrderService> logger)
+            ILogger<PurchaseOrderService> logger,
+            ManufacturingContext? mfgContext = null)
         {
             _context = context;
             _stripeService = stripeService;
             _emailService = emailService;
             _configuration = configuration;
             _logger = logger;
+            _mfgContext = mfgContext;
         }
 
         // ── Query ─────────────────────────────────────────────────────────────────
@@ -237,7 +243,135 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Trigger payment and dispatch after approval (with dev sandbox support)
             await ProcessPaymentInternalAsync(approvedPo, approverId, forceDispatch: true);
 
+            // Sync with AgentWorkflow if this PO was AI-generated
+            try
+            {
+                if (!string.IsNullOrEmpty(approvedPo.Notes))
+                {
+                    var match = Regex.Match(approvedPo.Notes, @"(WF-[A-Za-z0-9_-]+)");
+                    if (match.Success)
+                    {
+                        var wfId = match.Groups[1].Value;
+                        var wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
+                        if (wf != null)
+                        {
+                            wf.Status = WorkflowStatus.Completed;
+                            wf.ApprovalStatus = ApprovalStatus.Approved;
+                            wf.CurrentAgent = "Execution";
+                            wf.CompletedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
+                        }
+
+                        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/approve", null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync approval to AI workflow for PO {Id}", id);
+            }
+
+            // Replenish inventory stock and resolve alerts
+            if (_mfgContext != null)
+            {
+                await ReplenishInventoryAsync(approvedPo);
+            }
+
             return (await GetByIdAsync(approvedPo.Id))!;
+        }
+
+        private async Task ReplenishInventoryAsync(PurchaseOrder po)
+        {
+            if (_mfgContext == null) return;
+
+            try
+            {
+                var lines = po.OrderLines;
+                if (lines == null || !lines.Any())
+                {
+                    lines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
+                }
+
+                foreach (var line in lines)
+                {
+                    backend.Models.RawMaterial? material = null;
+                    if (line.RawMaterialId > 0)
+                    {
+                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => m.Id == line.RawMaterialId);
+                    }
+
+                    if (material == null && !string.IsNullOrEmpty(line.Description))
+                    {
+                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => 
+                            line.Description.Contains(m.SkuCode) || line.Description.Contains(m.Name));
+                    }
+
+                    if (material == null && !string.IsNullOrEmpty(po.Notes))
+                    {
+                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => 
+                            po.Notes.Contains(m.SkuCode) || po.Notes.Contains(m.Name));
+                    }
+
+                    material ??= await _mfgContext.RawMaterials.FirstOrDefaultAsync();
+
+                    if (material != null)
+                    {
+                        // 1. Create newly received inventory roll
+                        var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
+                        var newRoll = new backend.Models.InventoryRoll
+                        {
+                            Id = rollId,
+                            RollIdentifier = rollId,
+                            BatchId = "BATCH001",
+                            RawMaterialId = material.Id,
+                            InitialQuantity = line.Quantity,
+                            CurrentQuantity = line.Quantity,
+                            Status = "In Stock",
+                            BarcodeUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={rollId}",
+                            ReceivedDate = DateTime.UtcNow,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+                        _mfgContext.InventoryRolls.Add(newRoll);
+
+                        // 2. Update StockLevel if present
+                        var stockLevel = await _mfgContext.StockLevels.FirstOrDefaultAsync(s => s.RawMaterialId == material.Id);
+                        if (stockLevel != null)
+                        {
+                            stockLevel.TotalQuantity += line.Quantity;
+                            stockLevel.RecordedAt = DateTime.UtcNow;
+                        }
+
+                        // 3. Update legacy/general InventoryItem if exists
+                        var item = await _mfgContext.InventoryItems.FirstOrDefaultAsync(i => 
+                            i.Sku == material.SkuCode || i.Name.ToLower() == material.Name.ToLower());
+                        if (item != null)
+                        {
+                            item.StockLevel += (int)line.Quantity;
+                        }
+
+                        // 4. Resolve any pending or in-progress alerts for this SKU!
+                        var alerts = await _mfgContext.StockAlerts
+                            .Where(a => a.Sku == material.SkuCode && (a.Status == "Pending" || a.Status == "Processing" || a.Status == "Acknowledged"))
+                            .ToListAsync();
+
+                        foreach (var a in alerts)
+                        {
+                            a.Status = "Resolved";
+                        }
+
+                        _logger.LogInformation("Replenished {Qty} units for raw material {Sku}. Created Roll {RollId} and resolved {AlertCount} alerts.", 
+                            line.Quantity, material.SkuCode, rollId, alerts.Count);
+                    }
+                }
+
+                await _mfgContext.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to automatically replenish inventory for PO {PoNumber}", po.PoNumber);
+            }
         }
 
         public async Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason)
@@ -258,6 +392,34 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             await RecordAuditAsync(po.Id, "PO rejected", approverId, $"Rejected: {reason}");
 
             if (tx is not null) await tx.CommitAsync();
+
+            // Sync with AgentWorkflow if this PO was AI-generated
+            try
+            {
+                if (!string.IsNullOrEmpty(po.Notes))
+                {
+                    var match = Regex.Match(po.Notes, @"(WF-[A-Za-z0-9_-]+)");
+                    if (match.Success)
+                    {
+                        var wfId = match.Groups[1].Value;
+                        var wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
+                        if (wf != null)
+                        {
+                            wf.Status = WorkflowStatus.Failed;
+                            wf.ApprovalStatus = ApprovalStatus.Rejected;
+                            wf.CompletedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
+                        }
+
+                        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/reject", null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to sync rejection to AI workflow for PO {Id}", id);
+            }
 
             return (await GetByIdAsync(po.Id))!;
         }

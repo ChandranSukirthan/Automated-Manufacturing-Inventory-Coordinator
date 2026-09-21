@@ -30,7 +30,7 @@ namespace backend.Dtos
 
     public class QrLookupResultDto
     {
-        public int RollId { get; set; }
+        public string RollId { get; set; } = string.Empty;
         public string RollIdentifier { get; set; } = string.Empty;
         public string BarcodeUrl { get; set; } = string.Empty;
         public int RawMaterialId { get; set; }

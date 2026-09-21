@@ -244,7 +244,8 @@ export default function AiApprovals() {
               const budgetLimit = po.budgetLimit || 15000;
               const budgetPercentage = Math.round((totalAmount / budgetLimit) * 100);
 
-              const workflowId = `WF-${po.poNumber}`;
+              const wfMatch = po.notes?.match(/(WF-[A-Za-z0-9_-]+)/);
+              const workflowId = wfMatch ? wfMatch[1] : (po.poNumber.startsWith('PO-DRAFT-') ? `WF-${po.poNumber.replace('PO-DRAFT-', '')}` : `WF-${po.poNumber}`);
               const riskLevel = totalAmount > 10000 ? 'Moderate' : 'Low Risk';
 
               return (

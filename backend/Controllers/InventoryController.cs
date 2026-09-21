@@ -136,8 +136,8 @@ namespace backend.Controllers
         }
 
         // GET: api/inventory/rolls/{id}
-        [HttpGet("rolls/{id:int}")]
-        public async Task<ActionResult<InventoryRoll>> GetRollById(int id)
+        [HttpGet("rolls/{id}")]
+        public async Task<ActionResult<InventoryRoll>> GetRollById(string id)
         {
             var roll = await _inventoryService.GetInventoryRollByIdAsync(id);
             if (roll == null) return NotFound($"Roll {id} not found.");
@@ -161,8 +161,8 @@ namespace backend.Controllers
         }
 
         // PUT: api/inventory/rolls/{id}
-        [HttpPut("rolls/{id:int}")]
-        public async Task<IActionResult> UpdateRoll(int id, [FromBody] InventoryRoll roll)
+        [HttpPut("rolls/{id}")]
+        public async Task<IActionResult> UpdateRoll(string id, [FromBody] InventoryRoll roll)
         {
             if (id != roll.Id) return BadRequest("ID mismatch.");
             var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
@@ -171,8 +171,8 @@ namespace backend.Controllers
         }
 
         // DELETE: api/inventory/rolls/{id}
-        [HttpDelete("rolls/{id:int}")]
-        public async Task<IActionResult> DeleteRoll(int id)
+        [HttpDelete("rolls/{id}")]
+        public async Task<IActionResult> DeleteRoll(string id)
         {
             var deleted = await _inventoryService.DeleteInventoryRollAsync(id);
             if (!deleted) return NotFound();
