@@ -11,6 +11,12 @@ yarn-error.log*
 # .NET Backend
 bin/
 obj/
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+backend/bin/
+backend/obj/
 *.user
 *.userosscache
 *.sln.docstates
@@ -66,3 +72,18 @@ Thumbs.db
 .gemini/
 
 GIT_COMMIT_PLAN.md
+Library/
+.local/
+backend/Library/
+.aspnet/
+backend/.aspnet/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Gradle / Android caches
+.gradle/
+**/.gradle/

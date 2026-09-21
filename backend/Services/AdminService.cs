@@ -12,6 +12,8 @@ using ManufacturingCoordinator.Api.Interfaces;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Authentication;
 using ManufacturingCoordinator.Models.Production;
+using ManufacturingCoordinator.Models.PurchaseOrders;
+using backend.Data;
 
 namespace ManufacturingCoordinator.Api.Services
 {
@@ -19,11 +21,13 @@ namespace ManufacturingCoordinator.Api.Services
     {
         private readonly ApplicationDbContext _db;
         private readonly IPasswordHasher _passwordHasher;
+        private readonly ManufacturingContext? _mfgContext;
 
-        public AdminService(ApplicationDbContext db, IPasswordHasher passwordHasher)
+        public AdminService(ApplicationDbContext db, IPasswordHasher passwordHasher, ManufacturingContext? mfgContext = null)
         {
             _db = db;
             _passwordHasher = passwordHasher;
+            _mfgContext = mfgContext;
         }
 
         // ========== User Management ==========
@@ -289,9 +293,88 @@ namespace ManufacturingCoordinator.Api.Services
                     w.FinalOutcome = "Execution halted (Safe Failure): Target machine was not found in the factory equipment directory. No physical equipment was modified.";
                 }
             }
+            // Replenishment Domain Action & Purchase Order Sync
+            var matchingPo = await _db.PurchaseOrders
+                .Include(p => p.OrderLines)
+                .FirstOrDefaultAsync(p => p.Notes != null && p.Notes.Contains(w.WorkflowId));
+
+            if (matchingPo != null && matchingPo.Status == PurchaseOrderStatus.PendingApproval)
+            {
+                matchingPo.Status = PurchaseOrderStatus.Approved;
+                matchingPo.ApprovedAt = DateTime.UtcNow;
+                matchingPo.UpdatedAt = DateTime.UtcNow;
+
+                _db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                {
+                    PurchaseOrderId = matchingPo.Id,
+                    Action = "ApprovedBySupervisor",
+                    Notes = $"Authorized by Production Supervisor / IT Admin via Workflow {w.WorkflowId}.",
+                    Timestamp = DateTime.UtcNow
+                });
+
+                w.FinalOutcome = $"Approved by Production Supervisor. Order {matchingPo.PoNumber} authorized and queued for payment dispatch.";
+
+                // Replenish inventory stock and resolve alerts
+                if (_mfgContext != null)
+                {
+                    try
+                    {
+                        var lines = matchingPo.OrderLines ?? await _db.OrderLines.Where(l => l.PurchaseOrderId == matchingPo.Id).ToListAsync();
+                        foreach (var line in lines)
+                        {
+                            var mat = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => m.Id == line.RawMaterialId)
+                                ?? await _mfgContext.RawMaterials.FirstOrDefaultAsync();
+                            if (mat != null)
+                            {
+                                var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
+                                _mfgContext.InventoryRolls.Add(new backend.Models.InventoryRoll
+                                {
+                                    Id = rollId,
+                                    RollIdentifier = rollId,
+                                    BatchId = "BATCH001",
+                                    RawMaterialId = mat.Id,
+                                    InitialQuantity = line.Quantity,
+                                    CurrentQuantity = line.Quantity,
+                                    Status = "In Stock",
+                                    BarcodeUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={rollId}",
+                                    ReceivedDate = DateTime.UtcNow,
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                });
+
+                                var stockLvl = await _mfgContext.StockLevels.FirstOrDefaultAsync(s => s.RawMaterialId == mat.Id);
+                                if (stockLvl != null)
+                                {
+                                    stockLvl.TotalQuantity += line.Quantity;
+                                    stockLvl.RecordedAt = DateTime.UtcNow;
+                                }
+
+                                var item = await _mfgContext.InventoryItems.FirstOrDefaultAsync(i => i.Sku == mat.SkuCode);
+                                if (item != null)
+                                {
+                                    item.StockLevel += (int)line.Quantity;
+                                }
+
+                                var alerts = await _mfgContext.StockAlerts
+                                    .Where(a => a.Sku == mat.SkuCode && (a.Status == "Pending" || a.Status == "Processing" || a.Status == "Acknowledged"))
+                                    .ToListAsync();
+                                foreach (var a in alerts)
+                                {
+                                    a.Status = "Resolved";
+                                }
+                            }
+                        }
+                        await _mfgContext.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        // Ignore non-critical inventory sync errors
+                    }
+                }
+            }
             else if (string.IsNullOrEmpty(w.FinalOutcome) || w.FinalOutcome.Contains("PO-DRAFT"))
             {
-                w.FinalOutcome = "Approved by IT Admin. Requisition queued and production schedule reconciled.";
+                w.FinalOutcome = "Approved by Production Supervisor / IT Admin. Requisition queued and production schedule reconciled.";
             }
 
             await _db.SaveChangesAsync();
@@ -331,6 +414,24 @@ namespace ManufacturingCoordinator.Api.Services
             w.CompletedAt = DateTime.UtcNow;
             w.FinalOutcome = "Workflow execution rejected by human administrator.";
 
+            var matchingPo = await _db.PurchaseOrders
+                .FirstOrDefaultAsync(p => p.Notes != null && p.Notes.Contains(w.WorkflowId));
+
+            if (matchingPo != null && matchingPo.Status == PurchaseOrderStatus.PendingApproval)
+            {
+                matchingPo.Status = PurchaseOrderStatus.Rejected;
+                matchingPo.RejectionReason = "Rejected by Production Supervisor / IT Admin";
+                matchingPo.UpdatedAt = DateTime.UtcNow;
+
+                _db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                {
+                    PurchaseOrderId = matchingPo.Id,
+                    Action = "RejectedBySupervisor",
+                    Notes = $"Rejected by Production Supervisor / IT Admin via Workflow {w.WorkflowId}.",
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
             await _db.SaveChangesAsync();
 
             return new AgentWorkflowDto
@@ -351,11 +452,107 @@ namespace ManufacturingCoordinator.Api.Services
         {
             try
             {
-                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
                 var json = System.Text.Json.JsonSerializer.Serialize(new { objective, workflowId });
                 var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
                 var response = await httpClient.PostAsync("http://127.0.0.1:8000/api/workflows/run", content);
                 var responseString = await response.Content.ReadAsStringAsync();
+
+                // If this is a replenishment objective, create a corresponding PurchaseOrder in PendingApproval
+                if (objective.Contains("replenish", StringComparison.OrdinalIgnoreCase) ||
+                    objective.Contains("reorder", StringComparison.OrdinalIgnoreCase) ||
+                    objective.Contains("film", StringComparison.OrdinalIgnoreCase) ||
+                    objective.Contains("steel", StringComparison.OrdinalIgnoreCase) ||
+                    objective.Contains("material", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var jsonDoc = System.Text.Json.JsonDocument.Parse(responseString);
+                        var root = jsonDoc.RootElement;
+                        var wfId = root.TryGetProperty("workflow_id", out var wId) ? wId.GetString() : workflowId ?? $"WF-SUPERVISOR-{DateTime.UtcNow:yyyyMMdd}";
+
+                        string supplierCode = "SUP-001";
+                        string supplierName = "Apex Industrial Metals";
+                        decimal qty = 2000m;
+                        decimal unitPrice = 4.50m;
+                        string? poNumber = null;
+
+                        if (root.TryGetProperty("purchasing_data", out var purchData))
+                        {
+                            if (purchData.TryGetProperty("supplier", out var sup))
+                            {
+                                if (sup.TryGetProperty("supplierId", out var sId)) supplierCode = sId.GetString() ?? supplierCode;
+                                if (sup.TryGetProperty("name", out var sName)) supplierName = sName.GetString() ?? supplierName;
+                                if (sup.TryGetProperty("pricePerUnit", out var pUnit)) unitPrice = (decimal)pUnit.GetDouble();
+                            }
+                            if (purchData.TryGetProperty("draft_po", out var draftPo))
+                            {
+                                if (draftPo.TryGetProperty("poNumber", out var pNum)) poNumber = pNum.GetString();
+                                if (draftPo.TryGetProperty("quantity", out var q)) qty = (decimal)q.GetDouble();
+                                if (draftPo.TryGetProperty("unitPrice", out var uP)) unitPrice = (decimal)uP.GetDouble();
+                            }
+                        }
+
+                        var supplier = await _db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == supplierCode)
+                            ?? await _db.Suppliers.FirstOrDefaultAsync(s => s.Name.ToLower().Contains(supplierName.ToLower()))
+                            ?? await _db.Suppliers.FirstOrDefaultAsync(s => s.IsActive)
+                            ?? await _db.Suppliers.FirstOrDefaultAsync();
+
+                        var material = await _db.RawMaterials.FirstOrDefaultAsync(m => objective.ToLower().Contains(m.Name.ToLower()) || objective.ToLower().Contains(m.SkuCode.ToLower()))
+                            ?? await _db.RawMaterials.FirstOrDefaultAsync();
+
+                        if (supplier != null && material != null)
+                        {
+                            var count = await _db.PurchaseOrders.CountAsync();
+                            poNumber ??= $"PO-{DateTime.UtcNow:yyyy}-{(count + 1):D4}";
+
+                            var exists = await _db.PurchaseOrders.AnyAsync(p => p.PoNumber == poNumber);
+                            if (!exists)
+                            {
+                                var total = qty * unitPrice;
+                                var po = new PurchaseOrder
+                                {
+                                    PoNumber = poNumber,
+                                    SupplierId = supplier.Id,
+                                    Currency = "USD",
+                                    BudgetLimit = 15000m,
+                                    ApprovalThreshold = 5000m,
+                                    RequiresApproval = true,
+                                    Status = PurchaseOrderStatus.PendingApproval,
+                                    Notes = $"[Supervisor AI Workflow] Workflow: {wfId}. {objective}",
+                                    TotalCost = total,
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                };
+
+                                po.OrderLines.Add(new OrderLine
+                                {
+                                    RawMaterialId = material.Id,
+                                    Description = $"Supervisor Autonomous Replenishment: {material.Name} ({material.SkuCode})",
+                                    Quantity = qty,
+                                    UnitPrice = unitPrice,
+                                    TotalPrice = total,
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                });
+
+                                _db.PurchaseOrders.Add(po);
+                                await _db.SaveChangesAsync();
+
+                                _db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                                {
+                                    PurchaseOrderId = po.Id,
+                                    Action = "PendingApproval",
+                                    Notes = $"Supervisor initiated AI workflow {wfId}. Awaiting Supply Chain Manager review.",
+                                    Timestamp = DateTime.UtcNow
+                                });
+                                await _db.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
                 return System.Text.Json.JsonSerializer.Deserialize<object>(responseString) ?? new { message = "Workflow dispatched" };
             }
             catch (Exception ex)

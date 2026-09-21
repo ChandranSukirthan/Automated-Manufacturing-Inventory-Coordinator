@@ -1,29 +1,36 @@
 from typing import Dict, Any
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
+from ai.agents.quality_agent import run_quality_validation
+from ai.core.config import settings
 
 
 def validation_node(state: AgentState) -> Dict[str, Any]:
     """
     Validation / Safety Agent Node:
-    Performs risk analysis and business constraint checks.
+    Performs multi-point risk analysis and business constraint checks, combining:
+    1. Financial & Procurement Validation (draft PO costs and budgets).
+    2. Quality & Quarantine Safety (queries PostgreSQL database via Quality tools).
+    3. Production constraint checks.
     Rules:
     - If validation fails: do not execute.
-    - If high-impact (e.g., procurement expenditure > $1,000 or production shortfall):
-      pauses for human approval.
+    - If high-impact (e.g., procurement expenditure > $1,000, production shortfall,
+      or quarantined material): pauses for human approval.
     """
     completed = list(state.get("completed_steps", []))
     errors = list(state.get("errors", []))
 
-    purchasing_data = state.get("purchasing_data", {})
+    purchasing_data = dict(state.get("purchasing_data", {}))
     draft_po = purchasing_data.get("draft_po", {})
     prod_data = state.get("production_data", {})
     impact = prod_data.get("impact", {})
 
-    cost = draft_po.get("estimatedCostUsd", 0.0)
+    cost = float(draft_po.get("totalAmount") or draft_po.get("estimatedCostUsd") or 0.0)
+    quantity = float(draft_po.get("quantity", 0.0))
+    supplier_id = draft_po.get("supplierId") or draft_po.get("supplier")
     adjusted_output = impact.get("adjustedOutput", 10000)
     planned_target = impact.get("plannedOutput", 10000)
 
-    # 1. Validation check
+    # 1. Financial validation check
     if cost <= 0:
         return {
             "current_agent": "Validation/Safety",
@@ -32,24 +39,106 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "final_outcome": "Execution halted: Purchase order failed financial validation."
         }
 
-    # 2. Risk check: High impact triggers Human Approval requirement
-    is_high_impact = cost > 1000.0 or (adjusted_output < planned_target)
+    # Ensure purchasing_data is compatible with Quality Agent PO validator
+    if "draft_po" in purchasing_data and "purchase_order" not in purchasing_data:
+        purchasing_data["purchase_order"] = {
+            "supplier": supplier_id or "Apex Polymer Solutions Ltd",
+            "quantity": quantity or 4000,
+            "budget": cost,
+        }
+
+    # 2. Quality & Quarantine Safety Check (Student 3 Quality Agent Integration)
+    quality_data = dict(state.get("quality_data", {}))
+    quality_safety_status = "CLEAR"
+    quarantined_rolls_count = 0
+    defect = quality_data.get("defect")
+
+    if defect:
+        try:
+            quality_state = run_quality_validation({
+                **state,
+                "purchasing_data": purchasing_data,
+                "quality_data": quality_data,
+            })
+            quality_data = quality_state.get("quality_data", quality_data)
+            q_val = quality_data.get("validation", {})
+            if q_val.get("valid") is False:
+                reason = q_val.get("reason", "Associated inventory is quarantined")
+                return {
+                    "current_agent": "Validation/Safety",
+                    "status": WorkflowStatus.Failed,
+                    "quality_data": quality_data,
+                    "errors": errors + [f"Quality Agent validation rejected: {reason}"],
+                    "final_outcome": f"Execution halted: {reason}"
+                }
+            if q_val.get("quarantineRequired"):
+                quarantined_rolls_count = len(q_val.get("affectedInventory", []))
+                quality_safety_status = "QUARANTINE_REQUIRED"
+                completed.append(f"Quality Agent: Quarantine required for batch {q_val.get('batchId')}")
+        except Exception:
+            # Fallback to deterministic defect context analysis (if batch not in DB or offline)
+            try:
+                from ai.tools.quality_tools import analyze_defect_context
+                ctx = analyze_defect_context(defect)
+                if ctx.get("quarantineRequired"):
+                    quality_safety_status = "QUARANTINE_REQUIRED"
+                    completed.append(f"Quality Agent: Quarantine required for batch {ctx.get('batchId')}")
+                else:
+                    completed.append(f"Quality Agent: Defect severity {ctx.get('severity')} - no quarantine required")
+            except Exception as inner_ex:
+                completed.append(f"Quality Agent: Defect evaluation note ({inner_ex})")
+    else:
+        # Check factory floor database for any active quarantined inventory rolls
+        try:
+            import psycopg
+            with psycopg.connect(settings.database_url, connect_timeout=2) as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT COUNT(*) FROM "Quarantines" WHERE "Status" = \'Active\';')
+                    row = cur.fetchone()
+                    quarantined_rolls_count = row[0] if row else 0
+                    if quarantined_rolls_count > 0:
+                        quality_safety_status = "QUARANTINE_ACTIVE"
+                        completed.append(f"Quality Agent: Detected {quarantined_rolls_count} active quarantine holds")
+                    else:
+                        completed.append("Quality Agent: Factory inventory quarantine status CLEAR")
+        except Exception:
+            quality_safety_status = "CLEAR"
+
+    # 3. Risk check: High impact triggers Human Approval requirement
+    budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
+    is_high_impact = (cost > budget_threshold) or (cost > 1000.0) or (adjusted_output < planned_target) or (quality_safety_status == "QUARANTINE_REQUIRED") or (quarantined_rolls_count > 0)
+
+    impact_reasons = []
+    if cost > budget_threshold:
+        impact_reasons.append(f"Procurement cost (${cost:,.2f}) exceeds budget threshold (${budget_threshold:,.2f})")
+    elif cost > 1000.0:
+        impact_reasons.append("Procurement cost exceeds $1,000 threshold")
+    if adjusted_output < planned_target:
+        impact_reasons.append("Production output is material-constrained")
+    if quality_safety_status == "QUARANTINE_REQUIRED":
+        impact_reasons.append("Quality Agent quarantine recommendation requires authorization")
+    if quarantined_rolls_count > 0:
+        impact_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantines")
 
     validation_results = {
-        "budgetCheck": "PASSED",
+        "valid": quality_safety_status != "QUARANTINE_REQUIRED",
+        "budgetCheck": "PASSED" if cost <= budget_threshold else "EXCEEDS_BUDGET_THRESHOLD",
         "toleranceCheck": "PASSED",
         "safetyLockoutCheck": "CLEAR",
+        "qualitySafetyStatus": quality_safety_status,
+        "quarantinedRollsCount": quarantined_rolls_count,
         "isHighImpact": is_high_impact,
-        "impactReason": "Procurement cost exceeds $1,000 threshold and production output is material-constrained." if is_high_impact else "Low impact action."
+        "impactReason": "; ".join(impact_reasons) if is_high_impact else "Low impact action."
     }
 
-    completed.append("Validation/Safety: Completed multi-point risk and safety assessment")
+    completed.append("Validation/Safety: Completed multi-point risk, financial, and quality safety assessment")
 
     # If approval was already granted (e.g. resumed by human)
     if state.get("approval_status") == ApprovalStatus.Approved:
         return {
             "current_agent": "Validation/Safety",
             "validation_results": validation_results,
+            "quality_data": quality_data,
             "requires_approval": False,
             "status": WorkflowStatus.Running,
             "completed_steps": completed,
@@ -60,6 +149,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         return {
             "current_agent": "Validation/Safety",
             "validation_results": validation_results,
+            "quality_data": quality_data,
             "requires_approval": True,
             "status": WorkflowStatus.WaitingForApproval,
             "approval_status": ApprovalStatus.Pending,
@@ -70,6 +160,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     return {
         "current_agent": "Validation/Safety",
         "validation_results": validation_results,
+        "quality_data": quality_data,
         "requires_approval": False,
         "completed_steps": completed,
         "errors": errors
@@ -94,4 +185,3 @@ def execution_node(state: AgentState) -> Dict[str, Any]:
         "completed_steps": completed,
         "final_outcome": f"Objective achieved: {draft_po.get('quantity', 4000)}m raw film requisition queued under {po_num}. Production schedule reconciled."
     }
-

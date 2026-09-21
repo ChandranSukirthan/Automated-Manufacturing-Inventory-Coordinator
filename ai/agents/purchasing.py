@@ -12,48 +12,55 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     completed = list(state.get("completed_steps", []))
     errors = list(state.get("errors", []))
 
+    # Student 2: Purchasing Agent implements query_supplier_rates, select_supplier, calculate_total_cost, create_draft_po
+    from ai.tools.purchasing_tools import (
+        query_supplier_rates,
+        select_supplier,
+        calculate_total_cost,
+        create_draft_po
+    )
+
     inv_data = state.get("inventory_data", {})
     prod_data = state.get("production_data", {})
+    impact = prod_data.get("impact", {})
 
-    # Evaluate supplier availability
-    supplier = {
-        "supplierId": "SUP-8802",
-        "name": "Apex Polymer Solutions Ltd",
-        "isAvailable": True,
-        "leadTimeDays": 3,
-        "unitPriceUsd": 1.45,
-        "minimumOrderQuantity": 2000
-    }
+    material_id = inv_data.get("materialId") or inv_data.get("itemCode", "RM-STEEL-001")
+    base_qty = float(inv_data.get("requiredQuantity", 2000))
+    # Inter-agent cooperation: If Production Agent detected a material shortfall, reconcile it!
+    shortfall = float(impact.get("plannedOutput", 0) - impact.get("adjustedOutput", 0))
+    required_quantity = max(base_qty, shortfall) if shortfall > 0 else base_qty
 
-    if not supplier.get("isAvailable"):
-        return {
-            "current_agent": "Purchasing",
-            "status": WorkflowStatus.Failed,
-            "errors": errors + ["Primary supplier unavailable for BoxPouch film."],
-            "final_outcome": "Halted: Supplier unavailable. Revision requested."
-        }
+    # Tool 1: query_supplier_rates()
+    available_suppliers = query_supplier_rates(material_id)
 
-    needed_material = 4000
-    total_cost = needed_material * supplier["unitPriceUsd"]
+    # Tool 2: select_supplier()
+    chosen_supplier = select_supplier(available_suppliers, required_quantity)
 
-    draft_po = {
-        "poNumber": "PO-DRAFT-2026-004",
-        "supplier": supplier["name"],
-        "itemCode": inv_data.get("itemCode", "BP-FILM-001"),
-        "quantity": needed_material,
-        "unit": inv_data.get("unit", "meters"),
-        "estimatedCostUsd": total_cost,
-        "paymentStatus": "UNPAID", # Strict constraint: Planner/AI must NOT pay
-        "emailSent": False,        # Strict constraint: Planner/AI must NOT send email
-        "requiresApproval": True
-    }
+    # Tool 3: calculate_total_cost()
+    cost_calc = calculate_total_cost(
+        quantity=required_quantity,
+        unit_price=chosen_supplier["pricePerUnit"],
+        currency="USD"
+    )
 
-    completed.append("Purchasing: Formulated draft purchase order (PO-DRAFT-2026-004)")
+    # Tool 4: create_draft_po() — Creates ONLY draft, NEVER pays, NEVER sends email
+    draft_po = create_draft_po(
+        supplier_id=chosen_supplier["supplierId"],
+        supplier_name=chosen_supplier["name"],
+        material_id=material_id,
+        quantity=cost_calc["quantity"],
+        unit_price=cost_calc["unitPrice"],
+        total_amount=cost_calc["totalAmount"],
+        currency=cost_calc["currency"],
+        budget_threshold=5000.0
+    )
+
+    completed.append(f"Purchasing: Selected {chosen_supplier['name']} (${chosen_supplier['pricePerUnit']}/unit) and drafted {draft_po['poNumber']}")
 
     return {
         "current_agent": "Purchasing",
         "purchasing_data": {
-            "supplier": supplier,
+            "supplier": chosen_supplier,
             "draft_po": draft_po
         },
         "completed_steps": completed,

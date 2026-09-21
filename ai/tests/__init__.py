@@ -1,2 +1,1 @@
-# Tests module
-
+# Tests package for AMIC Agentic AI

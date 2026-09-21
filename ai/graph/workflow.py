@@ -7,7 +7,8 @@ import psycopg
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 from ai.core.config import settings
 from ai.agents.planner import planner_node
-from ai.agents.data_extraction import data_extraction_node, production_analysis_node
+from ai.agents.data_extraction import data_extraction_node
+from ai.agents.production_analysis import production_analysis_node
 from ai.agents.purchasing import purchasing_node
 from ai.agents.validation import validation_node, execution_node
 
@@ -139,11 +140,23 @@ WORKFLOW_SESSIONS: Dict[str, AgentState] = {}
 COMPILED_APP = build_workflow_graph()
 
 
-def run_workflow(objective: str, workflow_id: Optional[str] = None) -> AgentState:
+def run_workflow(
+    objective: str,
+    workflow_id: Optional[str] = None,
+    material_id: Optional[str] = None,
+    required_quantity: Optional[float] = None
+) -> AgentState:
     """
     Starts and executes a workflow up to completion or approval gate.
     """
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
+
+    initial_inv = {}
+    if material_id:
+        initial_inv["materialId"] = material_id
+        initial_inv["itemCode"] = material_id
+    if required_quantity:
+        initial_inv["requiredQuantity"] = required_quantity
 
     initial_state: AgentState = {
         "workflow_id": wf_id,
@@ -154,7 +167,7 @@ def run_workflow(objective: str, workflow_id: Optional[str] = None) -> AgentStat
         "plan": [],
         "completed_steps": [],
         "tool_results": {},
-        "inventory_data": {},
+        "inventory_data": initial_inv,
         "production_data": {},
         "purchasing_data": {},
         "validation_results": {},
