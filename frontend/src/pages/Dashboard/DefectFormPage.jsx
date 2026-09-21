@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Bot,
+  Sparkles,
+  Save,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldAlert,
+  Layers
+} from 'lucide-react';
 import defectService from '../../services/defectService';
 import { parseErrorMessage } from '../../utils/errorHandler';
-import QANavigation from '../../components/Dashboard/QANavigation';
+import PageHeader from '../../components/QA/PageHeader';
 
 const productTypes = ['BoxPouch', 'BiscuitPackaging', 'TeaBag', 'Bag', 'Can', 'Bottle'];
 const severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
@@ -124,73 +135,247 @@ export default function DefectFormPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-8">
-      <div className="max-w-3xl mx-auto">
-        <QANavigation />
-        <div className="flex justify-between items-center mb-8">
+    <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
+      {/* Page Header */}
+      <PageHeader
+        category="Quality Assurance"
+        title={isEdit ? 'Edit Defect Report' : 'Create Defect Report'}
+        subtitle={
+          isEdit
+            ? 'Update defect telemetry, severity metrics, and resolution status.'
+            : 'Record manufacturing defect inspection findings and trigger safety protocols.'
+        }
+        actions={
+          <button
+            onClick={() => navigate('/quality/defects')}
+            className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-200 text-sm font-medium hover:bg-slate-800 hover:text-white transition-all shadow-sm flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Defects</span>
+          </button>
+        }
+      />
+
+      {/* Error Banners */}
+      {error && (
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+          <span className="text-sm font-medium">{error}</span>
+        </div>
+      )}
+      {aiError && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+          <span className="text-sm font-medium">{aiError}</span>
+        </div>
+      )}
+
+      {/* Main Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-8 space-y-6 shadow-sm"
+      >
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Batch ID */}
           <div>
-            <p className="text-emerald-400 uppercase tracking-wide text-sm font-semibold">Quality Assurance</p>
-            <h1 className="text-4xl font-bold mt-2">{isEdit ? 'Edit Defect Report' : 'Create Defect Report'}</h1>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Batch ID
+            </label>
+            <input
+              name="batchId"
+              value={form.batchId}
+              onChange={handleChange}
+              placeholder="e.g. Batch-001"
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500 transition-colors"
+            />
           </div>
-          <button onClick={() => navigate('/quality/defects')} className="px-4 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Back to Defects</button>
+
+          {/* Product Type */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Product Type
+            </label>
+            <select
+              name="productType"
+              value={form.productType}
+              onChange={handleChange}
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+            >
+              {productTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Severity */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Severity Level
+            </label>
+            <select
+              name="severity"
+              value={form.severity}
+              onChange={handleChange}
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+            >
+              {severities.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              Resolution Status
+            </label>
+            <select
+              name="status"
+              value={form.status}
+              onChange={handleChange}
+              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500 transition-colors"
+            >
+              {statuses.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {error && <div className="mb-4 p-3 rounded bg-red-500/10 text-red-300 border border-red-500/30">{error}</div>}
-        {aiError && <div className="mb-4 p-3 rounded bg-amber-500/10 text-amber-200 border border-amber-500/30">{aiError}</div>}
+        {/* Description */}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+            Defect Description & Notes
+          </label>
+          <textarea
+            name="description"
+            value={form.description}
+            onChange={handleChange}
+            rows="5"
+            placeholder="Describe defect symptoms, observed anomalies, and affected packaging parameters..."
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500 transition-colors"
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="bg-slate-900/60 rounded-3xl border border-slate-800 p-8 space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Batch ID</label>
-              <input name="batchId" value={form.batchId} onChange={handleChange} className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white outline-none focus:border-emerald-500" placeholder="Batch-001" />
+        {/* Form Action Buttons */}
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => navigate('/quality/defects')}
+            className="px-5 py-2.5 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white text-sm font-medium transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleAnalyzeWithAi}
+            disabled={loading || aiLoading}
+            className="px-5 py-2.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50 text-sm font-semibold transition-all flex items-center gap-2"
+          >
+            {aiLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Analyzing Telemetry...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Analyze with AI</span>
+              </>
+            )}
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-6 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm hover:bg-emerald-400 disabled:opacity-60 transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 stroke-[2.5]" />
+                <span>{isEdit ? 'Update Defect' : 'Create Defect'}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+
+      {/* AI Recommendation Card (Section 17) */}
+      {aiRecommendation && (
+        <section
+          className="rounded-3xl border border-cyan-500/30 bg-cyan-500/10 p-6 backdrop-blur-sm space-y-4"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2.5 border-b border-cyan-500/20 pb-4">
+            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-300">
+              <Bot className="w-5 h-5" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Product Type</label>
-              <select name="productType" value={form.productType} onChange={handleChange} className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white outline-none focus:border-emerald-500">
-                {productTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Severity</label>
-              <select name="severity" value={form.severity} onChange={handleChange} className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white outline-none focus:border-emerald-500">
-                {severities.map((level) => <option key={level} value={level}>{level}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
-              <select name="status" value={form.status} onChange={handleChange} className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white outline-none focus:border-emerald-500">
-                {statuses.map((level) => <option key={level} value={level}>{level}</option>)}
-              </select>
+              <span className="text-cyan-300 uppercase tracking-widest text-xs font-bold">
+                AI Defect Assessment
+              </span>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Machine learning risk analysis & quarantine disposition guidance
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
-            <textarea name="description" value={form.description} onChange={handleChange} rows="6" className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white outline-none focus:border-emerald-500" placeholder="Describe the defect..." />
-          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {/* Risk Level */}
+            <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Risk Level
+              </span>
+              <div className="mt-2 text-2xl font-extrabold text-white tracking-tight">
+                {aiRecommendation.riskLevel}
+              </div>
+            </div>
 
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => navigate('/quality/defects')} className="px-5 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800">Cancel</button>
-            <button type="button" onClick={handleAnalyzeWithAi} disabled={loading || aiLoading} className="px-5 py-3 rounded-xl border border-cyan-400 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-60">
-              {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
-            </button>
-            <button type="submit" disabled={loading} className="px-5 py-3 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 disabled:opacity-60">
-              {loading ? 'Saving...' : isEdit ? 'Update Defect' : 'Create Defect'}
-            </button>
+            {/* Quarantine Required */}
+            <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Quarantine Required
+              </span>
+              <div className="mt-2 flex items-center gap-2">
+                <span
+                  className={`text-2xl font-extrabold tracking-tight ${
+                    aiRecommendation.quarantineRequired ? 'text-amber-400' : 'text-emerald-400'
+                  }`}
+                >
+                  {aiRecommendation.quarantineRequired ? 'YES' : 'NO'}
+                </span>
+                {aiRecommendation.quarantineRequired ? (
+                  <ShieldAlert className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                )}
+              </div>
+            </div>
+
+            {/* Affected Inventory */}
+            <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Affected Inventory
+              </span>
+              <div className="mt-2 text-sm font-mono text-cyan-200 break-words">
+                {aiRecommendation.affectedInventory?.length
+                  ? aiRecommendation.affectedInventory.join(', ')
+                  : 'None identified'}
+              </div>
+            </div>
           </div>
-        </form>
-        {aiRecommendation && <section className="mt-6 rounded-3xl border border-cyan-500/30 bg-cyan-500/10 p-6" aria-live="polite">
-          <p className="text-cyan-300 uppercase tracking-wide text-sm font-semibold">AI Recommendation</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            <div><p className="text-sm text-slate-400">Risk Level</p><p className="text-2xl font-bold text-white">{aiRecommendation.riskLevel}</p></div>
-            <div><p className="text-sm text-slate-400">Quarantine Required</p><p className="text-2xl font-bold text-white">{aiRecommendation.quarantineRequired ? 'YES' : 'NO'}</p></div>
-            <div><p className="text-sm text-slate-400">Affected Inventory</p><p className="mt-1 text-white">{aiRecommendation.affectedInventory?.length ? aiRecommendation.affectedInventory.join(', ') : 'None'}</p></div>
-          </div>
-        </section>}
-      </div>
+        </section>
+      )}
     </div>
   );
 }

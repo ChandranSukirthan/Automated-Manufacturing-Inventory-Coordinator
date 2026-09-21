@@ -33,6 +33,7 @@ import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
 import QuarantineManagementPage from './pages/Dashboard/QuarantineManagementPage';
 import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
 import QuarantineHistoryPage from './pages/Dashboard/QuarantineHistoryPage';
+import QALayout from './components/Layout/QALayout';
 
 function App() {
   return (
@@ -49,22 +50,24 @@ function App() {
           <Route path="/dashboard/admin" element={<Navigate to="/admin" replace />} />
           <Route path="/dashboard/worker" element={<WorkerDashboard />} />
           <Route element={<ProtectedRoute allowedRoles={['QualityInspector']} />}>
-            <Route path="/quality" element={<QualityDashboard />} />
-            <Route path="/quality/defects" element={<DefectReportsPage />} />
-            <Route path="/quality/defects/new" element={<DefectFormPage />} />
-            <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
-            <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
-            <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
-            <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
-            <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
-            <Route path="/dashboard/quality" element={<QualityDashboard />} />
-            <Route path="/dashboard/defects" element={<DefectReportsPage />} />
-            <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
-            <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
-            <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
-            <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
-            <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
-            <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+            <Route element={<QALayout />}>
+              <Route path="/quality" element={<QualityDashboard />} />
+              <Route path="/quality/defects" element={<DefectReportsPage />} />
+              <Route path="/quality/defects/new" element={<DefectFormPage />} />
+              <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
+              <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
+              <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
+              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
+              <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/dashboard/quality" element={<QualityDashboard />} />
+              <Route path="/dashboard/defects" element={<DefectReportsPage />} />
+              <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
+              <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
+              <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
+              <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
+              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
+              <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+            </Route>
           </Route>
           {/* Production & Equipment Routes (Protected) */}
           <Route 
