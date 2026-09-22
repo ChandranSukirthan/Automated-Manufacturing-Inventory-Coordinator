@@ -92,9 +92,13 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       _error = null;
     });
     try {
-      final records = await widget.service.quarantineDefect(
+      final inventoryRollId = _affectedInventory.isNotEmpty
+          ? _affectedInventory.first.inventoryRollId
+          : '';
+      final record = await widget.service.quarantineDefect(
         widget.defectId,
         _reason.text.trim(),
+        inventoryRollId,
       );
       if (mounted) {
         await Navigator.push<void>(
@@ -102,7 +106,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
           MaterialPageRoute(
             builder: (_) => QuarantineDetailScreen(
               service: widget.service,
-              quarantineId: records.first.id,
+              quarantineId: record.id,
             ),
           ),
         );

@@ -24,12 +24,20 @@ def run_quality_validation(
     """Run Quality tools inside the existing Validation/Safety stage."""
     defect = state.get("quality_data", {}).get("defect", {})
     recommendation = recommend_quarantine(defect, connection)
-    if _has_quarantined_inventory(defect["batchId"], connection):
-        outcome = {
-            "valid": False,
-            "riskLevel": "HIGH",
-            "reason": "Associated inventory is quarantined",
-        }
+    has_quarantined_inventory = (
+        _has_quarantined_inventory(recommendation["affectedInventory"], connection)
+        if recommendation["affectedInventory"]
+        else _has_quarantined_batch(recommendation["batchId"], connection)
+    )
+    if has_quarantined_inventory:
+        outcome = ({**recommendation, "valid": False} if recommendation["affectedInventory"] else {})
+        outcome.update(
+            {
+                "valid": False,
+                "riskLevel": "HIGH",
+                "reason": "Associated inventory is quarantined",
+            }
+        )
         requires_approval = False
     else:
         reason = _validate_purchase_order(
@@ -64,6 +72,21 @@ def run_quality_validation(
 
 
 def _has_quarantined_inventory(
+    inventory_ids: list[str],
+    connection: Connection[Any] | None,
+) -> bool:
+    if not inventory_ids:
+        return False
+    if connection is None:
+        from ai.core.config import settings
+        from psycopg import connect
+
+        with connect(settings.database_url) as owned_connection:
+            return _query_has_quarantined_inventory(inventory_ids, owned_connection)
+    return _query_has_quarantined_inventory(inventory_ids, connection)
+
+
+def _has_quarantined_batch(
     batch_id: str,
     connection: Connection[Any] | None,
 ) -> bool:
@@ -72,8 +95,8 @@ def _has_quarantined_inventory(
         from psycopg import connect
 
         with connect(settings.database_url) as owned_connection:
-            return _query_has_quarantined_inventory(batch_id, owned_connection)
-    return _query_has_quarantined_inventory(batch_id, connection)
+            return _query_has_quarantined_batch(batch_id, owned_connection)
+    return _query_has_quarantined_batch(batch_id, connection)
 
 
 def _validate_purchase_order(
@@ -119,6 +142,19 @@ def _number(value: Any) -> float | None:
 
 
 def _query_has_quarantined_inventory(
+    inventory_ids: list[str],
+    connection: Connection[Any],
+) -> bool:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            'SELECT 1 FROM "InventoryRolls" '
+            'WHERE "Id" = ANY(%s) AND UPPER("Status") = %s LIMIT 1',
+            (inventory_ids, "QUARANTINED"),
+        )
+        return cursor.fetchone() is not None
+
+
+def _query_has_quarantined_batch(
     batch_id: str,
     connection: Connection[Any],
 ) -> bool:

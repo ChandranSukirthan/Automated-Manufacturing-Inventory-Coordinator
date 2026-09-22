@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -61,6 +62,14 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
       _product = defect.productType;
       _severity = defect.severity;
       _status = defect.status;
+      if (defect.affectedInventory.isNotEmpty) {
+        _recommendation = QualityRecommendation(
+          batchId: defect.batchId,
+          quarantineRequired: false,
+          affectedInventory: defect.affectedInventory,
+          riskLevel: defect.severity.toUpperCase(),
+        );
+      }
     }
   }
 
@@ -75,6 +84,8 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      final affectedInventory = _recommendation?.affectedInventory ?? const [];
+
       if (_isEditing) {
         await widget.service.updateDefect(
           id: widget.defect!.id,
@@ -83,6 +94,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           severity: _severity,
           description: _description.text.trim(),
           status: _status,
+          affectedInventory: affectedInventory,
         );
       } else {
         await widget.service.createDefect(
@@ -91,6 +103,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           severity: _severity,
           description: _description.text.trim(),
           status: _status,
+          affectedInventory: affectedInventory,
         );
       }
       if (mounted) {
@@ -190,17 +203,22 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           ),
           const SizedBox(height: 24),
           if (_aiError != null)
-            Text(_aiError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Text(_aiError!, style: const TextStyle(color: AppColors.warningText)),
           if (_recommendation != null) ...[
             const SizedBox(height: 16),
             Card(
-              color: Theme.of(context).colorScheme.secondaryContainer,
+              color: AppColors.info.withValues(alpha: 0.1),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('AI Recommendation', style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      'AI Recommendation',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.infoText,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Text('Risk level: ${_recommendation!.riskLevel}'),
                     Text('Quarantine required: ${_recommendation!.quarantineRequired ? 'YES' : 'NO'}'),
@@ -213,6 +231,10 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: _saving || _analyzing ? null : _analyzeWithAi,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.infoText,
+              side: const BorderSide(color: AppColors.infoBorder),
+            ),
             icon: _analyzing
                 ? const SizedBox.square(
                     dimension: 18,

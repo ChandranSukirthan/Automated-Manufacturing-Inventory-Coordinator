@@ -237,7 +237,11 @@ namespace ManufacturingCoordinator.Data
                 entity.HasKey(i => i.Id);
                 entity.Property(i => i.Id).HasMaxLength(120);
                 entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
-                entity.Property(i => i.Status).HasConversion<string>().IsRequired();
+                entity.Property(i => i.Status)
+                    .HasConversion(
+                        status => status == InventoryStatus.Available ? "In Stock" : "Quarantined",
+                        value => value == "In Stock" ? InventoryStatus.Available : InventoryStatus.Quarantined)
+                    .IsRequired();
                 entity.HasOne(i => i.Batch)
                     .WithMany(b => b.InventoryRolls)
                     .HasForeignKey(i => i.BatchId)

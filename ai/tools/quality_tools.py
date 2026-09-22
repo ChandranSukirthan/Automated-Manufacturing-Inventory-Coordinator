@@ -28,7 +28,7 @@ def analyze_defect_context(
     connection: Connection[Any] | None = None,
 ) -> dict[str, Any]:
     """Validate a defect and produce a deterministic quarantine assessment."""
-    batch_id = _required_text(defect.get("batchId"), "batchId")
+    batch_id = str(defect.get("batchId") or "").strip()
     product_type = _required_text(defect.get("productType"), "productType")
     severity_value = _required_text(defect.get("severity"), "severity")
     description = _required_text(defect.get("description"), "description")
@@ -41,7 +41,7 @@ def analyze_defect_context(
         raise ValueError(f"severity must be one of: {', '.join(sorted(SEVERITIES))}")
 
     previous_severe_defect = False
-    if connection is not None:
+    if connection is not None and batch_id:
         previous_severe_defect = _has_previous_severe_defect(connection, batch_id)
 
     quarantine_required = severity in {"HIGH", "CRITICAL"}
@@ -81,12 +81,93 @@ def recommend_quarantine(
 ) -> dict[str, Any]:
     """Combine defect and inventory facts into a read-only recommendation."""
     context = analyze_defect_context(defect, connection)
-    inventory = related_inventory or check_related_inventory(context["batchId"], connection)
-    return {
+    inventory = related_inventory or _inventory_for_defect(defect, context, connection)
+    if not context["batchId"]:
+        context["batchId"] = inventory["batchId"]
+        if connection is not None and context["severity"].upper() == "MEDIUM":
+            context["quarantineRequired"] = _has_previous_severe_defect(connection, context["batchId"]) or _contains_serious_term(str(defect.get("description", "")))
+    result = {
         "batchId": context["batchId"],
         "quarantineRequired": context["quarantineRequired"],
         "affectedInventory": list(inventory["affectedInventory"]),
         "riskLevel": _risk_level(context["severity"]),
+    }
+    if "inventoryContext" in inventory:
+        result["inventoryContext"] = inventory["inventoryContext"]
+    return result
+
+
+def _inventory_for_defect(
+    defect: Mapping[str, Any],
+    context: dict[str, Any],
+    connection: Connection[Any] | None,
+) -> dict[str, Any]:
+    sku_code = str(defect.get("skuCode") or "").strip()
+    if sku_code:
+        return _inventory_by_sku(
+            sku_code,
+            [str(value) for value in (defect.get("affectedInventory") or [])],
+            connection,
+        )
+    if not context["batchId"]:
+        raise ValueError("SKU code is required")
+    return check_related_inventory(context["batchId"], connection)
+
+
+def _inventory_by_sku(
+    sku_code: str,
+    selected_inventory: list[str],
+    connection: Connection[Any] | None,
+) -> dict[str, Any]:
+    if connection is None:
+        from ai.core.config import settings
+        from psycopg import connect
+
+        with connect(settings.database_url) as owned_connection:
+            return _query_inventory_by_sku(sku_code, selected_inventory, owned_connection)
+    return _query_inventory_by_sku(sku_code, selected_inventory, connection)
+
+
+def _query_inventory_by_sku(
+    sku_code: str,
+    selected_inventory: list[str],
+    connection: Connection[Any],
+) -> dict[str, Any]:
+    with connection.cursor() as cursor:
+        query = (
+            'SELECT i."Id", i."RollIdentifier", i."RawMaterialId", '
+            'r."SkuCode", r."Name", i."BatchId", i."Status", '
+            'i."CurrentQuantity", i."InitialQuantity" '
+            'FROM "InventoryRolls" i JOIN "RawMaterials" r '
+            'ON r."Id" = i."RawMaterialId" WHERE r."SkuCode" = %s'
+        )
+        params: tuple[Any, ...] = (sku_code,)
+        if selected_inventory:
+            query += ' AND i."Id" = ANY(%s)'
+            params += (selected_inventory,)
+        query += ' ORDER BY i."Id"'
+        cursor.execute(query, params)
+        rows = [row for row in cursor.fetchall() if row and row[0] is not None]
+
+    if not rows:
+        raise ValueError("No inventory rolls were found for the selected SKU")
+    return {
+        "batchId": rows[0][5],
+        "affectedInventory": [str(row[0]) for row in rows],
+        "inventoryContext": [
+            {
+                "inventoryRollId": str(row[0]),
+                "rollIdentifier": row[1] or str(row[0]),
+                "rawMaterialId": row[2],
+                "rawMaterialSku": row[3],
+                "rawMaterialName": row[4],
+                "batchId": row[5],
+                "status": row[6],
+                "currentQuantity": row[7],
+                "initialQuantity": row[8],
+            }
+            for row in rows
+        ],
     }
 
 

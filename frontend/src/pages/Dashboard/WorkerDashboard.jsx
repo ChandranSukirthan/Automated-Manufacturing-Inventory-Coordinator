@@ -68,6 +68,7 @@ export default function WorkerDashboard() {
 
   // Roll registration
   const [rollIdentifier, setRollIdentifier] = useState('');
+  const [rollQuantity, setRollQuantity] = useState('1');
   const [rollRawMaterialId, setRollRawMaterialId] = useState(1);
   const [registeredRoll, setRegisteredRoll] = useState(null);
 
@@ -202,12 +203,17 @@ export default function WorkerDashboard() {
       const created = await inventoryService.createRoll({
         rollIdentifier: rollIdentifier.trim(),
         rawMaterialId: Number(rollRawMaterialId),
+        initialQuantity: Number(rollQuantity),
+        currentQuantity: Number(rollQuantity),
       });
       setRegisteredRoll(created);
       setRollIdentifier('');
+      setRollQuantity('1');
       showNotification(`Inventory Roll ${created.rollIdentifier || rollIdentifier} registered!`);
       loadData();
-    } catch { setError('Failed to register inventory roll.'); }
+    } catch (err) {
+      setError(err.response?.data || 'Failed to register inventory roll.');
+    }
   };
 
   const handleDeleteRoll = async (id) => {
@@ -370,9 +376,12 @@ export default function WorkerDashboard() {
         {activeTab === 'rolls' && (
           <RollsTab
             rolls={rolls}
+            inventoryItems={items}
             rawMaterials={rawMaterials}
             rollIdentifier={rollIdentifier}
             setRollIdentifier={setRollIdentifier}
+            rollQuantity={rollQuantity}
+            setRollQuantity={setRollQuantity}
             rollRawMaterialId={rollRawMaterialId}
             setRollRawMaterialId={setRollRawMaterialId}
             registeredRoll={registeredRoll}

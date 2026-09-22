@@ -12,9 +12,12 @@ function statusBadge(status) {
 
 export default function RollsTab({
   rolls,
+  inventoryItems,
   rawMaterials,
   rollIdentifier,
   setRollIdentifier,
+  rollQuantity,
+  setRollQuantity,
   rollRawMaterialId,
   setRollRawMaterialId,
   registeredRoll,
@@ -28,12 +31,34 @@ export default function RollsTab({
   loading,
 }) {
   const [rollSearch, setRollSearch] = useState('');
+  const [rollMaterialFilter, setRollMaterialFilter] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const materialBySku = new Map(
+    rawMaterials
+      .filter((material) => material.skuCode?.trim())
+      .map((material) => [material.skuCode.trim().toLowerCase(), material])
+  );
+  const sourceItems = inventoryItems?.length ? inventoryItems : rawMaterials;
+  const uniqueRawMaterials = sourceItems.filter((item, index, materials) => {
+    const skuCode = (item.sku || item.skuCode)?.trim().toLowerCase();
+    return skuCode && materials.findIndex((candidate) => (candidate.sku || candidate.skuCode)?.trim().toLowerCase() === skuCode) === index;
+  }).map((item) => {
+    const skuCode = (item.sku || item.skuCode).trim();
+    const rawMaterial = materialBySku.get(skuCode.toLowerCase());
+    return {
+      id: rawMaterial?.id,
+      skuCode,
+      name: item.name || rawMaterial?.name || 'Raw Material',
+    };
+  });
 
   const filteredRolls = rolls.filter(
     (r) =>
+      (!rollMaterialFilter || String(r.rawMaterialId) === rollMaterialFilter) &&
       r.rollIdentifier?.toLowerCase().includes(rollSearch.toLowerCase()) ||
-      (r.status || 'In Stock').toLowerCase().includes(rollSearch.toLowerCase())
+      ((!rollMaterialFilter || String(r.rawMaterialId) === rollMaterialFilter) &&
+        (r.status || 'In Stock').toLowerCase().includes(rollSearch.toLowerCase()))
   );
 
   const handleCopy = (text) => {
@@ -151,16 +176,31 @@ export default function RollsTab({
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Roll Quantity
+              </label>
+              <input
+                type="number"
+                required
+                min="1"
+                step="0.01"
+                value={rollQuantity}
+                onChange={(e) => setRollQuantity(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">Cannot exceed current stock.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Raw Material
               </label>
-              {rawMaterials.length > 0 ? (
+              {uniqueRawMaterials.length > 0 ? (
                 <select
                   value={rollRawMaterialId}
                   onChange={(e) => setRollRawMaterialId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition"
                 >
-                  {rawMaterials.map((m) => (
-                    <option key={m.id} value={m.id}>
+                  {uniqueRawMaterials.map((m) => (
+                    <option key={m.skuCode} value={m.id} disabled={!m.id}>
                       {m.skuCode} — {m.name}
                     </option>
                   ))}
@@ -202,18 +242,32 @@ export default function RollsTab({
           <div className="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
               <h3 className="text-sm font-bold text-white">Warehouse Inventory Rolls</h3>
-              <span className="text-xs text-slate-400">{rolls.length} rolls in system</span>
+              <span className="text-xs text-slate-400">{filteredRolls.length} rolls shown</span>
             </div>
-            {/* Roll search */}
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 w-full sm:w-auto">
-              <Search className="w-3.5 h-3.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Filter rolls..."
-                value={rollSearch}
-                onChange={(e) => setRollSearch(e.target.value)}
-                className="bg-transparent border-none text-xs text-slate-200 placeholder-slate-500 focus:outline-none w-full sm:w-36"
-              />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <select
+                value={rollMaterialFilter}
+                onChange={(e) => setRollMaterialFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                aria-label="Filter rolls by raw material"
+              >
+                <option value="">All Raw Materials</option>
+                {uniqueRawMaterials.filter((material) => material.id).map((material) => (
+                  <option key={material.id} value={material.id}>
+                    {material.skuCode} — {material.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5">
+                <Search className="w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Filter rolls..."
+                  value={rollSearch}
+                  onChange={(e) => setRollSearch(e.target.value)}
+                  className="bg-transparent border-none text-xs text-slate-200 placeholder-slate-500 focus:outline-none w-full sm:w-36"
+                />
+              </div>
             </div>
           </div>
 
