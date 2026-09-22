@@ -42,7 +42,35 @@ namespace backend.Services
 
         public async Task<IEnumerable<InventoryItemDto>> GetInventoryItemsAsync()
         {
-            return await _context.InventoryItems
+            var items = await _context.InventoryItems.ToListAsync();
+            var skuCodes = items
+                .Where(item => !string.IsNullOrWhiteSpace(item.Sku))
+                .Select(item => item.Sku.Trim())
+                .ToList();
+            var existingSkus = await _context.RawMaterials
+                .Where(material => skuCodes.Contains(material.SkuCode))
+                .Select(material => material.SkuCode)
+                .ToListAsync();
+            var missingMaterials = items
+                .Where(item => !string.IsNullOrWhiteSpace(item.Sku) && !existingSkus.Contains(item.Sku.Trim()))
+                .GroupBy(item => item.Sku.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .Select(item => new RawMaterial
+                {
+                    SkuCode = item.Sku.Trim(),
+                    Name = item.Name,
+                    Category = item.Category,
+                    UnitOfMeasure = "UNITS",
+                    ReorderThreshold = item.ReorderThreshold
+                })
+                .ToList();
+            if (missingMaterials.Count > 0)
+            {
+                _context.RawMaterials.AddRange(missingMaterials);
+                await _context.SaveChangesAsync();
+            }
+
+            return items
                 .Select(item => new InventoryItemDto
                 {
                     Id = item.Id,
@@ -52,7 +80,7 @@ namespace backend.Services
                     StockLevel = item.StockLevel,
                     ReorderThreshold = item.ReorderThreshold
                 })
-                .ToListAsync();
+                .ToList();
         }
 
         public async Task<InventoryItem?> GetInventoryItemByIdAsync(int id)
@@ -64,6 +92,18 @@ namespace backend.Services
         {
             _context.InventoryItems.Add(item);
             await _context.SaveChangesAsync();
+            if (!string.IsNullOrWhiteSpace(item.Sku) && !await _context.RawMaterials.AnyAsync(material => material.SkuCode == item.Sku.Trim()))
+            {
+                _context.RawMaterials.Add(new RawMaterial
+                {
+                    SkuCode = item.Sku.Trim(),
+                    Name = item.Name,
+                    Category = item.Category,
+                    UnitOfMeasure = "UNITS",
+                    ReorderThreshold = item.ReorderThreshold
+                });
+                await _context.SaveChangesAsync();
+            }
             return item;
         }
 
@@ -266,6 +306,51 @@ namespace backend.Services
 
         public async Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll)
         {
+            if (roll.InitialQuantity <= 0)
+            {
+                throw new InvalidOperationException("Roll quantity must be greater than zero.");
+            }
+
+            var rawMaterial = await _context.RawMaterials.FindAsync(roll.RawMaterialId);
+            if (rawMaterial == null)
+            {
+                throw new InvalidOperationException("The selected raw material was not found.");
+            }
+
+            var inventoryItem = await _context.InventoryItems
+                .FirstOrDefaultAsync(item => item.Sku == rawMaterial.SkuCode);
+            if (inventoryItem != null)
+            {
+                var allocatedQuantity = await _context.InventoryRolls
+                    .Where(existingRoll => existingRoll.RawMaterialId == roll.RawMaterialId)
+                    .SumAsync(existingRoll => (decimal?)existingRoll.CurrentQuantity) ?? 0m;
+                var remainingStock = inventoryItem.StockLevel - allocatedQuantity;
+                if (roll.InitialQuantity > remainingStock)
+                {
+                    throw new InvalidOperationException(
+                        $"Roll quantity ({roll.InitialQuantity}) exceeds remaining stock ({Math.Max(remainingStock, 0)} of {inventoryItem.StockLevel}) for {rawMaterial.SkuCode}.");
+                }
+            }
+
+            if (_context.Database.IsRelational())
+            {
+                var requestedBatchId = roll.BatchId ?? string.Empty;
+                var batchId = await _context.Database
+                    .SqlQueryRaw<string>("SELECT \"Id\" AS \"Value\" FROM \"Batches\" WHERE \"Id\" = {0} LIMIT 1", requestedBatchId)
+                    .FirstOrDefaultAsync();
+                if (batchId == null)
+                {
+                    batchId = await _context.Database
+                        .SqlQueryRaw<string>("SELECT \"Id\" AS \"Value\" FROM \"Batches\" ORDER BY \"Id\" LIMIT 1")
+                        .FirstOrDefaultAsync();
+                }
+                if (batchId == null)
+                {
+                    throw new InvalidOperationException("No batch is available for the new inventory roll.");
+                }
+                roll.BatchId = batchId;
+            }
+
             if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
             {
                 roll.RollIdentifier = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";

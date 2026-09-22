@@ -25,25 +25,35 @@ namespace ManufacturingCoordinator.Api.Controllers
         {
             var value = id.Trim();
             var batch = await _db.Batches
-                .Include(item => item.InventoryRolls)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(item => item.Id == value);
 
             if (batch == null)
             {
-                batch = await _db.InventoryRolls
+                var relatedBatchId = await _db.InventoryRolls
                     .Where(item => item.Id == value)
-                    .Select(item => item.Batch)
-                    .Include(item => item.InventoryRolls)
+                    .Select(item => item.BatchId)
                     .FirstOrDefaultAsync();
+                if (!string.IsNullOrWhiteSpace(relatedBatchId))
+                {
+                    batch = await _db.Batches
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(item => item.Id == relatedBatchId);
+                }
             }
 
             if (batch == null) return NotFound(new { message = "Batch was not found." });
+
+            var inventoryRolls = await _db.InventoryRolls
+                .AsNoTracking()
+                .Where(item => item.BatchId == batch.Id)
+                .ToListAsync();
 
             return Ok(new BatchDetailsDto
             {
                 Id = batch.Id,
                 ProductType = batch.ProductType,
-                InventoryRolls = batch.InventoryRolls.Select(roll => new InventoryRollDto
+                InventoryRolls = inventoryRolls.Select(roll => new InventoryRollDto
                 {
                     Id = roll.Id,
                     BatchId = roll.BatchId,

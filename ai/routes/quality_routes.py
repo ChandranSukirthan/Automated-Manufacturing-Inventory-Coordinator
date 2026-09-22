@@ -14,10 +14,12 @@ router = APIRouter(prefix="/quality", tags=["quality"])
 class DefectInput(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    batch_id: str = Field(alias="batchId")
+    batch_id: str | None = Field(None, alias="batchId")
+    sku_code: str | None = Field(None, alias="skuCode")
     product_type: str = Field(alias="productType")
     severity: str
     description: str
+    affected_inventory: list[str] = Field(default_factory=list, alias="affectedInventory")
 
 
 @router.post("/recommendation")

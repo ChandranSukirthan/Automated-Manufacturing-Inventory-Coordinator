@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import defectService from '../../services/defectService';
 import quarantineService from '../../services/quarantineService';
+import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import PageHeader from '../../components/QA/PageHeader';
 import StatusBadge from '../../components/QA/StatusBadge';
@@ -32,6 +33,7 @@ export default function DefectReportsPage() {
   const navigate = useNavigate();
   const [defects, setDefects] = useState([]);
   const [quarantines, setQuarantines] = useState([]);
+  const [inventoryRolls, setInventoryRolls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -45,12 +47,14 @@ export default function DefectReportsPage() {
     setLoading(true);
     setError('');
     try {
-      const [defectData, quarantineData] = await Promise.all([
+      const [defectData, quarantineData, rollData] = await Promise.all([
         defectService.getAll(),
-        quarantineService.getAll()
+        quarantineService.getAll(),
+        inventoryService.getRolls()
       ]);
       setDefects(defectData);
       setQuarantines(quarantineData);
+      setInventoryRolls(rollData);
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to load defect reports.'));
     } finally {
@@ -69,6 +73,12 @@ export default function DefectReportsPage() {
       .map((record) => record.inventoryRollId);
   };
 
+  const inventoryRollFor = (defect) => {
+    const rollId = inventoryFor(defect)[0];
+    const roll = inventoryRolls.find((item) => item.id === rollId);
+    return roll?.rollIdentifier || roll?.id || 'Unavailable';
+  };
+
   const isFiltered = query.trim() !== '' || productType !== 'All' || severity !== 'All' || status !== 'All';
 
   const clearFilters = () => {
@@ -83,6 +93,7 @@ export default function DefectReportsPage() {
     .filter((defect) => {
       const haystack = [
         defect.batchId,
+        inventoryRollFor(defect),
         defect.productType,
         defect.severity,
         defect.status,
@@ -103,7 +114,7 @@ export default function DefectReportsPage() {
       const values = {
         createdAt: [new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime()],
         severity: [left.severity, right.severity],
-        batchId: [left.batchId, right.batchId],
+        inventoryRoll: [inventoryRollFor(left), inventoryRollFor(right)],
         status: [left.status, right.status]
       }[sort.key];
       const comparison =
@@ -138,7 +149,7 @@ export default function DefectReportsPage() {
 
   const sortButtons = [
     { key: 'createdAt', label: 'Date' },
-    { key: 'batchId', label: 'Batch' },
+    { key: 'inventoryRoll', label: 'Inventory Roll' },
     { key: 'severity', label: 'Severity' },
     { key: 'status', label: 'Status' }
   ];
@@ -189,7 +200,7 @@ export default function DefectReportsPage() {
                 setQuery(e.target.value);
                 setPage(1);
               }}
-              placeholder="Search batch, description, inventory..."
+              placeholder="Search inventory roll, description..."
               className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
             />
           </div>
@@ -331,7 +342,7 @@ export default function DefectReportsPage() {
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-5 py-4">Batch</th>
+                  <th className="px-5 py-4">Inventory Roll</th>
                   <th className="px-5 py-4">Product</th>
                   <th className="px-5 py-4">Severity</th>
                   <th className="px-5 py-4">Status</th>
@@ -349,9 +360,9 @@ export default function DefectReportsPage() {
                       key={defect.id}
                       className="hover:bg-slate-800/40 transition-colors group"
                     >
-                      {/* Batch */}
+                      {/* SKU */}
                       <td className="px-5 py-4 font-mono font-bold text-white tracking-tight">
-                        {defect.batchId}
+                        {inventoryRollFor(defect)}
                       </td>
 
                       {/* Product */}

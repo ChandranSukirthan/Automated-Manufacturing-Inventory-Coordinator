@@ -97,7 +97,7 @@ export default function QuarantineHistoryPage() {
                 setQuery(e.target.value);
                 setPage(1);
               }}
-              placeholder="Filter released inventory, batch, reason..."
+              placeholder="Filter released inventory or reason..."
               className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
             />
           </div>
@@ -136,7 +136,6 @@ export default function QuarantineHistoryPage() {
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="px-5 py-4">Inventory</th>
-                  <th className="px-5 py-4">Batch</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Released At</th>
                   <th className="px-5 py-4">Disposition Reason</th>
@@ -151,11 +150,6 @@ export default function QuarantineHistoryPage() {
                     {/* Inventory */}
                     <td className="px-5 py-4 font-mono font-bold text-white tracking-tight">
                       {record.inventoryRollId}
-                    </td>
-
-                    {/* Batch */}
-                    <td className="px-5 py-4 text-slate-300 font-mono text-xs">
-                      {record.batchId}
                     </td>
 
                     {/* Status */}

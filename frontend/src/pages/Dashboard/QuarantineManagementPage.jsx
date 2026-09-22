@@ -292,7 +292,6 @@ export default function QuarantineManagementPage() {
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-5 py-4">Batch</th>
                   <th className="px-5 py-4">Inventory Rolls</th>
                   <th className="px-5 py-4">Severity</th>
                   <th className="px-5 py-4">Reason</th>
@@ -308,11 +307,6 @@ export default function QuarantineManagementPage() {
                     key={record.id}
                     className="hover:bg-slate-800/40 transition-colors group"
                   >
-                    {/* Batch */}
-                    <td className="px-5 py-4 font-mono font-bold text-white tracking-tight">
-                      {record.batchId}
-                    </td>
-
                     {/* Inventory Rolls */}
                     <td className="px-5 py-4 text-slate-300 font-mono text-xs">
                       {record.inventoryRollId}

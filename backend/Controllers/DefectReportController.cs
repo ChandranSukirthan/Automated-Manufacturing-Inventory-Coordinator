@@ -1,11 +1,15 @@
 using System;
 using System.Threading.Tasks;
 using System.Security.Claims;
+using System.Net.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using ManufacturingCoordinator.Api.DTOs.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
+using System.Net.Http.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace ManufacturingCoordinator.Api.Controllers
 {
@@ -16,11 +20,19 @@ namespace ManufacturingCoordinator.Api.Controllers
     {
         private readonly IDefectReportService _service;
         private readonly IQuarantineService _quarantineService;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
 
-        public DefectReportController(IDefectReportService service, IQuarantineService quarantineService)
+        public DefectReportController(
+            IDefectReportService service,
+            IQuarantineService quarantineService,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration)
         {
             _service = service;
             _quarantineService = quarantineService;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
         }
 
         [HttpGet]
@@ -55,9 +67,9 @@ namespace ManufacturingCoordinator.Api.Controllers
                 return ValidationProblem(ModelState);
             }
 
-            if (string.IsNullOrWhiteSpace(dto.BatchId))
+            if (string.IsNullOrWhiteSpace(dto.SkuCode))
             {
-                return BadRequest(new { message = "Batch ID is required." });
+                return BadRequest(new { message = "SKU code is required." });
             }
 
             if (string.IsNullOrWhiteSpace(dto.Description))
@@ -68,8 +80,19 @@ namespace ManufacturingCoordinator.Api.Controllers
             var reportedByUserId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
                 ? userId
                 : (Guid?)null;
-            var created = await _service.CreateAsync(dto, reportedByUserId);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            try
+            {
+                var created = await _service.CreateAsync(dto, reportedByUserId);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (DbUpdateException)
+            {
+                return Conflict(new { message = "The defect could not be saved because it conflicts with existing quality data." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpPut("{id:guid}")]
@@ -115,6 +138,53 @@ namespace ManufacturingCoordinator.Api.Controllers
                 id,
                 dto ?? new CreateQuarantineDto());
             return Ok(created);
+        }
+
+        [HttpPost("analyze")]
+        public async Task<IActionResult> Analyze([FromBody] CreateDefectReportDto dto)
+        {
+            if (dto == null || !ModelState.IsValid)
+            {
+                return ValidationProblem(ModelState);
+            }
+
+            var client = _httpClientFactory.CreateClient();
+            var baseUrl = _configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000";
+            var payload = new
+            {
+                skuCode = dto.SkuCode,
+                productType = dto.ProductType?.ToString(),
+                severity = dto.Severity.ToString(),
+                description = dto.Description,
+                affectedInventory = dto.AffectedInventory
+            };
+            try
+            {
+                var response = await client.PostAsJsonAsync(
+                    $"{baseUrl.TrimEnd('/')}/quality/recommendation",
+                    payload);
+                var content = await response.Content.ReadAsStringAsync();
+                return new ContentResult
+                {
+                    StatusCode = (int)response.StatusCode,
+                    ContentType = "application/json",
+                    Content = content
+                };
+            }
+            catch (HttpRequestException)
+            {
+                return StatusCode(503, new
+                {
+                    message = "The AI service is unavailable. Please start the AI service and try again."
+                });
+            }
+            catch (TaskCanceledException)
+            {
+                return StatusCode(504, new
+                {
+                    message = "The AI service took too long to respond. Please try again."
+                });
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import defectService from '../../services/defectService';
 import quarantineService from '../../services/quarantineService';
+import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import PageHeader from '../../components/QA/PageHeader';
 import StatusBadge from '../../components/QA/StatusBadge';
@@ -27,14 +28,17 @@ export default function DefectDetailPage() {
   const [reason, setReason] = useState('');
   const [quarantining, setQuarantining] = useState(false);
   const [affectedInventory, setAffectedInventory] = useState([]);
+  const [skuCode, setSkuCode] = useState('Unavailable');
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const [data, quarantineData] = await Promise.all([
+        const [data, quarantineData, rolls, materials] = await Promise.all([
           defectService.getById(id),
-          quarantineService.getAll()
+          quarantineService.getAll(),
+          inventoryService.getRolls(),
+          inventoryService.getRawMaterials()
         ]);
         const savedInventory = data.affectedInventory?.length
           ? data.affectedInventory
@@ -43,6 +47,8 @@ export default function DefectDetailPage() {
               .map((record) => record.inventoryRollId);
         setDefect(data);
         setAffectedInventory(savedInventory);
+        const selectedRoll = rolls.find((roll) => savedInventory.includes(roll.id));
+        setSkuCode(materials.find((material) => material.id === selectedRoll?.rawMaterialId)?.skuCode || 'Unavailable');
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load defect.'));
       } finally {
@@ -107,7 +113,7 @@ export default function DefectDetailPage() {
       <PageHeader
         category="Quality Assurance"
         title="Defect Detail"
-        subtitle={`Detailed inspection profile for Batch ${defect.batchId}`}
+        subtitle={`Detailed inspection profile for SKU ${skuCode}`}
         actions={
           <div className="flex items-center gap-2.5">
             <button
@@ -142,10 +148,10 @@ export default function DefectDetailPage() {
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 border-b border-slate-800/80 pb-8">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Batch ID
+              SKU Code
             </span>
             <div className="mt-1 text-xl font-bold font-mono text-white tracking-tight">
-              {defect.batchId}
+              {skuCode}
             </div>
           </div>
 
