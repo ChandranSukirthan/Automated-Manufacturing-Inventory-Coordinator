@@ -46,7 +46,6 @@ class BatchDetailsScreen extends StatelessWidget {
               builder: (_) => DefectFormScreen(
                 service: service,
                 initialBatchId: batch.id,
-                initialProductType: batch.productType,
               ),
             ),
           ),

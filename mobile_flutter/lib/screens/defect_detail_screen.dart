@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
+import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'defect_form_screen.dart';
@@ -28,6 +29,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
   bool _loading = true;
   bool _quarantining = false;
   List<QuarantineRecord> _affectedInventory = [];
+  String? _skuCode;
   final _reason = TextEditingController();
 
   @override
@@ -51,12 +53,23 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       final results = await Future.wait([
         widget.service.getDefect(widget.defectId),
         widget.service.getQuarantines(),
+        InventoryApiService().fetchOwnedRolls(),
+        InventoryApiService().fetchRawMaterials(),
       ]);
       final defect = results[0] as DefectReport;
       final quarantines = results[1] as List<QuarantineRecord>;
+      final rolls = results[2] as List<InventoryRollModel>;
+      final materials = results[3] as List<RawMaterialModel>;
+      final affectedRoll = rolls
+          .where((roll) => defect.affectedInventory.contains(roll.id))
+          .firstOrNull;
+      final material = materials
+          .where((item) => item.id == affectedRoll?.rawMaterialId)
+          .firstOrNull;
       if (mounted) {
         setState(() {
           _defect = defect;
+          _skuCode = material?.skuCode;
           _affectedInventory = quarantines
               .where((record) => record.defectReportId == widget.defectId)
               .toList();
@@ -92,14 +105,19 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       _error = null;
     });
     try {
-      final inventoryRollId = _affectedInventory.isNotEmpty
-          ? _affectedInventory.first.inventoryRollId
-          : '';
-      final record = await widget.service.quarantineDefect(
+      final records = await widget.service.quarantineDefect(
         widget.defectId,
         _reason.text.trim(),
-        inventoryRollId,
       );
+      final record = records.isNotEmpty ? records.first : null;
+      if (record == null) {
+        if (mounted) {
+          setState(
+            () => _error = 'The backend did not create a quarantine record.',
+          );
+        }
+        return;
+      }
       if (mounted) {
         await Navigator.push<void>(
           context,
@@ -157,6 +175,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             _DetailRow(label: 'Batch ID', value: defect.batchId),
+            _DetailRow(label: 'SKU Code', value: _skuCode ?? 'Unavailable'),
             _DetailRow(label: 'Product type', value: defect.productType),
             Row(
               children: [
@@ -187,12 +206,13 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
             ),
             _DetailRow(
               label: 'Affected inventory',
-              value: (defect.affectedInventory.isNotEmpty
-                      ? defect.affectedInventory
-                      : _affectedInventory
-                          .map((record) => record.inventoryRollId)
-                          .toList())
-                  .join(', '),
+              value:
+                  (defect.affectedInventory.isNotEmpty
+                          ? defect.affectedInventory
+                          : _affectedInventory
+                                .map((record) => record.inventoryRollId)
+                                .toList())
+                      .join(', '),
             ),
             const SizedBox(height: 20),
             Text(
@@ -214,10 +234,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(color: AppColors.errorText),
-              ),
+              Text(_error!, style: const TextStyle(color: AppColors.errorText)),
             ],
             const SizedBox(height: 16),
             FilledButton.icon(

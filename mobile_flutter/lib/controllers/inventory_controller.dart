@@ -8,8 +8,8 @@ class InventoryController extends ChangeNotifier {
   InventoryController({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
 
-  String _packagingType = 'Box Pouch';
-  String _sku = 'RM-PLASTIC-502';
+  String _packagingType = 'Standard Roll';
+  String _sku = '';
   int _quantityRequested = 500;
   bool _isLoading = false;
   String? _errorMessage;

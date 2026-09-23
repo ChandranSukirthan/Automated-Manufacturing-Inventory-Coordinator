@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../controllers/inventory_controller.dart';
+import '../services/api_client.dart';
+import '../services/inventory_api_service.dart';
 
 class ScannerView extends StatefulWidget {
   final InventoryController controller;
@@ -18,6 +20,7 @@ class ScannerView extends StatefulWidget {
 
 class _ScannerViewState extends State<ScannerView> {
   final MobileScannerController _scannerController = MobileScannerController();
+  final InventoryApiService _inventoryApi = InventoryApiService();
   bool _hasScanned = false;
 
   @override
@@ -26,7 +29,7 @@ class _ScannerViewState extends State<ScannerView> {
     super.dispose();
   }
 
-  void _handleBarcode(BarcodeCapture capture) {
+  Future<void> _handleBarcode(BarcodeCapture capture) async {
     if (_hasScanned) return;
 
     final List<Barcode> barcodes = capture.barcodes;
@@ -37,9 +40,20 @@ class _ScannerViewState extends State<ScannerView> {
         });
 
         final scannedCode = barcode.rawValue!;
+        Map<String, dynamic>? roll;
+        String? lookupError;
+        try {
+          roll = await _inventoryApi.lookupRoll(scannedCode);
+        } on ApiException catch (exception) {
+          lookupError = exception.message;
+        }
+        if (!mounted) return;
 
-        // Pass String data to controller placeholder method
-        widget.controller.setSku(scannedCode);
+        widget.controller.setSku(
+          (roll?['rollIdentifier'] as String?)?.trim().isNotEmpty == true
+            ? roll!['rollIdentifier'] as String
+            : scannedCode,
+        );
 
         // Show yellow SnackBar saying "Scan Successful"
         ScaffoldMessenger.of(context).showSnackBar(
@@ -52,7 +66,11 @@ class _ScannerViewState extends State<ScannerView> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Scan Successful: $scannedCode',
+                    roll == null
+                      ? lookupError == null
+                        ? 'Code captured: $scannedCode'
+                        : 'Code captured; lookup unavailable'
+                      : 'Roll found: ${roll['rollIdentifier'] ?? scannedCode}',
                     style: const TextStyle(
                       color: Colors.black,
                       fontWeight: FontWeight.bold,

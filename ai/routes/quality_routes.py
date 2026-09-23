@@ -16,7 +16,7 @@ class DefectInput(BaseModel):
 
     batch_id: str | None = Field(None, alias="batchId")
     sku_code: str | None = Field(None, alias="skuCode")
-    product_type: str = Field(alias="productType")
+    product_type: str | None = Field(None, alias="productType")
     severity: str
     description: str
     affected_inventory: list[str] = Field(default_factory=list, alias="affectedInventory")

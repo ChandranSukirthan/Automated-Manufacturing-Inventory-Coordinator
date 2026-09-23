@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'quarantine_detail_screen.dart';
+import 'quarantine_history_screen.dart';
 
 class QuarantineScreen extends StatefulWidget {
   const QuarantineScreen({required this.service, super.key});
@@ -16,6 +18,7 @@ class QuarantineScreen extends StatefulWidget {
 }
 
 class _QuarantineScreenState extends State<QuarantineScreen> {
+  static const _pageSize = 8;
   List<QuarantineRecord>? _records;
   List<DefectReport> _defects = [];
   String? _error;
@@ -23,6 +26,7 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
   String? _severity;
   String? _status;
   _QuarantineSort _sort = _QuarantineSort.newest;
+  int _page = 1;
 
   @override
   void initState() {
@@ -70,13 +74,17 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
           (_severity == null || severity == _severity) &&
           (_status == null || record.status == _status);
     }).toList();
-    records.sort((left, right) => switch (_sort) {
-      _QuarantineSort.newest => right.createdAt.compareTo(left.createdAt),
-      _QuarantineSort.oldest => left.createdAt.compareTo(right.createdAt),
-      _QuarantineSort.batch => left.batchId.compareTo(right.batchId),
-      _QuarantineSort.status => left.status.compareTo(right.status),
-      _QuarantineSort.severity => _severityFor(left).compareTo(_severityFor(right)),
-    });
+    records.sort(
+      (left, right) => switch (_sort) {
+        _QuarantineSort.newest => right.createdAt.compareTo(left.createdAt),
+        _QuarantineSort.oldest => left.createdAt.compareTo(right.createdAt),
+        _QuarantineSort.batch => left.batchId.compareTo(right.batchId),
+        _QuarantineSort.status => left.status.compareTo(right.status),
+        _QuarantineSort.severity => _severityFor(
+          left,
+        ).compareTo(_severityFor(right)),
+      },
+    );
     return records;
   }
 
@@ -91,6 +99,7 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
     setState(() {
       _severity = result.severity;
       _status = result.status;
+      _page = 1;
     });
   }
 
@@ -117,7 +126,12 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
         ),
       ),
     );
-    if (result != null && mounted) setState(() => _sort = result);
+    if (result != null && mounted) {
+      setState(() {
+        _sort = result;
+        _page = 1;
+      });
+    }
   }
 
   Future<void> _open(QuarantineRecord record) async {
@@ -136,10 +150,26 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
   @override
   Widget build(BuildContext context) {
     final records = _visibleRecords;
+    final totalPages = (records.length / _pageSize).ceil().clamp(1, 999999);
+    final visibleRecords = records
+        .skip((_page - 1).clamp(0, totalPages - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quarantine'),
+        title: const Text('Quarantine Management'),
         actions: [
+          IconButton(
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    QuarantineHistoryScreen(service: widget.service),
+              ),
+            ),
+            icon: const Icon(Icons.history),
+            tooltip: 'History',
+          ),
           IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
           IconButton(
             onPressed: _showFilters,
@@ -159,57 +189,249 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  TextField(
-                    onChanged: (value) => setState(() => _query = value),
-                    decoration: InputDecoration(
-                      hintText: 'Search batch, inventory, reason...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              onPressed: () => setState(() => _query = ''),
-                              icon: const Icon(Icons.clear),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('${records.length} result${records.length == 1 ? '' : 's'} · ${_sort.label}'),
-                  const SizedBox(height: 8),
+                  _pageHeader(),
+                  const SizedBox(height: 20),
+                  _filterToolbar(),
+                  const SizedBox(height: 16),
+                  if (_error != null) _errorBanner(),
                   if (records.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.only(top: 120),
+                      padding: EdgeInsets.only(top: 80),
                       child: StateMessage(
                         message: 'No quarantine records match these filters.',
                         icon: Icons.inventory_2_outlined,
                       ),
                     )
                   else
-                    ...records.map(
-                      (record) => Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          onTap: () => _open(record),
-                          title: Text(
-                            record.batchId,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '${record.inventoryRollId}\n${_severityFor(record)} · ${record.reason}\nCreated: ${_formatDate(record.createdAt)}${record.releasedAt == null ? '' : '\nReleased: ${_formatDate(record.releasedAt!)}'}',
-                            ),
-                          ),
-                          isThreeLine: true,
-                          trailing: StatusPill(record.status),
+                    _quarantineTable(visibleRecords),
+                  if (totalPages > 1) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: _page <= 1
+                              ? null
+                              : () => setState(() => _page--),
+                          icon: const Icon(Icons.chevron_left),
                         ),
-                      ),
+                        Text(
+                          'Page ${_page.clamp(1, totalPages)} of $totalPages',
+                        ),
+                        IconButton(
+                          onPressed: _page >= totalPages
+                              ? null
+                              : () => setState(() => _page++),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
                     ),
+                  ],
                 ],
               ),
             ),
     );
   }
+
+  Widget _pageHeader() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Quality Assurance  •  Control Center',
+        style: TextStyle(
+          color: AppColors.primaryLight,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
+      ),
+      const SizedBox(height: 6),
+      const Text(
+        'Quarantine Management',
+        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 4),
+      const Text('Review and manage inventory currently under quality hold.'),
+    ],
+  );
+
+  Widget _filterToolbar() {
+    final hasFilters =
+        _query.isNotEmpty || _severity != null || _status != null;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            TextField(
+              onChanged: (value) => setState(() {
+                _query = value;
+                _page = 1;
+              }),
+              decoration: InputDecoration(
+                hintText: 'Search batch, inventory, reason...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => setState(() {
+                          _query = '';
+                          _page = 1;
+                        }),
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _dropdown(
+              'All Severities',
+              _severity,
+              const ['LOW', 'MEDIUM', 'HIGH', 'Critical'],
+              (value) => setState(() {
+                _severity = value;
+                _page = 1;
+              }),
+            ),
+            const SizedBox(height: 8),
+            _dropdown(
+              'All Statuses',
+              _status,
+              const ['Active', 'Released'],
+              (value) => setState(() {
+                _status = value;
+                _page = 1;
+              }),
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                const Text(
+                  'Sort By:',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_sort.label)),
+                IconButton(
+                  onPressed: _showSort,
+                  icon: const Icon(Icons.swap_vert),
+                  tooltip: 'Change sort',
+                ),
+                if (hasFilters)
+                  IconButton(
+                    onPressed: () => setState(() {
+                      _query = '';
+                      _severity = null;
+                      _status = null;
+                      _page = 1;
+                    }),
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Reset filters',
+                  ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${_visibleRecords.length} quarantine record${_visibleRecords.length == 1 ? '' : 's'} found',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dropdown(
+    String label,
+    String? value,
+    List<String> values,
+    ValueChanged<String?> onChanged,
+  ) => DropdownButtonFormField<String?>(
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(labelText: label),
+    items: [
+      DropdownMenuItem<String?>(value: null, child: Text(label)),
+      ...values.map(
+        (item) => DropdownMenuItem<String?>(value: item, child: Text(item)),
+      ),
+    ],
+    onChanged: onChanged,
+  );
+
+  Widget _errorBanner() => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.error.withValues(alpha: 0.12),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            _error!,
+            style: const TextStyle(color: AppColors.errorText),
+          ),
+        ),
+        TextButton(onPressed: _load, child: const Text('Retry')),
+      ],
+    ),
+  );
+
+  Widget _quarantineTable(List<QuarantineRecord> records) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Inventory Rolls')),
+          DataColumn(label: Text('Severity')),
+          DataColumn(label: Text('Reason')),
+          DataColumn(label: Text('Created')),
+          DataColumn(label: Text('Status')),
+          DataColumn(label: Text('Released')),
+          DataColumn(label: Text('Actions')),
+        ],
+        rows: records
+            .map(
+              (record) => DataRow(
+                cells: [
+                  DataCell(Text(record.inventoryRollId)),
+                  DataCell(StatusPill(_severityFor(record))),
+                  DataCell(
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(
+                        record.reason,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  DataCell(Text(_formatDate(record.createdAt))),
+                  DataCell(StatusPill(record.status)),
+                  DataCell(
+                    Text(
+                      record.releasedAt == null
+                          ? 'Not released'
+                          : _formatDate(record.releasedAt!),
+                    ),
+                  ),
+                  DataCell(
+                    IconButton(
+                      onPressed: () => _open(record),
+                      icon: const Icon(Icons.visibility_outlined),
+                      tooltip: 'View',
+                    ),
+                  ),
+                ],
+              ),
+            )
+            .toList(),
+      ),
+    ),
+  );
 }
 
 enum _QuarantineSort { newest, oldest, batch, severity, status }
@@ -252,12 +474,26 @@ class _QuarantineFilterSheetState extends State<_QuarantineFilterSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Filter quarantine', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Filter quarantine',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 12),
-          _dropdown('Severity', _severity, const ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], (value) => setState(() => _severity = value)),
-          _dropdown('Status', _status, const ['Active', 'Released'], (value) => setState(() => _status = value)),
+          _dropdown('Severity', _severity, const [
+            'LOW',
+            'MEDIUM',
+            'HIGH',
+            'Critical',
+          ], (value) => setState(() => _severity = value)),
+          _dropdown('Status', _status, const [
+            'Active',
+            'Released',
+          ], (value) => setState(() => _status = value)),
           FilledButton(
-            onPressed: () => Navigator.pop(context, _QuarantineFilters(severity: _severity, status: _status)),
+            onPressed: () => Navigator.pop(
+              context,
+              _QuarantineFilters(severity: _severity, status: _status),
+            ),
             child: const Text('Apply filters'),
           ),
           TextButton(
@@ -281,7 +517,9 @@ class _QuarantineFilterSheetState extends State<_QuarantineFilterSheet> {
       decoration: InputDecoration(labelText: label),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('All')),
-        ...values.map((item) => DropdownMenuItem<String?>(value: item, child: Text(item))),
+        ...values.map(
+          (item) => DropdownMenuItem<String?>(value: item, child: Text(item)),
+        ),
       ],
       onChanged: onChanged,
     ),

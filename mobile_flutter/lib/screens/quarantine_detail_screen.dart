@@ -26,6 +26,7 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
   bool _loading = true;
   bool _releasing = false;
   BatchDetails? _batch;
+  DefectReport? _defect;
 
   @override
   void initState() {
@@ -40,11 +41,15 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     });
     try {
       final record = await widget.service.getQuarantine(widget.quarantineId);
-      final batch = await widget.service.getBatch(record.batchId);
+      final results = await Future.wait([
+        widget.service.getBatch(record.batchId),
+        widget.service.getDefect(record.defectReportId),
+      ]);
       if (mounted) {
         setState(() {
           _record = record;
-          _batch = batch;
+          _batch = results[0] as BatchDetails;
+          _defect = results[1] as DefectReport;
         });
       }
     } on ApiException catch (exception) {
@@ -84,11 +89,15 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
       final record = await widget.service.releaseQuarantine(
         widget.quarantineId,
       );
-      final batch = await widget.service.getBatch(record.batchId);
+      final results = await Future.wait([
+        widget.service.getBatch(record.batchId),
+        widget.service.getDefect(record.defectReportId),
+      ]);
       if (mounted) {
         setState(() {
           _record = record;
-          _batch = batch;
+          _batch = results[0] as BatchDetails;
+          _defect = results[1] as DefectReport;
         });
       }
     } on ApiException catch (exception) {
@@ -133,11 +142,13 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             _Info(label: 'Defect', value: record.defectReportId),
+            _Info(label: 'Severity', value: _defect?.severity ?? 'Unknown'),
             _Info(label: 'Batch', value: record.batchId),
             _Info(label: 'Inventory', value: record.inventoryRollId),
             _Info(
               label: 'Inventory status',
-              value: _batch?.inventoryRolls
+              value:
+                  _batch?.inventoryRolls
                       .firstWhere(
                         (roll) => roll.id == record.inventoryRollId,
                         orElse: () => const InventoryRoll(
@@ -176,10 +187,7 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(color: AppColors.errorText),
-              ),
+              Text(_error!, style: const TextStyle(color: AppColors.errorText)),
             ],
             if (active) ...[
               const SizedBox(height: 20),

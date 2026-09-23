@@ -29,11 +29,11 @@ def analyze_defect_context(
 ) -> dict[str, Any]:
     """Validate a defect and produce a deterministic quarantine assessment."""
     batch_id = str(defect.get("batchId") or "").strip()
-    product_type = _required_text(defect.get("productType"), "productType")
     severity_value = _required_text(defect.get("severity"), "severity")
     description = _required_text(defect.get("description"), "description")
 
-    if product_type not in PRODUCT_TYPES:
+    product_type = str(defect.get("productType") or "").strip()
+    if product_type and product_type not in PRODUCT_TYPES:
         raise ValueError(f"productType must be one of: {', '.join(sorted(PRODUCT_TYPES))}")
 
     severity = severity_value.upper()

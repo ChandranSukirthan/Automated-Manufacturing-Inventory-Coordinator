@@ -7,6 +7,10 @@ import '../services/api_client.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'batch_scan_screen.dart';
+import 'defect_form_screen.dart';
+import 'defects_screen.dart';
+import 'quarantine_history_screen.dart';
+import 'quarantine_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -122,6 +126,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Scan batch QR'),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DefectsScreen(service: widget.service),
+                  ),
+                ),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('View Defects'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => QuarantineScreen(service: widget.service),
+                  ),
+                ),
+                icon: const Icon(Icons.shield_outlined),
+                label: const Text('Manage Quarantine'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DefectFormScreen(service: widget.service),
+                  ),
+                ),
+                icon: const Icon(Icons.add_alert_outlined),
+                label: const Text('New Defect'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        QuarantineHistoryScreen(service: widget.service),
+                  ),
+                ),
+                icon: const Icon(Icons.history),
+                label: const Text('History'),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           GridView.count(
