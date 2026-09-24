@@ -27,11 +27,6 @@ class ApiClient {
                   ))
               .replaceAll(RegExp(r'/$'), '');
 
-  final String aiBaseUrl = const String.fromEnvironment(
-    'AI_API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000',
-  ).replaceAll(RegExp(r'/$'), '');
-
   final SessionStorage storage;
   final String baseUrl;
   Future<void> Function()? onSessionExpired;
@@ -39,8 +34,6 @@ class ApiClient {
   Future<dynamic> get(String path) => _request('GET', path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
-    Future<dynamic> postAi(String path, [Map<String, dynamic>? body]) =>
-      _request('POST', path, body, true, aiBaseUrl);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
       _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);
@@ -127,7 +120,14 @@ class ApiClient {
 
   String _message(http.Response response) {
     try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      if (decoded is String && decoded.isNotEmpty) return decoded;
+      if (decoded is! Map<String, dynamic>) {
+        return response.body.trim().isNotEmpty
+            ? response.body.trim()
+            : 'The request could not be completed (${response.statusCode}).';
+      }
+      final data = decoded;
       final message = data['message'] as String?;
       if (message != null && message.isNotEmpty) return message;
 
@@ -143,7 +143,10 @@ class ApiClient {
 
       return data['title'] as String? ?? 'The request could not be completed.';
     } catch (_) {
-      return 'The request could not be completed (${response.statusCode}).';
+      final body = response.body.trim();
+      return body.isNotEmpty
+          ? body
+          : 'The request could not be completed (${response.statusCode}).';
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -7,19 +8,27 @@ import '../widgets/app_widgets.dart';
 import 'quarantine_detail_screen.dart';
 
 class QuarantineHistoryScreen extends StatefulWidget {
-  const QuarantineHistoryScreen({required this.service, super.key});
+  const QuarantineHistoryScreen({
+    required this.service,
+    this.showPageChrome = true,
+    super.key,
+  });
 
   final QualityService service;
+  final bool showPageChrome;
 
   @override
-  State<QuarantineHistoryScreen> createState() => _QuarantineHistoryScreenState();
+  State<QuarantineHistoryScreen> createState() =>
+      _QuarantineHistoryScreenState();
 }
 
 class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
+  static const _pageSize = 8;
   List<QuarantineRecord>? _records;
   String? _error;
   String _query = '';
   _HistorySort _sort = _HistorySort.newest;
+  int _page = 1;
 
   @override
   void initState() {
@@ -33,7 +42,9 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
       final records = await widget.service.getQuarantines();
       if (mounted) {
         setState(() {
-          _records = records.where((record) => record.status == 'Released').toList();
+          _records = records
+              .where((record) => record.status == 'Released')
+              .toList();
         });
       }
     } on ApiException catch (exception) {
@@ -52,14 +63,20 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
       ].join(' ').toLowerCase();
       return query.isEmpty || text.contains(query);
     }).toList();
-    records.sort((left, right) => switch (_sort) {
-      _HistorySort.newest => (right.releasedAt ?? right.createdAt)
-          .compareTo(left.releasedAt ?? left.createdAt),
-      _HistorySort.oldest => (left.releasedAt ?? left.createdAt)
-          .compareTo(right.releasedAt ?? right.createdAt),
-      _HistorySort.batch => left.batchId.compareTo(right.batchId),
-      _HistorySort.inventory => left.inventoryRollId.compareTo(right.inventoryRollId),
-    });
+    records.sort(
+      (left, right) => switch (_sort) {
+        _HistorySort.newest => (right.releasedAt ?? right.createdAt).compareTo(
+          left.releasedAt ?? left.createdAt,
+        ),
+        _HistorySort.oldest => (left.releasedAt ?? left.createdAt).compareTo(
+          right.releasedAt ?? right.createdAt,
+        ),
+        _HistorySort.batch => left.batchId.compareTo(right.batchId),
+        _HistorySort.inventory => left.inventoryRollId.compareTo(
+          right.inventoryRollId,
+        ),
+      },
+    );
     return records;
   }
 
@@ -86,7 +103,12 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
         ),
       ),
     );
-    if (result != null && mounted) setState(() => _sort = result);
+    if (result != null && mounted) {
+      setState(() {
+        _sort = result;
+        _page = 1;
+      });
+    }
   }
 
   Future<void> _open(QuarantineRecord record) async {
@@ -105,66 +127,408 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final records = _visibleRecords;
+    final totalPages = (records.length / _pageSize).ceil().clamp(1, 999999);
+    final visibleRecords = records
+        .skip((_page - 1).clamp(0, totalPages - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
     if (_error != null && _records == null) {
-      return StateMessage(message: _error!, icon: Icons.cloud_off, action: _load);
+      return StateMessage(
+        message: _error!,
+        icon: Icons.cloud_off,
+        action: _load,
+      );
     }
-    if (_records == null) return const Center(child: CircularProgressIndicator());
+    if (_records == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quarantine history'),
-        actions: [IconButton(onPressed: _showSort, icon: const Icon(Icons.sort))],
-      ),
+      appBar: widget.showPageChrome
+          ? AppBar(
+              title: const Text('History'),
+              actions: [
+                IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
+              ],
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            TextField(
-              onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
-                hintText: 'Search inventory, batch, reason...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => setState(() => _query = ''),
-                        icon: const Icon(Icons.clear),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text('${records.length} result${records.length == 1 ? '' : 's'} · ${_sort.label}'),
-            const SizedBox(height: 8),
+            if (widget.showPageChrome) ...[
+              _pageHeader(),
+              const SizedBox(height: 20),
+            ],
+            _searchToolbar(records.length),
+            const SizedBox(height: 16),
+            if (_error != null) _errorBanner(),
             if (records.isEmpty)
               const Padding(
-                padding: EdgeInsets.only(top: 120),
+                padding: EdgeInsets.only(top: 80),
                 child: StateMessage(
                   message: 'No released quarantine history found.',
                   icon: Icons.history,
                 ),
               )
             else
-              ...records.map(
-                (record) => Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    onTap: () => _open(record),
-                    title: Text(record.inventoryRollId, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text(
-                      'Batch: ${record.batchId}\nStatus: ${record.status}\nReleased: ${_formatDate(record.releasedAt ?? record.createdAt)}\nReason: ${record.reason}',
-                    ),
-                    isThreeLine: true,
-                    trailing: const StatusPill('Released'),
+              _historyTable(visibleRecords),
+            if (totalPages > 1) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: _page <= 1
+                        ? null
+                        : () => setState(() => _page--),
+                    icon: const Icon(Icons.chevron_left),
                   ),
-                ),
+                  Text('Page ${_page.clamp(1, totalPages)} of $totalPages'),
+                  IconButton(
+                    onPressed: _page >= totalPages
+                        ? null
+                        : () => setState(() => _page++),
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
               ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  Widget _pageHeader() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'QUALITY ASSURANCE  •  CONTROL CENTER',
+        style: TextStyle(
+          color: AppColors.primaryLight,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
+        ),
+      ),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'History',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Review previously released quality holds.',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.28),
+              ),
+            ),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.primaryLight,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _searchToolbar(int count) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: _historyDecoration,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final counter = Text(
+          'Showing $count released audit record${count == 1 ? '' : 's'}',
+          textAlign: constraints.maxWidth < 420
+              ? TextAlign.left
+              : TextAlign.right,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        final search = TextField(
+          onChanged: (value) => setState(() {
+            _query = value;
+            _page = 1;
+          }),
+          style: const TextStyle(color: AppColors.strongText, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Filter releas...',
+            hintStyle: const TextStyle(color: AppColors.mutedText),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () => setState(() {
+                      _query = '';
+                      _page = 1;
+                    }),
+                    icon: const Icon(Icons.clear),
+                  ),
+          ),
+        );
+        if (constraints.maxWidth < 420) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [search, const SizedBox(height: 10), counter],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+          Expanded(
+            child: search,
+          ),
+          const SizedBox(width: 12),
+          Flexible(child: counter),
+          ],
+        );
+      },
+    ),
+  );
+
+  Widget _errorBanner() => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.error.withValues(alpha: 0.12),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            _error!,
+            style: const TextStyle(color: AppColors.errorText),
+          ),
+        ),
+        TextButton(onPressed: _load, child: const Text('Retry')),
+      ],
+    ),
+  );
+
+  Widget _historyTable(List<QuarantineRecord> records) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth < 700
+        ? _historyCards(records)
+        : Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: _historyDecoration,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Inventory')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Released At')),
+                  DataColumn(label: Text('Disposition Reason')),
+                  DataColumn(label: Text('Actions')),
+                ],
+                rows: records
+                    .map(
+                      (record) => DataRow(
+                        cells: [
+                          DataCell(Text(record.inventoryRollId)),
+                          DataCell(const _ReleasedBadge()),
+                          DataCell(
+                            Text(
+                              _formatDate(
+                                record.releasedAt ?? record.createdAt,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 260),
+                              child: Text(
+                                record.reason,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            IconButton(
+                              onPressed: () => _open(record),
+                              icon: const Icon(Icons.visibility_outlined),
+                              tooltip: 'View',
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+  );
+
+  Widget _historyCards(List<QuarantineRecord> records) => Column(
+    children: [
+      for (final record in records) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 15, 12, 8),
+          decoration: _historyDecoration,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.history_rounded,
+                    color: AppColors.primaryLight,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      record.inventoryRollId,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.strongText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
+              const SizedBox(height: 5),
+              _historyField('Inventory', Text(record.inventoryRollId)),
+              _historyField('Status', const _ReleasedBadge()),
+              _historyField(
+                'Released At',
+                Text(_formatDate(record.releasedAt ?? record.createdAt)),
+              ),
+              _historyField(
+                'Disposition',
+                Text(
+                  record.reason,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _open(record),
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: const Text('View'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primaryLight,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ],
+  );
+
+  Widget _historyField(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(top: 5, bottom: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: DefaultTextStyle(
+            style: const TextStyle(
+              color: AppColors.strongText,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            child: value,
+          ),
+        ),
+      ],
+    ),
+  );
 }
+
+class _ReleasedBadge extends StatelessWidget {
+  const _ReleasedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: AppColors.primary.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+    ),
+    child: const Text(
+      'Released',
+      style: TextStyle(
+        color: AppColors.primaryLight,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+final _historyDecoration = BoxDecoration(
+  gradient: const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+  ),
+  borderRadius: BorderRadius.circular(16),
+  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+  boxShadow: [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.25),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ],
+);
 
 enum _HistorySort { newest, oldest, batch, inventory }
 

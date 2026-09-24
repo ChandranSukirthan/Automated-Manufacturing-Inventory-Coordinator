@@ -36,7 +36,7 @@ export default function DefectFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
-  const [form, setForm] = useState({ skuCode: '', rawMaterialName: '', productType: '', severity: 'LOW', description: '', status: 'Open' });
+  const [form, setForm] = useState({ skuCode: '', rawMaterialName: '', severity: 'LOW', description: '', status: 'Open' });
   const [inventoryItems, setInventoryItems] = useState([]);
   const [rawMaterials, setRawMaterials] = useState([]);
   const [inventoryRolls, setInventoryRolls] = useState([]);
@@ -78,9 +78,7 @@ export default function DefectFormPage() {
         const roll = inventoryRolls.find((item) => affected.includes(item.id));
         const material = getCreatedMaterials(inventoryItems, rawMaterials)
           .find((item) => item.id === roll?.rawMaterialId);
-        let productType = data.productType || '';
-        if (roll?.batchId) productType = (await defectService.getBatch(roll.batchId)).productType;
-        setForm({ skuCode: material?.skuCode || '', rawMaterialName: material?.name || '', productType, severity: data.severity, description: data.description, status: data.status });
+        setForm({ skuCode: material?.skuCode || '', rawMaterialName: material?.name || '', severity: data.severity, description: data.description, status: data.status });
         setSelectedInventory(affected);
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load defect.'));
@@ -98,30 +96,20 @@ export default function DefectFormPage() {
   const handleSkuChange = async (event) => {
     const skuCode = event.target.value;
     const material = createdMaterials.find((item) => item.skuCode === skuCode);
-    const firstRoll = inventoryRolls.find((roll) => roll.rawMaterialId === material?.id);
     setSelectedInventory([]);
-    setForm((current) => ({ ...current, skuCode, rawMaterialName: material?.name || '', productType: '' }));
-    if (firstRoll?.batchId) {
-      try {
-        const batch = await defectService.getBatch(firstRoll.batchId);
-        setForm((current) => ({ ...current, productType: batch.productType }));
-      } catch (err) {
-        setError(parseErrorMessage(err, 'Unable to determine product type from the selected roll.'));
-      }
-    }
+    setForm((current) => ({ ...current, skuCode, rawMaterialName: material?.name || '' }));
   };
 
   const handleChange = (event) => setForm({ ...form, [event.target.name]: event.target.value });
 
   const validate = (requireInventory = true) => {
     if (!form.skuCode) return 'Inventory roll is required.';
-    if (!form.productType) return 'Product type could not be determined from the selected roll.';
     if (requireInventory && selectedInventory.length === 0) return 'Select at least one inventory roll.';
     if (!form.description.trim()) return 'Description is required.';
     return '';
   };
 
-  const payload = { skuCode: form.skuCode, productType: form.productType, severity: form.severity, description: form.description.trim(), status: form.status, affectedInventory: selectedInventory };
+  const payload = { skuCode: form.skuCode, severity: form.severity, description: form.description.trim(), status: form.status, affectedInventory: selectedInventory };
   const assessedRollIds = aiRecommendation?.affectedInventory || [];
   const assessedRolls = assessedRollIds.map((rollId) => inventoryRolls.find((roll) => roll.id === rollId)).filter(Boolean);
 

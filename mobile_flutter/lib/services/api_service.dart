@@ -1,29 +1,15 @@
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import '../models/low_stock_alert.dart';
+import 'api_client.dart';
+import 'session_storage.dart';
 
 class ApiService {
-  final String baseUrl;
+  ApiService({ApiClient? api})
+    : _api = api ?? ApiClient(storage: SessionStorage());
 
-  ApiService({this.baseUrl = 'https://localhost:7001/api'});
+  final ApiClient _api;
 
-  /// Simulates sending a POST request to an ASP.NET Core backend.
   Future<bool> submitLowStockAlert(LowStockAlert alert) async {
-    final payloadJson = jsonEncode(alert.toJson());
-
-    if (kDebugMode) {
-      print('Simulating POST request to $baseUrl/inventory/low-stock-alert');
-      print('Payload: $payloadJson');
-    }
-
-    // Simulate network delay to ASP.NET Core backend
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Simulated successful HTTP 200 OK response from ASP.NET Core backend
-    if (kDebugMode) {
-      print('ASP.NET Core Backend response: 200 OK');
-    }
-
+    await _api.post('/inventory/low-stock-alert', alert.toJson());
     return true;
   }
 }
