@@ -40,6 +40,7 @@ export default function WorkerHeader({ user, loading, onRefresh, onLogout }) {
             <div className="text-right">
               <div className="text-xs font-semibold text-slate-200">{user?.fullName || 'Floor Worker'}</div>
               <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">Floor Worker</div>
+              <div className="text-xs font-semibold text-slate-200">{user?.fullName || 'User'}</div>
             </div>
             <button
               onClick={onLogout}
