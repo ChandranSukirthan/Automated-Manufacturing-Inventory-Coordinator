@@ -5,11 +5,15 @@ import 'package:flutter/material.dart';
 class ManagerDashboardView extends StatefulWidget {
   final VoidCallback? onOpenExecutionLog;
   final Function(int)? onTabSelected;
+  final ValueChanged<String>? onWorkflowStatusChanged;
+  final bool canApproveFinancialActions;
 
   const ManagerDashboardView({
     super.key,
     this.onOpenExecutionLog,
     this.onTabSelected,
+    this.onWorkflowStatusChanged,
+    this.canApproveFinancialActions = false,
   });
 
   @override
@@ -23,10 +27,12 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
   List<dynamic> _alerts = [];
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  late final ScrollController _pageScrollController;
 
   @override
   void initState() {
     super.initState();
+    _pageScrollController = ScrollController();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
@@ -37,6 +43,7 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
 
   @override
   void dispose() {
+    _pageScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -47,8 +54,8 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
     });
 
     try {
-      final invResponse = await http.get(Uri.parse('http://localhost:5070/api/Inventory'));
-      final alertsResponse = await http.get(Uri.parse('http://localhost:5070/api/Inventory/alerts'));
+      final invResponse = await http.get(Uri.parse('http://10.0.2.2:5070/api/Inventory'));
+      final alertsResponse = await http.get(Uri.parse('http://10.0.2.2:5070/api/Inventory/alerts'));
 
       if (invResponse.statusCode == 200 && alertsResponse.statusCode == 200) {
         setState(() {
@@ -67,25 +74,82 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
     }
   }
 
+  bool _requiresAction(dynamic alert) {
+    final status = (alert['status'] ?? '').toString().toLowerCase();
+    return status == 'pending' ||
+        status == 'scanned' ||
+        status == 'pending approval';
+  }
+
+  String _requestKey(dynamic alert) {
+    String value(String field) =>
+        (alert[field] ?? '').toString().trim().toLowerCase();
+
+    return [
+      value('packagingType'),
+      value('sku'),
+      value('quantityRequested'),
+    ].join('|');
+  }
+
+  List<dynamic> get _actionRequiredAlerts {
+    final seenRequestKeys = <String>{};
+    return _alerts
+        .where(_requiresAction)
+        .where((alert) => seenRequestKeys.add(_requestKey(alert)))
+        .toList();
+  }
+
   Future<void> _updateAlertStatus(int id, String status) async {
+    final selectedAlerts = _alerts
+        .where((alert) => alert['id'] == id && _requiresAction(alert))
+        .toList();
+    if (selectedAlerts.isEmpty) return;
+
+    final requestKey = _requestKey(selectedAlerts.first);
+    final relatedAlertIds = _alerts
+        .where((alert) => _requiresAction(alert) && _requestKey(alert) == requestKey)
+        .map((alert) => alert['id'] as int)
+        .toList();
+
     try {
-      final response = await http.put(
-        Uri.parse('http://localhost:5070/api/Inventory/alerts/$id'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'status': status}),
+      final responses = await Future.wait(
+        relatedAlertIds.map(
+          (alertId) => http.put(
+            Uri.parse('http://10.0.2.2:5070/api/Inventory/alerts/$alertId'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'status': status}),
+          ),
+        ),
       );
 
-      if (response.statusCode == 204 || response.statusCode == 200) {
+      final didUpdateEveryAlert = responses.every(
+        (response) => response.statusCode == 204 || response.statusCode == 200,
+      );
+      if (didUpdateEveryAlert) {
         if (mounted) {
+          setState(() {
+            _alerts.removeWhere(
+              (alert) => _requiresAction(alert) && _requestKey(alert) == requestKey,
+            );
+          });
+          widget.onWorkflowStatusChanged?.call(status);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Alert marked as $status!'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(
+                '${relatedAlertIds.length} matching alert${relatedAlertIds.length == 1 ? '' : 's'} marked as $status.',
+              ),
+              backgroundColor: Colors.green,
+            ),
           );
         }
-        _fetchData();
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error updating status: ${response.statusCode}'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('Could not update every matching alert. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -96,6 +160,72 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
         );
       }
     }
+  }
+
+  void _showNotifications() {
+    final notifications = _actionRequiredAlerts;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F1B2B),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: 360,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: Text(
+                  'Notifications',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              Expanded(
+                child: notifications.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'You are all caught up.',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: notifications.length,
+                        separatorBuilder: (_, __) => const Divider(color: Colors.white12),
+                        itemBuilder: (context, index) {
+                          final alert = notifications[index] as Map<String, dynamic>;
+                          return ListTile(
+                            leading: const Icon(
+                              Icons.notifications_active_outlined,
+                              color: Color(0xFF5CC8F8),
+                            ),
+                            title: Text(
+                              'Approval required: ${alert['sku'] ?? 'Unknown SKU'}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            subtitle: Text(
+                              '${alert['quantityRequested'] ?? 0} units requested',
+                              style: const TextStyle(color: Colors.white54),
+                            ),
+                            onTap: () {
+                              Navigator.pop(sheetContext);
+                              _showAgentPlanDialog(alert);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showAgentPlanDialog(Map<String, dynamic> alert) {
@@ -142,14 +272,15 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5CC8F8)),
-              onPressed: () {
-                Navigator.pop(context);
-                _updateAlertStatus(alert['id'], 'Approved');
-              },
-              child: const Text('Confirm & Dispatch PO', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-            ),
+            if (widget.canApproveFinancialActions)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5CC8F8)),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _updateAlertStatus(alert['id'], 'Approved');
+                },
+                child: const Text('Confirm & Dispatch PO', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              ),
           ],
         );
       },
@@ -199,6 +330,7 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
     const cyanAccent = Color(0xFF5CC8F8);
     const amberAccent = Color(0xFFFFB74D);
     const coralAccent = Color(0xFFFF7043);
+    final actionRequiredAlerts = _actionRequiredAlerts;
 
     return Scaffold(
       backgroundColor: navyBg,
@@ -224,14 +356,19 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none_rounded, color: Colors.white70, size: 26),
-            onPressed: () {},
+            tooltip: 'Notifications',
+            onPressed: _showNotifications,
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-        child: Column(
+      body: Scrollbar(
+        controller: _pageScrollController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _pageScrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 2x2 Metric Cards Grid
@@ -291,13 +428,13 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
 
             if (_isLoading)
               const Center(child: CircularProgressIndicator(color: cyanAccent))
-            else if (_alerts.where((a) => a['status'] == 'Pending' || a['status'] == 'Scanned').isEmpty)
+            else if (actionRequiredAlerts.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Text('No AI actions required at this time.', style: TextStyle(color: Colors.white54)),
               )
             else
-              ..._alerts.where((a) => a['status'] == 'Pending' || a['status'] == 'Scanned').map((alert) {
+              ...actionRequiredAlerts.map((alert) {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
                   child: Container(
@@ -375,7 +512,9 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  onPressed: () => _showAgentPlanDialog(alert),
+                                  onPressed: widget.canApproveFinancialActions
+                                      ? () => _showAgentPlanDialog(alert)
+                                      : null,
                                   child: const Text(
                                     'Approve & Execute',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
@@ -396,7 +535,9 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  onPressed: () => _updateAlertStatus(alert['id'], 'Rejected'),
+                                  onPressed: widget.canApproveFinancialActions
+                                      ? () => _updateAlertStatus(alert['id'], 'Rejected')
+                                      : null,
                                   child: const Text(
                                     'Reject',
                                     style: TextStyle(
@@ -594,6 +735,7 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
               ),
             ),
           ],
+          ),
         ),
       ),
       bottomNavigationBar: Container(

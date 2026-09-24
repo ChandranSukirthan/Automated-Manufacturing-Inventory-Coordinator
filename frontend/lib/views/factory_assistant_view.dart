@@ -1,13 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../controllers/inventory_controller.dart';
+import '../models/user_profile.dart';
+import '../utils/shift_helper.dart';
+import 'profile_view.dart';
 
 class FactoryAssistantView extends StatefulWidget {
   final InventoryController controller;
+  final UserProfile profile;
+  final ValueChanged<UserProfile> onProfileChanged;
+  final VoidCallback onLogout;
+  final VoidCallback? onManageEmployees;
   final Function(int)? onTabSelected;
 
   const FactoryAssistantView({
     super.key,
     required this.controller,
+    required this.profile,
+    required this.onProfileChanged,
+    required this.onLogout,
+    this.onManageEmployees,
     this.onTabSelected,
   });
 
@@ -17,6 +31,9 @@ class FactoryAssistantView extends StatefulWidget {
 
 class _FactoryAssistantViewState extends State<FactoryAssistantView> {
   late final TextEditingController _skuController;
+  late final TextEditingController _quantityController;
+  late final ScrollController _pageScrollController;
+  Timer? _shiftRefreshTimer;
   int _selectedNavIndex = 0;
 
   final List<String> _packagingOptions = [
@@ -31,6 +48,13 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
   void initState() {
     super.initState();
     _skuController = TextEditingController(text: widget.controller.sku);
+    _quantityController = TextEditingController(
+      text: widget.controller.quantityRequested.toString(),
+    );
+    _pageScrollController = ScrollController();
+    _shiftRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _skuController.addListener(() {
       if (_skuController.text != widget.controller.sku) {
         widget.controller.setSku(_skuController.text);
@@ -40,8 +64,42 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
 
   @override
   void dispose() {
+    _shiftRefreshTimer?.cancel();
+    _pageScrollController.dispose();
     _skuController.dispose();
+    _quantityController.dispose();
     super.dispose();
+  }
+
+  void _syncQuantityField() {
+    final quantityText = widget.controller.quantityRequested.toString();
+    if (int.tryParse(_quantityController.text) == widget.controller.quantityRequested) {
+      return;
+    }
+
+    _quantityController.value = TextEditingValue(
+      text: quantityText,
+      selection: TextSelection.collapsed(offset: quantityText.length),
+    );
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileView(
+          profile: widget.profile,
+          onProfileChanged: widget.onProfileChanged,
+          onManageEmployees: widget.onManageEmployees,
+        ),
+      ),
+    );
+  }
+
+  String _formatWorkflowTime(DateTime time) {
+    final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
+    final minute = time.minute.toString().padLeft(2, '0');
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
   }
 
   @override
@@ -56,6 +114,7 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
         if (_skuController.text != widget.controller.sku) {
           _skuController.text = widget.controller.sku;
         }
+        _syncQuantityField();
 
         return Scaffold(
           backgroundColor: darkBg,
@@ -65,8 +124,8 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
             centerTitle: false,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
+              children: [
+                const Text(
                   'FACTORY ASSISTANT',
                   style: TextStyle(
                     color: yellowAccent,
@@ -75,10 +134,10 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                     letterSpacing: 1.1,
                   ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  'Morning Shift - Line 03',
-                  style: TextStyle(
+                  currentShiftLabel(),
+                  style: const TextStyle(
                     color: Colors.white60,
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
@@ -87,17 +146,63 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
               ],
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.account_circle_outlined, color: Colors.white70, size: 28),
-                onPressed: () {},
+              PopupMenuButton<String>(
+                tooltip: 'Profile options',
+                color: const Color(0xFF262626),
+                onSelected: (value) {
+                  if (value == 'profile') {
+                    _openProfile();
+                  } else if (value == 'logout') {
+                    widget.onLogout();
+                  }
+                },
+                icon: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF1E2E42),
+                  backgroundImage: widget.profile.profileImageBytes == null
+                      ? null
+                      : MemoryImage(widget.profile.profileImageBytes!),
+                  child: widget.profile.profileImageBytes == null
+                      ? Text(
+                          widget.profile.initials.isEmpty
+                              ? '?'
+                              : widget.profile.initials,
+                          style: const TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        )
+                      : null,
+                ),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'profile',
+                    child: ListTile(
+                      leading: Icon(Icons.person_outline, color: Colors.white70),
+                      title: Text('View profile', style: TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'logout',
+                    child: ListTile(
+                      leading: Icon(Icons.logout, color: Colors.redAccent),
+                      title: Text('Log out', style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(width: 8),
             ],
           ),
-          // 1. Layout: Entire main body wrapped inside SingleChildScrollView
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+          // The visible scrollbar indicates that the full form can be scrolled.
+          body: Scrollbar(
+            controller: _pageScrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _pageScrollController,
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Top Action Buttons
@@ -168,11 +273,15 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        initialValue: widget.controller.packagingType.isNotEmpty
+                        initialValue: _packagingOptions.contains(widget.controller.packagingType)
                             ? widget.controller.packagingType
-                            : _packagingOptions.first,
+                            : null,
                         dropdownColor: const Color(0xFF2A2A2A),
                         style: const TextStyle(color: Colors.white, fontSize: 15),
+                        hint: const Text(
+                          'Select a packaging type',
+                          style: TextStyle(color: Colors.white38),
+                        ),
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: const Color(0xFF262626),
@@ -220,7 +329,7 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                         controller: _skuController,
                         style: const TextStyle(color: Colors.white, fontSize: 15),
                         decoration: InputDecoration(
-                          hintText: 'e.g. RM-PLASTIC-502',
+                          hintText: 'Enter or scan SKU',
                           hintStyle: const TextStyle(color: Colors.white38),
                           filled: true,
                           fillColor: const Color(0xFF262626),
@@ -264,19 +373,38 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             IconButton(
-                              onPressed: () => widget.controller.decrementQuantity(50),
+                              onPressed: widget.controller.quantityRequested > 1
+                                  ? () => widget.controller.decrementQuantity()
+                                  : null,
                               icon: const Icon(Icons.remove, color: Colors.white70, size: 28),
                             ),
-                            Text(
-                              '${widget.controller.quantityRequested}',
-                              style: const TextStyle(
-                                color: yellowAccent,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
+                            SizedBox(
+                              width: 110,
+                              child: TextFormField(
+                                controller: _quantityController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: yellowAccent,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                ),
+                                onChanged: (value) {
+                                  final quantity = int.tryParse(value);
+                                  if (quantity != null) {
+                                    widget.controller.setQuantityRequested(quantity);
+                                  }
+                                },
+                                onEditingComplete: _syncQuantityField,
                               ),
                             ),
                             IconButton(
-                              onPressed: () => widget.controller.incrementQuantity(50),
+                              onPressed: () => widget.controller.incrementQuantity(),
                               icon: const Icon(Icons.add, color: Colors.white70, size: 28),
                             ),
                           ],
@@ -303,20 +431,25 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                               : () async {
                                   final messenger = ScaffoldMessenger.of(context);
                                   final success = await widget.controller.submitLowStockAlert();
-                                  if (mounted && success) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        backgroundColor: yellowAccent,
-                                        content: Text(
-                                          'Alert submitted to AI Coordinator!',
-                                          style: TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                  if (!mounted) return;
+
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: success
+                                          ? yellowAccent
+                                          : Colors.redAccent,
+                                      content: Text(
+                                        success
+                                            ? 'Alert submitted to AI Coordinator!'
+                                            : widget.controller.errorMessage ??
+                                                'Unable to submit the alert.',
+                                        style: TextStyle(
+                                          color: success ? Colors.black : Colors.white,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    );
-                                  }
+                                    ),
+                                  );
                                 },
                           child: widget.controller.isLoading
                               ? const SizedBox(
@@ -385,57 +518,89 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                         ],
                       ),
                       const SizedBox(height: 20),
-
-                      // 4. Workflow Timeline with 3 steps connected by a thin vertical grey line
-                      // Step 1: "Alert Logged", subtitle "08:15 AM". Leading icon: solid yellow circle with a checkmark.
-                      _buildTimelineStep(
-                        title: 'Alert Logged',
-                        subtitle: '08:15 AM',
-                        leadingIcon: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: yellowAccent,
-                            shape: BoxShape.circle,
+                      if (widget.controller.workflowStatus == null)
+                        const Text(
+                          'No low-stock alert has been submitted yet.',
+                          style: TextStyle(color: Colors.white60),
+                        )
+                      else ...[
+                        _buildTimelineStep(
+                          title: 'Alert Logged',
+                          subtitle: _formatWorkflowTime(
+                            widget.controller.workflowStartedAt ?? DateTime.now(),
                           ),
-                          child: const Icon(Icons.check, color: Colors.black, size: 14),
-                        ),
-                        titleColor: Colors.white,
-                        showConnectingLine: true,
-                      ),
-
-                      // Step 2: "AI Plan Generated", subtitle "08:16 AM". Leading icon: solid yellow circle with a checkmark.
-                      _buildTimelineStep(
-                        title: 'AI Plan Generated',
-                        subtitle: '08:16 AM',
-                        leadingIcon: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(
-                            color: yellowAccent,
-                            shape: BoxShape.circle,
+                          leadingIcon: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: yellowAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check, color: Colors.black, size: 14),
                           ),
-                          child: const Icon(Icons.check, color: Colors.black, size: 14),
+                          titleColor: Colors.white,
+                          showConnectingLine: true,
                         ),
-                        titleColor: Colors.white,
-                        showConnectingLine: true,
-                      ),
-
-                      // Step 3: "Pending Approval...", subtitle "Waiting for manager review". Leading icon: an empty yellow circle or a loading spinner.
-                      _buildTimelineStep(
-                        title: 'Pending Approval...',
-                        subtitle: 'Waiting for manager review',
-                        leadingIcon: const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: yellowAccent,
-                            strokeWidth: 2,
+                        _buildTimelineStep(
+                          title: 'AI Plan Generated',
+                          subtitle: 'Request prepared for review',
+                          leadingIcon: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: yellowAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.check, color: Colors.black, size: 14),
                           ),
+                          titleColor: Colors.white,
+                          showConnectingLine: true,
                         ),
-                        titleColor: yellowAccent,
-                        showConnectingLine: false,
-                      ),
+                        _buildTimelineStep(
+                          title: widget.controller.workflowStatus!,
+                          subtitle: widget.controller.workflowStatus == 'Pending Approval'
+                              ? 'Waiting for manager review'
+                              : widget.controller.workflowStatus == 'Approved'
+                                  ? 'Manager approved the request'
+                                  : widget.controller.workflowStatus == 'Rejected'
+                                      ? 'Manager rejected the request'
+                                      : 'Check the connection and submit again',
+                          leadingIcon: widget.controller.workflowStatus == 'Pending Approval'
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: yellowAccent,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : widget.controller.workflowStatus == 'Approved'
+                                  ? Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.greenAccent,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.check,
+                                        color: Colors.black,
+                                        size: 14,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.error_outline,
+                                      color: Colors.redAccent,
+                                      size: 22,
+                                    ),
+                          titleColor: widget.controller.workflowStatus == 'Pending Approval'
+                              ? yellowAccent
+                              : widget.controller.workflowStatus == 'Approved'
+                                  ? Colors.greenAccent
+                                  : Colors.redAccent,
+                          showConnectingLine: false,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -443,6 +608,7 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                 const SizedBox(height: 24),
               ],
             ),
+          ),
           ),
 
           // 5. Bottom Navigation Bar on Scaffold with dark background & 4 specified items
@@ -460,20 +626,20 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                 widget.onTabSelected!(index);
               }
             },
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.grid_view_rounded),
                 label: 'DASHBOARD',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.qr_code_scanner),
                 label: 'SCANNER',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.inventory_2_outlined),
                 label: 'STOCK',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.precision_manufacturing),
                 label: 'TRACKER',
               ),

@@ -34,6 +34,7 @@ builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ??
 
 // Controllers
 builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
 
 // PostgreSQL + Entity Framework Core
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -59,7 +60,13 @@ builder.Services.AddScoped<IShiftService, ShiftService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
-builder.Services.AddScoped<IBarcodeService, BarcodeService>();
+builder.Services.AddHttpClient<IBarcodeService, BarcodeService>(client =>
+{
+    // Fixed, HTTPS-only provider endpoint. Flutter calls our API, never this URL.
+    client.BaseAddress = new Uri("https://api.qrserver.com/");
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AMIC-Inventory-QR/1.0");
+});
 
 // HttpContextAccessor (for audit log IP capture)
 builder.Services.AddHttpContextAccessor();

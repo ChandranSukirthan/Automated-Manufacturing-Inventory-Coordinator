@@ -12,12 +12,10 @@ namespace backend.Services
     public class InventoryService : IInventoryService
     {
         private readonly ApplicationDbContext _context; // Changed to ApplicationDbContext
-        private readonly IBarcodeService _barcodeService;
 
-        public InventoryService(ApplicationDbContext context, IBarcodeService barcodeService) // Changed here too
+        public InventoryService(ApplicationDbContext context)
         {
             _context = context;
-            _barcodeService = barcodeService;
         }
 
         public async Task<IEnumerable<InventoryItemDto>> GetInventoryItemsAsync()
@@ -151,13 +149,25 @@ namespace backend.Services
                 throw new ArgumentException("RollIdentifier is required.");
             }
 
-            roll.BarcodeUrl = _barcodeService.GenerateQrCodeUrl(roll.RollIdentifier);
+            roll.RollIdentifier = roll.RollIdentifier.Trim();
             roll.CreatedAt = DateTime.UtcNow;
             roll.UpdatedAt = DateTime.UtcNow;
 
             _context.InventoryRolls.Add(roll);
             await _context.SaveChangesAsync();
+
+            // The app serves this image through its authenticated API endpoint.
+            // Do not store a third-party URL or make external calls on writes.
+            roll.BarcodeUrl = $"/api/inventory/rolls/{Uri.EscapeDataString(roll.RollIdentifier)}/qr";
+            await _context.SaveChangesAsync();
             return roll;
+        }
+
+        public async Task<InventoryRoll?> GetInventoryRollByIdentifierAsync(string rollIdentifier)
+        {
+            return await _context.InventoryRolls
+                .AsNoTracking()
+                .FirstOrDefaultAsync(roll => roll.RollIdentifier == rollIdentifier);
         }
 
         public async Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material)

@@ -31,7 +31,7 @@ class _ScannerViewState extends State<ScannerView> {
   Future<void> _registerScannedRoll(String rollId) async {
     try {
       final response = await http.post(
-        Uri.parse('http://localhost:5070/api/Inventory/rolls'),
+        Uri.parse('http://10.0.2.2:5070/api/Inventory/rolls'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'qrCodeId': rollId, 'status': 'Scanned'}),
       );
@@ -103,6 +103,28 @@ class _ScannerViewState extends State<ScannerView> {
     }
   }
 
+  Future<void> _toggleTorch() async {
+    if (_scannerController.value.torchState == TorchState.unavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Flashlight is not available on this device.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _scannerController.toggleTorch();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to change the flashlight state.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const yellowAccent = Color(0xFFFFD700);
@@ -145,7 +167,8 @@ class _ScannerViewState extends State<ScannerView> {
                 return const Icon(Icons.flash_off, color: Colors.white70);
               },
             ),
-            onPressed: () => _scannerController.toggleTorch(),
+            tooltip: 'Toggle flashlight',
+            onPressed: _toggleTorch,
           ),
         ],
       ),

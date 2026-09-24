@@ -57,7 +57,7 @@ class _StockViewState extends State<StockView> {
     });
 
     try {
-      final response = await http.get(Uri.parse('http://localhost:5070/api/Inventory'));
+      final response = await http.get(Uri.parse('http://10.0.2.2:5070/api/Inventory'));
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
@@ -116,7 +116,7 @@ class _StockViewState extends State<StockView> {
           : 'Analyze all current inventory and replenish any low stock materials.';
 
       final response = await http.post(
-        Uri.parse('http://localhost:8000/api/workflows/run'),
+        Uri.parse('http://10.0.2.2:5070/api/workflows/run'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'objective': agentObjective,
@@ -192,7 +192,7 @@ class _StockViewState extends State<StockView> {
     final _formKey = GlobalKey<FormState>();
     String sku = '';
     String name = '';
-    String category = 'BoxPouch';
+    String? category;
     int stockLevel = 0;
     int reorderThreshold = 0;
 
@@ -225,10 +225,16 @@ class _StockViewState extends State<StockView> {
                     dropdownColor: const Color(0xFF1E1E1E),
                     style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(labelText: 'Category', labelStyle: TextStyle(color: Colors.white54)),
+                    hint: const Text(
+                      'Select a category',
+                      style: TextStyle(color: Colors.white38),
+                    ),
                     items: ['BoxPouch', 'Can', 'Bottle', 'TeaBag']
                         .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                         .toList(),
-                    onChanged: (value) => category = value!,
+                    onChanged: (value) => category = value,
+                    validator: (value) => value == null ? 'Select a category' : null,
+                    onSaved: (value) => category = value,
                   ),
                   TextFormField(
                     style: const TextStyle(color: Colors.white),
@@ -269,12 +275,12 @@ class _StockViewState extends State<StockView> {
                   
                   try {
                     final response = await http.post(
-                      Uri.parse('http://localhost:5070/api/Inventory'),
+                      Uri.parse('http://10.0.2.2:5070/api/Inventory'),
                       headers: {'Content-Type': 'application/json'},
                       body: json.encode({
                         'sku': sku,
                         'name': name,
-                        'category': category,
+                        'category': category!,
                         'stockLevel': stockLevel,
                         'reorderThreshold': reorderThreshold,
                       }),

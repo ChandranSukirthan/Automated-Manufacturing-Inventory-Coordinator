@@ -22,6 +22,7 @@ class AgentState(TypedDict, total=False):
     """
     workflow_id: str
     objective: str
+    data_extraction_request: Dict[str, str]
     plan: List[str]
     current_agent: str
     status: WorkflowStatus

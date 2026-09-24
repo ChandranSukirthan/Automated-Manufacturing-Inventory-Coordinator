@@ -8,12 +8,14 @@ class InventoryController extends ChangeNotifier {
   InventoryController({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
 
-  String _packagingType = 'Box Pouch';
-  String _sku = 'RM-PLASTIC-502';
-  int _quantityRequested = 500;
+  String _packagingType = '';
+  String _sku = '';
+  int _quantityRequested = 1;
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
+  String? _workflowStatus;
+  DateTime? _workflowStartedAt;
 
   // Getters
   String get packagingType => _packagingType;
@@ -22,34 +24,36 @@ class InventoryController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
+  String? get workflowStatus => _workflowStatus;
+  DateTime? get workflowStartedAt => _workflowStartedAt;
 
   // Setters / State Mutators
   void setPackagingType(String value) {
-    _packagingType = value;
+    _packagingType = value.trim();
     notifyListeners();
   }
 
   void setSku(String value) {
-    _sku = value;
+    _sku = value.trim();
     notifyListeners();
   }
 
   void setQuantityRequested(int value) {
-    _quantityRequested = value < 0 ? 0 : value;
+    _quantityRequested = value < 1 ? 1 : value;
     notifyListeners();
   }
 
-  void incrementQuantity([int amount = 50]) {
-    _quantityRequested += amount;
+  void incrementQuantity([int amount = 1]) {
+    final step = amount < 1 ? 1 : amount;
+    _quantityRequested += step;
     notifyListeners();
   }
 
-  void decrementQuantity([int amount = 50]) {
-    if (_quantityRequested - amount >= 0) {
-      _quantityRequested -= amount;
-    } else {
-      _quantityRequested = 0;
-    }
+  void decrementQuantity([int amount = 1]) {
+    final step = amount < 1 ? 1 : amount;
+    _quantityRequested = (_quantityRequested - step) < 1
+        ? 1
+        : _quantityRequested - step;
     notifyListeners();
   }
 
@@ -78,12 +82,16 @@ class InventoryController extends ChangeNotifier {
 
       if (success) {
         _successMessage = 'Low stock alert for SKU "$_sku" ($_quantityRequested x $_packagingType) submitted to AI Coordinator!';
+        _workflowStatus = 'Pending Approval';
+        _workflowStartedAt = DateTime.now();
       } else {
         _errorMessage = 'Failed to submit low stock alert to backend.';
+        _workflowStatus = 'Submission Failed';
       }
       return success;
     } catch (e) {
       _errorMessage = 'Error submitting alert: $e';
+      _workflowStatus = 'Submission Failed';
       return false;
     } finally {
       _isLoading = false;
@@ -94,6 +102,11 @@ class InventoryController extends ChangeNotifier {
   void clearMessages() {
     _errorMessage = null;
     _successMessage = null;
+    notifyListeners();
+  }
+
+  void setWorkflowStatus(String status) {
+    _workflowStatus = status;
     notifyListeners();
   }
 }

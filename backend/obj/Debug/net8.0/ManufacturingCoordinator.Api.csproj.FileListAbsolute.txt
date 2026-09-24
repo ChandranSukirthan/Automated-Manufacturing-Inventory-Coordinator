@@ -254,3 +254,9 @@ C:\Users\MSI\Desktop\Y3S1 labsheets\SEF-labsheets\AMIC\Automated-Manufacturing-I
 C:\Users\MSI\Desktop\Y3S1 labsheets\SEF-labsheets\AMIC\Automated-Manufacturing-Inventory-Coordinator\backend\obj\Debug\net8.0\ManufacturingCoordinator.Api.pdb
 C:\Users\MSI\Desktop\Y3S1 labsheets\SEF-labsheets\AMIC\Automated-Manufacturing-Inventory-Coordinator\backend\obj\Debug\net8.0\ManufacturingCoordinator.Api.genruntimeconfig.cache
 C:\Users\MSI\Desktop\Y3S1 labsheets\SEF-labsheets\AMIC\Automated-Manufacturing-Inventory-Coordinator\backend\obj\Debug\net8.0\ref\ManufacturingCoordinator.Api.dll
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\appsettings.Development.json
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\appsettings.json
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\ManufacturingCoordinator.Api.deps.json
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\ManufacturingCoordinator.Api.runtimeconfig.json
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\ManufacturingCoordinator.Api.dll
+C:\Users\MSI\AppData\Local\Temp\amic-build-check\ManufacturingCoordinator.Api.pdb

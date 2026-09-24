@@ -15,6 +15,30 @@ Built with **FastAPI**, **LangGraph**, and **PostgreSQL** on **Port 8000**.
 
 ---
 
+## Data Extraction Agent (Student A)
+
+`agents/data_extraction_agent.py` is the inventory-focused LangGraph subgraph.
+It accepts a validated JSON object containing `product_type` (`BoxPouch`,
+`TeaBag`, `Can`, or `Bottle`), `batch_id`, and `material_sku`. The agent always
+calls only these two read-only tools:
+
+1. `query_production_db` - mock production history and upcoming schedules.
+2. `get_inventory_levels` - mock current, reserved, and reorder inventory.
+
+The returned JSON includes historical average burn-rate, current allocatable
+stock, upcoming material demand, shortfall/replenishment recommendation, the
+two tool calls, and any safe-failure errors. The mock dictionaries are clearly
+isolated in the agent module so they can be replaced by parameterised backend
+queries without changing its validated contract or graph.
+
+Run its focused tests with:
+
+```powershell
+pytest tests/test_data_extraction_agent.py -v
+```
+
+---
+
 ## 🛠️ Setup & Installation
 
 ### 1. Prerequisites
