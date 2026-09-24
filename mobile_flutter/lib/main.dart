@@ -18,7 +18,6 @@ Future<void> main() async {
   api.onSessionExpired = appState.expireSession;
   await appState.restore();
   runApp(
-    ManufacturingApp(appState: appState, qualityService: QualityService(api)),
     ManufacturingApp(
       appState: appState,
       qualityService: QualityService(api),
@@ -76,7 +75,6 @@ class ManufacturingApp extends StatelessWidget {
       home: appState.isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : appState.isAuthenticated
-          ? HomeShell(appState: appState, qualityService: qualityService)
           ? HomeShell(
               appState: appState,
               qualityService: qualityService,

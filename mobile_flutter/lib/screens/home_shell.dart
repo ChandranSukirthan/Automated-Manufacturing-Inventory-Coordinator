@@ -38,25 +38,6 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final user = widget.appState.session!.user;
     final isQualityInspector = user.isQualityInspector;
-    final screens = isQualityInspector
-        ? [
-            DashboardScreen(
-              service: widget.qualityService,
-              appState: widget.appState,
-            ),
-            DefectsScreen(service: widget.qualityService),
-            QuarantineScreen(service: widget.qualityService),
-            QuarantineHistoryScreen(service: widget.qualityService),
-          ]
-        : [
-            RoleDashboardScreen(
-              service: widget.qualityService,
-              role: user.role,
-            ),
-          ];
-    final titles = isQualityInspector
-        ? ['Dashboard', 'Defect reports', 'Quarantine', 'History']
-        : ['Dashboard'];
     final isManager = user.isSupplyChainManager || user.isITAdmin;
 
     final List<Widget> screens;
@@ -100,7 +81,6 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(titles[_selectedIndex]),
         title: Text(titles[_selectedIndex < titles.length ? _selectedIndex : 0]),
         actions: [
           PopupMenuButton<String>(
@@ -145,15 +125,12 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _selectedIndex, children: screens),
-      bottomNavigationBar: isQualityInspector
       body: IndexedStack(
         index: _selectedIndex < screens.length ? _selectedIndex : 0,
         children: screens,
       ),
       bottomNavigationBar: isManager
           ? NavigationBar(
-              selectedIndex: _selectedIndex,
               selectedIndex: _selectedIndex < 5 ? _selectedIndex : 0,
               onDestinationSelected: (index) =>
                   setState(() => _selectedIndex = index),
@@ -161,28 +138,19 @@ class _HomeShellState extends State<HomeShell> {
                 NavigationDestination(
                   icon: Icon(Icons.dashboard_outlined),
                   selectedIcon: Icon(Icons.dashboard),
-                  label: 'Overview',
                   label: 'Dashboard',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.fact_check_outlined),
-                  selectedIcon: Icon(Icons.fact_check),
-                  label: 'Defects',
                   icon: Icon(Icons.receipt_long_outlined),
                   selectedIcon: Icon(Icons.receipt_long),
                   label: 'Orders',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  selectedIcon: Icon(Icons.inventory_2),
-                  label: 'Quarantine',
                   icon: Icon(Icons.psychology_outlined),
                   selectedIcon: Icon(Icons.psychology),
                   label: 'AI Flows',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.history),
-                  label: 'History',
                   icon: Icon(Icons.business_outlined),
                   selectedIcon: Icon(Icons.business),
                   label: 'Suppliers',
@@ -194,7 +162,6 @@ class _HomeShellState extends State<HomeShell> {
                 ),
               ],
             )
-          : null,
           : isQualityInspector
               ? NavigationBar(
                   selectedIndex: _selectedIndex < 4 ? _selectedIndex : 0,
