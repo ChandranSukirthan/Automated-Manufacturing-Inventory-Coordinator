@@ -145,7 +145,7 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
     return Scaffold(
       appBar: widget.showPageChrome
           ? AppBar(
-              title: const Text('Quarantine History'),
+              title: const Text('History'),
               actions: [
                 IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
               ],
@@ -204,15 +204,15 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text(
-        'Quality Assurance  •  Control Center',
+        'QUALITY ASSURANCE  •  CONTROL CENTER',
         style: TextStyle(
           color: AppColors.primaryLight,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
         ),
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 8),
       Row(
         children: [
           const Expanded(
@@ -220,58 +220,97 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Quarantine History',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+                  'History',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                SizedBox(height: 4),
-                Text('Review previously released quality holds.'),
+                SizedBox(height: 6),
+                Text(
+                  'Review previously released quality holds.',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+                ),
               ],
             ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back, size: 17),
-            label: const Text('Back to Quarantine'),
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.28),
+              ),
+            ),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.primaryLight,
+              size: 22,
+            ),
           ),
         ],
       ),
     ],
   );
 
-  Widget _searchToolbar(int count) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
+  Widget _searchToolbar(int count) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: _historyDecoration,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final counter = Text(
+          'Showing $count released audit record${count == 1 ? '' : 's'}',
+          textAlign: constraints.maxWidth < 420
+              ? TextAlign.left
+              : TextAlign.right,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        final search = TextField(
+          onChanged: (value) => setState(() {
+            _query = value;
+            _page = 1;
+          }),
+          style: const TextStyle(color: AppColors.strongText, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Filter releas...',
+            hintStyle: const TextStyle(color: AppColors.mutedText),
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    onPressed: () => setState(() {
+                      _query = '';
+                      _page = 1;
+                    }),
+                    icon: const Icon(Icons.clear),
+                  ),
+          ),
+        );
+        if (constraints.maxWidth < 420) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [search, const SizedBox(height: 10), counter],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
           Expanded(
-            child: TextField(
-              onChanged: (value) => setState(() {
-                _query = value;
-                _page = 1;
-              }),
-              decoration: InputDecoration(
-                hintText: 'Filter released inventory or reason...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: () => setState(() {
-                          _query = '';
-                          _page = 1;
-                        }),
-                        icon: const Icon(Icons.clear),
-                      ),
-              ),
-            ),
+            child: search,
           ),
           const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              'Showing $count released audit record${count == 1 ? '' : 's'}',
-            ),
-          ),
-        ],
-      ),
+          Flexible(child: counter),
+          ],
+        );
+      },
     ),
   );
 
@@ -299,8 +338,9 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
   Widget _historyTable(List<QuarantineRecord> records) => LayoutBuilder(
     builder: (context, constraints) => constraints.maxWidth < 700
         ? _historyCards(records)
-        : Card(
-            clipBehavior: Clip.antiAlias,
+        : Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: _historyDecoration,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
@@ -316,7 +356,7 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
                       (record) => DataRow(
                         cells: [
                           DataCell(Text(record.inventoryRollId)),
-                          DataCell(const StatusPill('Released')),
+                          DataCell(const _ReleasedBadge()),
                           DataCell(
                             Text(
                               _formatDate(
@@ -352,29 +392,66 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
   Widget _historyCards(List<QuarantineRecord> records) => Column(
     children: [
       for (final record in records) ...[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _historyField('Inventory', Text(record.inventoryRollId)),
-                _historyField('Status', const StatusPill('Released')),
-                _historyField(
-                  'Released At',
-                  Text(_formatDate(record.releasedAt ?? record.createdAt)),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 15, 12, 8),
+          decoration: _historyDecoration,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.history_rounded,
+                    color: AppColors.primaryLight,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      record.inventoryRollId,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.strongText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
+              const SizedBox(height: 5),
+              _historyField('Inventory', Text(record.inventoryRollId)),
+              _historyField('Status', const _ReleasedBadge()),
+              _historyField(
+                'Released At',
+                Text(_formatDate(record.releasedAt ?? record.createdAt)),
+              ),
+              _historyField(
+                'Disposition',
+                Text(
+                  record.reason,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                _historyField('Disposition', Text(record.reason)),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => _open(record),
-                    icon: const Icon(Icons.visibility_outlined),
-                    label: const Text('View'),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _open(record),
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: const Text('View'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primaryLight,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -383,23 +460,75 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
   );
 
   Widget _historyField(String label, Widget value) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
+    padding: const EdgeInsets.only(top: 5, bottom: 5),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 92,
+          width: 88,
           child: Text(
             label,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: value),
+        Expanded(
+          child: DefaultTextStyle(
+            style: const TextStyle(
+              color: AppColors.strongText,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            child: value,
+          ),
+        ),
       ],
     ),
   );
 }
+
+class _ReleasedBadge extends StatelessWidget {
+  const _ReleasedBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: AppColors.primary.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+    ),
+    child: const Text(
+      'Released',
+      style: TextStyle(
+        color: AppColors.primaryLight,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+final _historyDecoration = BoxDecoration(
+  gradient: const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+  ),
+  borderRadius: BorderRadius.circular(16),
+  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+  boxShadow: [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.25),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ],
+);
 
 enum _HistorySort { newest, oldest, batch, inventory }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -32,6 +34,8 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   bool _loadingInventory = true;
   bool _saving = false;
   bool _analyzing = false;
+  int _analysisStatusIndex = 0;
+  Timer? _analysisStatusTimer;
   String? _error;
   String? _aiError;
   QualityRecommendation? _recommendation;
@@ -81,6 +85,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
 
   @override
   void dispose() {
+    _analysisStatusTimer?.cancel();
     _description.dispose();
     super.dispose();
   }
@@ -161,6 +166,19 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     setState(() {
       _analyzing = true;
       _aiError = null;
+      _analysisStatusIndex = 0;
+    });
+    _analysisStatusTimer?.cancel();
+    _analysisStatusTimer = Timer.periodic(const Duration(milliseconds: 1500), (
+      timer,
+    ) {
+      if (!mounted || !_analyzing) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _analysisStatusIndex = (_analysisStatusIndex + 1) % 3;
+      });
     });
     try {
       final recommendation = await widget.service.analyzeDefect(
@@ -173,6 +191,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     } on ApiException catch (exception) {
       if (mounted) setState(() => _aiError = exception.message);
     } finally {
+      _analysisStatusTimer?.cancel();
       if (mounted) setState(() => _analyzing = false);
     }
   }
@@ -221,7 +240,6 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     final rolls = _skuRolls;
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
         title: Text(_isEditing ? 'Edit Defect Report' : 'Create Defect Report'),
         leading: BackButton(onPressed: () => Navigator.pop(context)),
       ),
@@ -230,55 +248,39 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
                 children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Quality Assurance  •  Control Center',
-                              style: TextStyle(
-                                color: Color(0xFFC4B5FD),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Create Defect Report',
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Use shared FloorWorker inventory data to record and assess a defect.',
-                            ),
-                          ],
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.arrow_back, size: 17),
-                        label: const Text('Back to Defects'),
-                      ),
-                    ],
+                  const Text(
+                    'QUALITY ASSURANCE  •  CONTROL CENTER',
+                    style: TextStyle(
+                      color: AppColors.primaryLight,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isEditing ? 'Edit defect report' : 'Create defect report',
+                    style: const TextStyle(
+                      color: AppColors.strongText,
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Capture the issue details and let AI assess the quality risk.',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+                  ),
+                  const SizedBox(height: 22),
                   if (_error != null) _message(_error!, AppColors.errorText),
                   if (_aiError != null)
                     _message(_aiError!, AppColors.warningText),
-                  DropdownButtonFormField<String>(
-                    initialValue: _skuCode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Inventory Roll',
-                    ),
+                  _FormSelect<String>(
+                    label: 'Inventory Roll',
+                    value: _skuCode,
                     items: _createdMaterials
                         .map(
                           (material) => DropdownMenuItem<String>(
@@ -291,98 +293,116 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                     validator: (_) =>
                         _skuCode == null ? 'Inventory roll is required.' : null,
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    readOnly: true,
-                    initialValue:
-                        selectedMaterial?.name ??
-                        'Determined from selected inventory',
-                    decoration: const InputDecoration(
-                      labelText: 'Raw Material',
+                  const SizedBox(height: 14),
+                  _FormFieldShell(
+                    label: 'Raw Material',
+                    child: Text(
+                      selectedMaterial?.name ??
+                          'Determined from selected inventory',
+                      style: TextStyle(
+                        color: selectedMaterial == null
+                            ? AppColors.mutedText
+                            : AppColors.strongText,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _severity,
-                    decoration: const InputDecoration(labelText: 'Severity'),
-                    items: _severities
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _severity = value!),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _FormSelect<String>(
+                          label: 'Severity',
+                          value: _severity,
+                          items: _severities
+                              .map(
+                                (value) => DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setState(() => _severity = value!),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _FormSelect<String>(
+                          label: 'Status',
+                          value: _status,
+                          items: _statuses
+                              .map(
+                                (value) => DropdownMenuItem(
+                                  value: value,
+                                  child: Text(value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setState(() => _status = value!),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _status,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: _statuses
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) => setState(() => _status = value!),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
+                  const SizedBox(height: 14),
+                  _DescriptionField(
                     controller: _description,
-                    maxLines: 5,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      alignLabelWithHint: true,
-                    ),
                     validator: (value) => value == null || value.trim().isEmpty
                         ? 'Description is required.'
                         : null,
                   ),
-                  if (_recommendation != null) ...[
+                  if (_analyzing) ...[
+                    const SizedBox(height: 20),
+                    _analysisPanel(),
+                  ] else if (_recommendation != null) ...[
                     const SizedBox(height: 20),
                     _rollSelection(rolls),
                     const SizedBox(height: 20),
                     _assessmentCard(),
                   ],
-                  const SizedBox(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: _saving || _analyzing ? null : _analyzeWithAi,
-                    icon: _analyzing
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome),
-                    label: Text(
-                      _analyzing ? 'Analyzing...' : 'Analyze with AI',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: Text(_isEditing ? 'Update Defect' : 'Create Defect'),
-                  ),
+                  const SizedBox(height: 112),
                 ],
               ),
+            ),
+      bottomNavigationBar: _loadingInventory
+          ? null
+          : _ActionBar(
+              analyzing: _analyzing,
+              saving: _saving,
+              canSave: _recommendation != null,
+              isEditing: _isEditing,
+              onAnalyze: _analyzeWithAi,
+              onSave: _save,
             ),
     );
   }
 
-  Widget _rollSelection(List<InventoryRollModel> rolls) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget _analysisPanel() => _AiAnalysisPanel(
+    statusIndex: _analysisStatusIndex,
+  );
+
+  Widget _rollSelection(List<InventoryRollModel> rolls) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+      ),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.25),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Text(
             'Select Inventory Rolls',
             style: Theme.of(context).textTheme.titleMedium,
@@ -415,8 +435,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             }),
           const SizedBox(height: 4),
           const Text('Review or adjust the rolls selected for this defect.'),
-        ],
-      ),
+      ],
     ),
   );
 
@@ -444,8 +463,24 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
         : 'The AI assessment returned a $risk risk level and quarantine is '
               '${recommendation.quarantineRequired ? 'required' : 'not required'}.';
 
-    return Card(
+    return Container(
       clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -577,6 +612,345 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   }
 }
 
+class _FormFieldShell extends StatelessWidget {
+  const _FormFieldShell({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+    decoration: _fieldDecoration,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.mutedText,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 7),
+        child,
+      ],
+    ),
+  );
+}
+
+class _FormSelect<T> extends StatelessWidget {
+  const _FormSelect({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.validator,
+  });
+
+  final String label;
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+  final FormFieldValidator<T>? validator;
+
+  @override
+  Widget build(BuildContext context) => DropdownButtonFormField<T>(
+    initialValue: value,
+    isExpanded: true,
+    items: items,
+    onChanged: onChanged,
+    validator: validator,
+    style: const TextStyle(color: AppColors.strongText, fontSize: 14),
+    dropdownColor: AppColors.surface,
+    iconEnabledColor: AppColors.mutedText,
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      filled: true,
+      fillColor: Colors.transparent,
+      enabledBorder: _fieldBorder,
+      focusedBorder: _fieldBorder.copyWith(
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+      ),
+      errorBorder: _fieldBorder.copyWith(
+        borderSide: const BorderSide(color: AppColors.error),
+      ),
+    ),
+  );
+}
+
+class _DescriptionField extends StatelessWidget {
+  const _DescriptionField({required this.controller, required this.validator});
+
+  final TextEditingController controller;
+  final FormFieldValidator<String> validator;
+
+  @override
+  Widget build(BuildContext context) => TextFormField(
+    controller: controller,
+    maxLines: 5,
+    style: const TextStyle(color: AppColors.strongText, fontSize: 14),
+    decoration: InputDecoration(
+      labelText: 'Description',
+      hintText: 'Description',
+      hintStyle: const TextStyle(color: AppColors.mutedText),
+      alignLabelWithHint: true,
+      filled: true,
+      fillColor: Colors.transparent,
+      enabledBorder: _fieldBorder,
+      focusedBorder: _fieldBorder.copyWith(
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+      ),
+      errorBorder: _fieldBorder.copyWith(
+        borderSide: const BorderSide(color: AppColors.error),
+      ),
+    ),
+    validator: validator,
+  );
+}
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.analyzing,
+    required this.saving,
+    required this.canSave,
+    required this.isEditing,
+    required this.onAnalyze,
+    required this.onSave,
+  });
+
+  final bool analyzing;
+  final bool saving;
+  final bool canSave;
+  final bool isEditing;
+  final VoidCallback onAnalyze;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      decoration: BoxDecoration(
+        color: AppColors.background.withValues(alpha: 0.97),
+        border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.8))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: saving || analyzing ? null : onAnalyze,
+              icon: const Icon(Icons.bolt_rounded, size: 18),
+              label: const Text('Analyze with AI'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryLight,
+                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.75)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: saving || analyzing || !canSave ? null : onSave,
+              icon: saving
+                  ? const SizedBox.square(
+                      dimension: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(isEditing ? 'Update Defect' : 'Create Defect'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.strongText,
+                disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.25),
+                disabledForegroundColor: AppColors.mutedText,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _AiAnalysisPanel extends StatefulWidget {
+  const _AiAnalysisPanel({required this.statusIndex});
+
+  final int statusIndex;
+
+  @override
+  State<_AiAnalysisPanel> createState() => _AiAnalysisPanelState();
+}
+
+class _AiAnalysisPanelState extends State<_AiAnalysisPanel>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  )..repeat();
+
+  static const _statuses = [
+    'Agentic AI analyzing rolls...',
+    'Evaluating risk patterns...',
+    'Synthesizing quality data...',
+  ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+      ),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.25),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(
+                  Icons.smart_toy_outlined,
+                  color: AppColors.primaryLight,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'AI Defect Assessment',
+                  softWrap: true,
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Center(
+            child: SizedBox.square(
+              dimension: 52,
+              child: CircularProgressIndicator(
+                strokeWidth: 4,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                backgroundColor: Color(0xFF2A3958),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              _statuses[widget.statusIndex % _statuses.length],
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: const TextStyle(
+                color: AppColors.primaryLight,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _statuses.length,
+            itemBuilder: (context, index) {
+              final isCurrent = index == widget.statusIndex % _statuses.length;
+              final isComplete = index < widget.statusIndex % _statuses.length;
+              final color = isCurrent || isComplete
+                  ? AppColors.primaryLight
+                  : AppColors.mutedText;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Row(
+                  children: [
+                    Icon(
+                      isComplete
+                          ? Icons.check_circle_rounded
+                          : isCurrent
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: color,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        _statuses[index],
+                        softWrap: true,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 12,
+                          fontWeight: isCurrent
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+final _fieldBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.circular(12),
+  borderSide: const BorderSide(color: Color(0xFF2A3958), width: 1.2),
+);
+
+final _fieldDecoration = BoxDecoration(
+  gradient: const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+  ),
+  borderRadius: BorderRadius.circular(12),
+  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+);
+
 class _AssessmentMetric extends StatelessWidget {
   const _AssessmentMetric({required this.label, required this.value});
 
@@ -599,7 +973,7 @@ class _AssessmentMetric extends StatelessWidget {
         Text(
           value,
           style: const TextStyle(
-            color: Color(0xFFC4B5FD),
+            color: AppColors.strongText,
             fontSize: 17,
             fontWeight: FontWeight.w800,
           ),
@@ -615,20 +989,25 @@ class _AssessmentPill extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: AppColors.violet.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: AppColors.violet.withValues(alpha: 0.35)),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Color(0xFFC4B5FD),
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final isReleased = label.toLowerCase() == 'released' ||
+        label.toLowerCase() == 'in stock';
+    final color = isReleased ? const Color(0xFF86EFAC) : AppColors.primaryLight;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-    ),
-  );
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }
