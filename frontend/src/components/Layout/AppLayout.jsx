@@ -97,17 +97,18 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
   };
 
   const getRoleName = (role) => {
-    const r = typeof role === 'number' ? role : parseInt(role, 10);
-    switch (r) {
-      case 1:
-        return 'Supply Chain Manager';
-      case 2:
-        return 'Quality Inspector';
-      case 3:
-        return 'System Admin';
-      default:
-        return 'Floor Worker';
+    if (role === null || role === undefined) return '';
+    const s = String(role).trim().toLowerCase();
+    if (s === '1' || s === 'supplychainmanager') {
+      return 'Supply Chain Manager';
     }
+    if (s === '2' || s === 'qualityinspector') {
+      return 'Quality Inspector';
+    }
+    if (s === '3' || s === 'itadmin' || s === 'systemadmin' || s === 'admin') {
+      return 'System Admin';
+    }
+    return '';
   };
 
   return (
@@ -155,19 +156,21 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
           </button>
         </div>
 
-        {/* Manager role badge */}
+        {/* User profile badge */}
         <div className="px-4 py-3">
           <div className="p-3 rounded-xl bg-gradient-to-r from-brand-950/60 to-slate-900 border border-brand-800/40 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-brand-500/20 border border-brand-400/30 flex items-center justify-center text-brand-400">
+            <div className="w-8 h-8 rounded-lg bg-brand-500/20 border border-brand-400/30 flex items-center justify-center text-brand-400 shrink-0">
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div className="overflow-hidden">
               <p className="text-xs font-semibold text-white truncate">
-                {user?.fullName || 'Sukirthan (Manager)'}
+                {user?.fullName || 'Sukirthan'}
               </p>
-              <p className="text-[10px] text-brand-400 font-medium">
-                {getRoleName(user?.role)}
-              </p>
+              {getRoleName(user?.role) && getRoleName(user?.role) !== 'Floor Worker' && (
+                <p className="text-[10px] text-brand-400 font-medium truncate">
+                  {getRoleName(user?.role)}
+                </p>
+              )}
             </div>
           </div>
         </div>
