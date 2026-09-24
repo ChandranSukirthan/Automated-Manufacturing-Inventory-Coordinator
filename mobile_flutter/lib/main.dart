@@ -6,6 +6,7 @@ import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/purchase_order_service.dart';
 import 'services/quality_service.dart';
 import 'services/session_storage.dart';
 
@@ -18,6 +19,11 @@ Future<void> main() async {
   await appState.restore();
   runApp(
     ManufacturingApp(appState: appState, qualityService: QualityService(api)),
+    ManufacturingApp(
+      appState: appState,
+      qualityService: QualityService(api),
+      poService: PurchaseOrderService(api),
+    ),
   );
 }
 
@@ -25,11 +31,13 @@ class ManufacturingApp extends StatelessWidget {
   const ManufacturingApp({
     required this.appState,
     required this.qualityService,
+    required this.poService,
     super.key,
   });
 
   final AppState appState;
   final QualityService qualityService;
+  final PurchaseOrderService poService;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -69,6 +77,11 @@ class ManufacturingApp extends StatelessWidget {
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : appState.isAuthenticated
           ? HomeShell(appState: appState, qualityService: qualityService)
+          ? HomeShell(
+              appState: appState,
+              qualityService: qualityService,
+              poService: poService,
+            )
           : LoginScreen(appState: appState),
     ),
   );

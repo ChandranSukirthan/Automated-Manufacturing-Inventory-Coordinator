@@ -12,6 +12,8 @@ class UserSummary {
   final String role;
 
   bool get isQualityInspector => role == 'QualityInspector';
+  bool get isSupplyChainManager => role == 'SupplyChainManager';
+  bool get isITAdmin => role == 'ITAdmin';
 
   factory UserSummary.fromJson(Map<String, dynamic> json) => UserSummary(
     id: json['id']?.toString() ?? '',
