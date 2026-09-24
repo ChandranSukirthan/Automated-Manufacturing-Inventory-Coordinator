@@ -54,6 +54,23 @@ class ManufacturingApp extends StatelessWidget {
         ),
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
+        navigationBarTheme: NavigationBarThemeData(
+          indicatorColor: AppColors.violet,
+          iconTheme: WidgetStateProperty.resolveWith(
+            (states) => IconThemeData(
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.strongText
+                  : AppColors.mutedText,
+            ),
+          ),
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (states) => TextStyle(
+              color: states.contains(WidgetState.selected)
+                  ? AppColors.violet
+                  : AppColors.mutedText,
+            ),
+          ),
+        ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
           filled: true,

@@ -8,9 +8,14 @@ import '../widgets/app_widgets.dart';
 import 'quarantine_detail_screen.dart';
 
 class QuarantineHistoryScreen extends StatefulWidget {
-  const QuarantineHistoryScreen({required this.service, super.key});
+  const QuarantineHistoryScreen({
+    required this.service,
+    this.showPageChrome = true,
+    super.key,
+  });
 
   final QualityService service;
+  final bool showPageChrome;
 
   @override
   State<QuarantineHistoryScreen> createState() =>
@@ -138,19 +143,23 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quarantine History'),
-        actions: [
-          IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
-        ],
-      ),
+      appBar: widget.showPageChrome
+          ? AppBar(
+              title: const Text('Quarantine History'),
+              actions: [
+                IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
+              ],
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            _pageHeader(),
-            const SizedBox(height: 20),
+            if (widget.showPageChrome) ...[
+              _pageHeader(),
+              const SizedBox(height: 20),
+            ],
             _searchToolbar(records.length),
             const SizedBox(height: 16),
             if (_error != null) _errorBanner(),
@@ -287,48 +296,107 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
     ),
   );
 
-  Widget _historyTable(List<QuarantineRecord> records) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Inventory')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('Released At')),
-          DataColumn(label: Text('Disposition Reason')),
-          DataColumn(label: Text('Actions')),
-        ],
-        rows: records
-            .map(
-              (record) => DataRow(
-                cells: [
-                  DataCell(Text(record.inventoryRollId)),
-                  DataCell(const StatusPill('Released')),
-                  DataCell(
-                    Text(_formatDate(record.releasedAt ?? record.createdAt)),
-                  ),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 260),
-                      child: Text(
-                        record.reason,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    IconButton(
-                      onPressed: () => _open(record),
-                      icon: const Icon(Icons.visibility_outlined),
-                      tooltip: 'View',
-                    ),
-                  ),
+  Widget _historyTable(List<QuarantineRecord> records) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth < 700
+        ? _historyCards(records)
+        : Card(
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Inventory')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Released At')),
+                  DataColumn(label: Text('Disposition Reason')),
+                  DataColumn(label: Text('Actions')),
                 ],
+                rows: records
+                    .map(
+                      (record) => DataRow(
+                        cells: [
+                          DataCell(Text(record.inventoryRollId)),
+                          DataCell(const StatusPill('Released')),
+                          DataCell(
+                            Text(
+                              _formatDate(
+                                record.releasedAt ?? record.createdAt,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 260),
+                              child: Text(
+                                record.reason,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            IconButton(
+                              onPressed: () => _open(record),
+                              icon: const Icon(Icons.visibility_outlined),
+                              tooltip: 'View',
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
               ),
-            )
-            .toList(),
-      ),
+            ),
+          ),
+  );
+
+  Widget _historyCards(List<QuarantineRecord> records) => Column(
+    children: [
+      for (final record in records) ...[
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _historyField('Inventory', Text(record.inventoryRollId)),
+                _historyField('Status', const StatusPill('Released')),
+                _historyField(
+                  'Released At',
+                  Text(_formatDate(record.releasedAt ?? record.createdAt)),
+                ),
+                _historyField('Disposition', Text(record.reason)),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _open(record),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('View'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ],
+  );
+
+  Widget _historyField(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: value),
+      ],
     ),
   );
 }

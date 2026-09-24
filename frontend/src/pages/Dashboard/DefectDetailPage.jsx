@@ -157,15 +157,6 @@ export default function DefectDetailPage() {
 
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Product Type
-            </span>
-            <div className="mt-1 text-base font-semibold text-slate-200">
-              {defect.productType}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
               Severity
             </span>
             <div className="mt-1">

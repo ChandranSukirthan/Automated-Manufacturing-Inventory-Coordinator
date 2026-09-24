@@ -6,7 +6,6 @@ import '../services/api_client.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'quarantine_detail_screen.dart';
-import 'quarantine_history_screen.dart';
 
 class QuarantineScreen extends StatefulWidget {
   const QuarantineScreen({required this.service, super.key});
@@ -88,21 +87,6 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
     return records;
   }
 
-  Future<void> _showFilters() async {
-    final result = await showModalBottomSheet<_QuarantineFilters>(
-      context: context,
-      builder: (_) => _QuarantineFilterSheet(
-        initial: _QuarantineFilters(severity: _severity, status: _status),
-      ),
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _severity = result.severity;
-      _status = result.status;
-      _page = 1;
-    });
-  }
-
   Future<void> _showSort() async {
     final result = await showModalBottomSheet<_QuarantineSort>(
       context: context,
@@ -156,30 +140,6 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
         .take(_pageSize)
         .toList();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quarantine Management'),
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    QuarantineHistoryScreen(service: widget.service),
-              ),
-            ),
-            icon: const Icon(Icons.history),
-            tooltip: 'History',
-          ),
-          IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
-          IconButton(
-            onPressed: _showFilters,
-            icon: Badge(
-              isLabelVisible: _severity != null || _status != null,
-              child: const Icon(Icons.tune),
-            ),
-          ),
-        ],
-      ),
       body: _error != null && _records == null
           ? StateMessage(message: _error!, icon: Icons.cloud_off, action: _load)
           : _records == null
@@ -189,8 +149,6 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  _pageHeader(),
-                  const SizedBox(height: 20),
                   _filterToolbar(),
                   const SizedBox(height: 16),
                   if (_error != null) _errorBanner(),
@@ -232,28 +190,6 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
             ),
     );
   }
-
-  Widget _pageHeader() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'Quality Assurance  •  Control Center',
-        style: TextStyle(
-          color: AppColors.primaryLight,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'Quarantine Management',
-        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 4),
-      const Text('Review and manage inventory currently under quality hold.'),
-    ],
-  );
 
   Widget _filterToolbar() {
     final hasFilters =
@@ -380,56 +316,123 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
     ),
   );
 
-  Widget _quarantineTable(List<QuarantineRecord> records) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Inventory Rolls')),
-          DataColumn(label: Text('Severity')),
-          DataColumn(label: Text('Reason')),
-          DataColumn(label: Text('Created')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('Released')),
-          DataColumn(label: Text('Actions')),
-        ],
-        rows: records
-            .map(
-              (record) => DataRow(
-                cells: [
-                  DataCell(Text(record.inventoryRollId)),
-                  DataCell(StatusPill(_severityFor(record))),
-                  DataCell(
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        record.reason,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(Text(_formatDate(record.createdAt))),
-                  DataCell(StatusPill(record.status)),
-                  DataCell(
-                    Text(
-                      record.releasedAt == null
-                          ? 'Not released'
-                          : _formatDate(record.releasedAt!),
-                    ),
-                  ),
-                  DataCell(
-                    IconButton(
-                      onPressed: () => _open(record),
-                      icon: const Icon(Icons.visibility_outlined),
-                      tooltip: 'View',
-                    ),
-                  ),
+  Widget _quarantineTable(List<QuarantineRecord> records) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth < 700
+        ? _quarantineCards(records)
+        : Card(
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Inventory Rolls')),
+                  DataColumn(label: Text('Severity')),
+                  DataColumn(label: Text('Reason')),
+                  DataColumn(label: Text('Created')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Released')),
+                  DataColumn(label: Text('Actions')),
                 ],
+                rows: records
+                    .map(
+                      (record) => DataRow(
+                        cells: [
+                          DataCell(Text(record.inventoryRollId)),
+                          DataCell(StatusPill(_severityFor(record))),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Text(
+                                record.reason,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(_formatDate(record.createdAt))),
+                          DataCell(StatusPill(record.status)),
+                          DataCell(
+                            Text(
+                              record.releasedAt == null
+                                  ? 'Not released'
+                                  : _formatDate(record.releasedAt!),
+                            ),
+                          ),
+                          DataCell(
+                            IconButton(
+                              onPressed: () => _open(record),
+                              icon: const Icon(Icons.visibility_outlined),
+                              tooltip: 'View',
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
               ),
-            )
-            .toList(),
-      ),
+            ),
+          ),
+  );
+
+  Widget _quarantineCards(List<QuarantineRecord> records) => Column(
+    children: [
+      for (final record in records) ...[
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _quarantineField(
+                  'Inventory Roll',
+                  Text(record.inventoryRollId),
+                ),
+                _quarantineField('Severity', StatusPill(_severityFor(record))),
+                _quarantineField('Reason', Text(record.reason)),
+                _quarantineField(
+                  'Created',
+                  Text(_formatDate(record.createdAt)),
+                ),
+                _quarantineField('Status', StatusPill(record.status)),
+                _quarantineField(
+                  'Released',
+                  Text(
+                    record.releasedAt == null
+                        ? 'Not released'
+                        : _formatDate(record.releasedAt!),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => _open(record),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('View'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ],
+  );
+
+  Widget _quarantineField(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 92,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: value),
+      ],
     ),
   );
 }

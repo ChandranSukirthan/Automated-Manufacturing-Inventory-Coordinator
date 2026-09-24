@@ -12,9 +12,9 @@ abstract final class AppColors {
   static const mutedText = Color(0xFF94A3B8);
   static const faintText = Color(0xFF64748B);
 
-  static const primary = Color(0xFF10B981);
-  static const primaryLight = Color(0xFF34D399);
-  static const primaryTextLight = Color(0xFF6EE7B7);
+  static const primary = Color(0xFF8B5CF6);
+  static const primaryLight = Color(0xFFA78BFA);
+  static const primaryTextLight = Color(0xFFC4B5FD);
 
   static const info = Color(0xFF06B6D4);
   static const infoBorder = Color(0xFF22D3EE);

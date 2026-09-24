@@ -7,16 +7,10 @@ import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
 
 class DefectFormScreen extends StatefulWidget {
-  const DefectFormScreen({
-    required this.service,
-    this.defect,
-    this.initialBatchId,
-    super.key,
-  });
+  const DefectFormScreen({required this.service, this.defect, super.key});
 
   final QualityService service;
   final DefectReport? defect;
-  final String? initialBatchId;
 
   @override
   State<DefectFormScreen> createState() => _DefectFormScreenState();
@@ -105,19 +99,6 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
         _rolls = results[2] as List<InventoryRollModel>;
         _loadingInventory = false;
       });
-      if (widget.initialBatchId != null) {
-        final roll = _rolls
-            .where((item) => item.batchId == widget.initialBatchId)
-            .firstOrNull;
-        final material = _materials
-            .where((item) => item.id == roll?.rawMaterialId)
-            .firstOrNull;
-        if (mounted && material != null) {
-          setState(() {
-            _skuCode = material.skuCode;
-          });
-        }
-      }
       await _restoreDefectSelection();
     } on ApiException catch (exception) {
       if (mounted) {
@@ -149,8 +130,6 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
       _skuCode = material?.skuCode;
       _selectedRolls = affected;
     });
-    if (roll?.batchId != null && roll!.batchId!.isNotEmpty) {
-    }
   }
 
   Future<void> _selectSku(String? sku) async {
@@ -160,9 +139,6 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
       _recommendation = null;
       _aiError = null;
     });
-    final firstRoll = _skuRolls.firstOrNull;
-    if (firstRoll?.batchId != null && firstRoll!.batchId!.isNotEmpty) {
-    }
   }
 
   String? _validate({required bool requireRolls}) {
@@ -245,6 +221,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     final rolls = _skuRolls;
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: Text(_isEditing ? 'Edit Defect Report' : 'Create Defect Report'),
         leading: BackButton(onPressed: () => Navigator.pop(context)),
       ),

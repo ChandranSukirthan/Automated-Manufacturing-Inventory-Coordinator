@@ -45,7 +45,6 @@ class BatchDetailsScreen extends StatelessWidget {
             MaterialPageRoute(
               builder: (_) => DefectFormScreen(
                 service: service,
-                initialBatchId: batch.id,
               ),
             ),
           ),

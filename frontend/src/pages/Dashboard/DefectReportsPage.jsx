@@ -25,7 +25,6 @@ import EmptyState from '../../components/QA/EmptyState';
 import TablePagination from '../../components/QA/TablePagination';
 
 const PAGE_SIZE = 8;
-const productTypes = ['BoxPouch', 'BiscuitPackaging', 'TeaBag', 'Bag', 'Can', 'Bottle'];
 const severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
 const statuses = ['Open', 'InReview', 'Resolved', 'Closed'];
 
@@ -37,7 +36,6 @@ export default function DefectReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [productType, setProductType] = useState('All');
   const [severity, setSeverity] = useState('All');
   const [status, setStatus] = useState('All');
   const [sort, setSort] = useState({ key: 'createdAt', direction: 'desc' });
@@ -79,11 +77,10 @@ export default function DefectReportsPage() {
     return roll?.rollIdentifier || roll?.id || 'Unavailable';
   };
 
-  const isFiltered = query.trim() !== '' || productType !== 'All' || severity !== 'All' || status !== 'All';
+  const isFiltered = query.trim() !== '' || severity !== 'All' || status !== 'All';
 
   const clearFilters = () => {
     setQuery('');
-    setProductType('All');
     setSeverity('All');
     setStatus('All');
     setPage(1);
@@ -92,9 +89,7 @@ export default function DefectReportsPage() {
   const filtered = defects
     .filter((defect) => {
       const haystack = [
-        defect.batchId,
         inventoryRollFor(defect),
-        defect.productType,
         defect.severity,
         defect.status,
         defect.description,
@@ -105,7 +100,6 @@ export default function DefectReportsPage() {
 
       return (
         haystack.includes(query.trim().toLowerCase()) &&
-        (productType === 'All' || defect.productType === productType) &&
         (severity === 'All' || defect.severity === severity) &&
         (status === 'All' || defect.status === status)
       );
@@ -203,25 +197,6 @@ export default function DefectReportsPage() {
               placeholder="Search inventory roll, description..."
               className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
             />
-          </div>
-
-          {/* Product Filter */}
-          <div className="lg:col-span-3">
-            <select
-              value={productType}
-              onChange={(e) => {
-                setProductType(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2.5 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-            >
-              <option value="All">All Product Types</option>
-              {productTypes.map((val) => (
-                <option key={val} value={val}>
-                  {val}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Severity Filter */}
@@ -343,7 +318,6 @@ export default function DefectReportsPage() {
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-bold uppercase tracking-wider text-slate-400">
                   <th className="px-5 py-4">Inventory Roll</th>
-                  <th className="px-5 py-4">Product</th>
                   <th className="px-5 py-4">Severity</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Reported By</th>
@@ -363,11 +337,6 @@ export default function DefectReportsPage() {
                       {/* SKU */}
                       <td className="px-5 py-4 font-mono font-bold text-white tracking-tight">
                         {inventoryRollFor(defect)}
-                      </td>
-
-                      {/* Product */}
-                      <td className="px-5 py-4 text-slate-300 font-medium">
-                        {defect.productType}
                       </td>
 
                       {/* Severity */}

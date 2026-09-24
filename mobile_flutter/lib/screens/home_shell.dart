@@ -4,6 +4,7 @@ import '../app_state.dart';
 import '../services/quality_service.dart';
 import 'dashboard_screen.dart';
 import 'defects_screen.dart';
+import 'defect_form_screen.dart';
 import 'quarantine_screen.dart';
 import 'quarantine_history_screen.dart';
 import 'role_dashboard_screen.dart';
@@ -25,6 +26,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
+  int _selectedNavigationIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +38,12 @@ class _HomeShellState extends State<HomeShell> {
               service: widget.qualityService,
               appState: widget.appState,
             ),
-            DefectsScreen(service: widget.qualityService),
+            DefectsScreen(service: widget.qualityService, showAppBar: false),
             QuarantineScreen(service: widget.qualityService),
-            QuarantineHistoryScreen(service: widget.qualityService),
+            QuarantineHistoryScreen(
+              service: widget.qualityService,
+              showPageChrome: false,
+            ),
           ]
         : [
             RoleDashboardScreen(
@@ -98,9 +103,29 @@ class _HomeShellState extends State<HomeShell> {
       body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: isQualityInspector
           ? NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (index) =>
-                  setState(() => _selectedIndex = index),
+              selectedIndex: _selectedNavigationIndex,
+              onDestinationSelected: (index) async {
+                if (index == 2) {
+                  await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          DefectFormScreen(service: widget.qualityService),
+                    ),
+                  );
+                  if (mounted) {
+                    setState(() {
+                      _selectedIndex = 1;
+                      _selectedNavigationIndex = 1;
+                    });
+                  }
+                  return;
+                }
+                setState(() {
+                  _selectedNavigationIndex = index;
+                  _selectedIndex = index > 2 ? index - 1 : index;
+                });
+              },
               destinations: const [
                 NavigationDestination(
                   icon: Icon(Icons.dashboard_outlined),
@@ -111,6 +136,11 @@ class _HomeShellState extends State<HomeShell> {
                   icon: Icon(Icons.fact_check_outlined),
                   selectedIcon: Icon(Icons.fact_check),
                   label: 'Defects',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.add_circle_outline),
+                  selectedIcon: Icon(Icons.add_circle),
+                  label: 'Create\nDefect',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.inventory_2_outlined),

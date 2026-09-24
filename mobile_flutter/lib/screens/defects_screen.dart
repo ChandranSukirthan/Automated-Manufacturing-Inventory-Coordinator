@@ -10,9 +10,10 @@ import 'defect_detail_screen.dart';
 import 'defect_form_screen.dart';
 
 class DefectsScreen extends StatefulWidget {
-  const DefectsScreen({required this.service, super.key});
+  const DefectsScreen({required this.service, this.showAppBar = true, super.key});
 
   final QualityService service;
+  final bool showAppBar;
 
   @override
   State<DefectsScreen> createState() => _DefectsScreenState();
@@ -22,14 +23,6 @@ enum _DefectSort { date, inventory, severity, status }
 
 class _DefectsScreenState extends State<DefectsScreen> {
   static const _pageSize = 8;
-  static const _products = [
-    'BoxPouch',
-    'BiscuitPackaging',
-    'TeaBag',
-    'Bag',
-    'Can',
-    'Bottle',
-  ];
   static const _severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
   static const _statuses = ['Open', 'InReview', 'Resolved', 'Closed'];
 
@@ -38,7 +31,6 @@ class _DefectsScreenState extends State<DefectsScreen> {
   List<InventoryRollModel> _rolls = [];
   String? _error;
   String _query = '';
-  String? _product;
   String? _severity;
   String? _status;
   _DefectSort _sort = _DefectSort.date;
@@ -70,11 +62,6 @@ class _DefectsScreenState extends State<DefectsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Defect Reports',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-                ),
-                SizedBox(height: 4),
                 Text('Monitor and review reported quality issues.'),
               ],
             ),
@@ -91,10 +78,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
 
   Widget _filterToolbar() {
     final hasFilters =
-        _product != null ||
-        _severity != null ||
-        _status != null ||
-        _query.isNotEmpty;
+        _severity != null || _status != null || _query.isNotEmpty;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -120,16 +104,6 @@ class _DefectsScreenState extends State<DefectsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _inlineDropdown(
-              'All Product Types',
-              _product,
-              _products,
-              (value) => setState(() {
-                _product = value;
-                _page = 1;
-              }),
-            ),
-            const SizedBox(height: 8),
             _inlineDropdown(
               'All Severities',
               _severity,
@@ -167,7 +141,6 @@ class _DefectsScreenState extends State<DefectsScreen> {
                   IconButton(
                     onPressed: () => setState(() {
                       _query = '';
-                      _product = null;
                       _severity = null;
                       _status = null;
                       _page = 1;
@@ -255,59 +228,102 @@ class _DefectsScreenState extends State<DefectsScreen> {
     ),
   );
 
-  Widget _defectTable(List<DefectReport> defects) => Card(
-    clipBehavior: Clip.antiAlias,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Inventory Roll')),
-          DataColumn(label: Text('Product')),
-          DataColumn(label: Text('Severity')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('Reported By')),
-          DataColumn(label: Text('Affected Inventory')),
-          DataColumn(label: Text('Created')),
-          DataColumn(label: Text('Actions')),
-        ],
-        rows: defects.map((defect) {
-          final affected = _inventoryFor(defect);
-          return DataRow(
-            cells: [
-              DataCell(Text(_inventoryLabel(defect))),
-              DataCell(Text(defect.productType)),
-              DataCell(StatusPill(defect.severity)),
-              DataCell(StatusPill(defect.status)),
-              DataCell(Text(defect.reportedByUserId ?? 'System')),
-              DataCell(Text(affected.isEmpty ? '—' : affected.join(', '))),
-              DataCell(Text(_formatDate(defect.createdAt))),
-              DataCell(
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: () => _open(defect),
-                      icon: const Icon(Icons.visibility_outlined),
-                      tooltip: 'View',
+  Widget _defectField(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 126,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Expanded(child: value),
+      ],
+    ),
+  );
+
+  Widget _defectTable(List<DefectReport> defects) => Column(
+    children: defects.map((defect) {
+      final affected = _inventoryFor(defect);
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _inventoryLabel(defect),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'monospace',
+                      ),
                     ),
-                    IconButton(
-                      onPressed: () => _edit(defect),
-                      icon: const Icon(Icons.edit_outlined),
-                      tooltip: 'Edit',
-                    ),
-                    IconButton(
-                      onPressed: () => _delete(defect),
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete',
-                    ),
-                  ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () => _open(defect),
+                        icon: const Icon(Icons.visibility_outlined),
+                        tooltip: 'View',
+                      ),
+                      IconButton(
+                        onPressed: () => _edit(defect),
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Edit',
+                      ),
+                      IconButton(
+                        onPressed: () => _delete(defect),
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Delete',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const Divider(height: 8),
+              _defectField('Severity', StatusPill(defect.severity)),
+              _defectField('Status', StatusPill(defect.status)),
+              _defectField(
+                'Reported By',
+                Text(
+                  defect.reportedByUserId ?? 'System',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _defectField(
+                'Affected Inventory',
+                Text(
+                  affected.isEmpty ? '—' : affected.join(', '),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _defectField(
+                'Created',
+                Text(
+                  _formatDate(defect.createdAt),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
-          );
-        }).toList(),
-      ),
-    ),
+          ),
+        ),
+      );
+    }).toList(),
   );
 
   Future<void> _load() async {
@@ -351,16 +367,13 @@ class _DefectsScreenState extends State<DefectsScreen> {
     final query = _query.trim().toLowerCase();
     final values = (_defects ?? []).where((defect) {
       final text = [
-        defect.batchId,
         _inventoryLabel(defect),
-        defect.productType,
         defect.severity,
         defect.status,
         defect.description,
         ..._inventoryFor(defect),
       ].join(' ').toLowerCase();
       return (query.isEmpty || text.contains(query)) &&
-          (_product == null || defect.productType == _product) &&
           (_severity == null || defect.severity == _severity) &&
           (_status == null || defect.status == _status);
     }).toList();
@@ -453,17 +466,13 @@ class _DefectsScreenState extends State<DefectsScreen> {
   Future<void> _filters() async {
     final result = await showModalBottomSheet<List<String?>>(
       context: context,
-      builder: (context) => _DefectFilterSheet(
-        product: _product,
-        severity: _severity,
-        status: _status,
-      ),
+      builder: (context) =>
+          _DefectFilterSheet(severity: _severity, status: _status),
     );
     if (result == null || !mounted) return;
     setState(() {
-      _product = result[0];
-      _severity = result[1];
-      _status = result[2];
+      _severity = result[0];
+      _status = result[1];
       _page = 1;
     });
   }
@@ -484,55 +493,56 @@ class _DefectsScreenState extends State<DefectsScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Defect Reports'),
-        actions: [
-          IconButton(
-            onPressed: _create,
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'Create defect',
-          ),
-          IconButton(
-            onPressed: _filters,
-            icon: Badge(
-              isLabelVisible:
-                  _product != null || _severity != null || _status != null,
-              child: const Icon(Icons.tune),
-            ),
-            tooltip: 'Filters',
-          ),
-          PopupMenuButton<_DefectSort>(
-            icon: const Icon(Icons.sort),
-            onSelected: (value) => setState(() {
-              if (_sort == value) {
-                _ascending = !_ascending;
-              } else {
-                _sort = value;
-                _ascending = true;
-              }
-              _page = 1;
-            }),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: _DefectSort.date,
-                child: Text('Sort by date'),
-              ),
-              PopupMenuItem(
-                value: _DefectSort.inventory,
-                child: Text('Sort by inventory roll'),
-              ),
-              PopupMenuItem(
-                value: _DefectSort.severity,
-                child: Text('Sort by severity'),
-              ),
-              PopupMenuItem(
-                value: _DefectSort.status,
-                child: Text('Sort by status'),
-              ),
-            ],
-          ),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('Defect Reports'),
+              actions: [
+                IconButton(
+                  onPressed: _create,
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'Create defect',
+                ),
+                IconButton(
+                  onPressed: _filters,
+                  icon: Badge(
+                    isLabelVisible: _severity != null || _status != null,
+                    child: const Icon(Icons.tune),
+                  ),
+                  tooltip: 'Filters',
+                ),
+                PopupMenuButton<_DefectSort>(
+                  icon: const Icon(Icons.sort),
+                  onSelected: (value) => setState(() {
+                    if (_sort == value) {
+                      _ascending = !_ascending;
+                    } else {
+                      _sort = value;
+                      _ascending = true;
+                    }
+                    _page = 1;
+                  }),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: _DefectSort.date,
+                      child: Text('Sort by date'),
+                    ),
+                    PopupMenuItem(
+                      value: _DefectSort.inventory,
+                      child: Text('Sort by inventory roll'),
+                    ),
+                    PopupMenuItem(
+                      value: _DefectSort.severity,
+                      child: Text('Sort by severity'),
+                    ),
+                    PopupMenuItem(
+                      value: _DefectSort.status,
+                      child: Text('Sort by status'),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -582,8 +592,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
 }
 
 class _DefectFilterSheet extends StatefulWidget {
-  const _DefectFilterSheet({this.product, this.severity, this.status});
-  final String? product;
+  const _DefectFilterSheet({this.severity, this.status});
   final String? severity;
   final String? status;
   @override
@@ -591,7 +600,6 @@ class _DefectFilterSheet extends StatefulWidget {
 }
 
 class _DefectFilterSheetState extends State<_DefectFilterSheet> {
-  late String? product = widget.product;
   late String? severity = widget.severity;
   late String? status = widget.status;
   @override
@@ -601,17 +609,6 @@ class _DefectFilterSheetState extends State<_DefectFilterSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          DropdownButtonFormField<String?>(
-            initialValue: product,
-            decoration: const InputDecoration(labelText: 'Product type'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All')),
-              ..._DefectsScreenState._products.map(
-                (value) => DropdownMenuItem(value: value, child: Text(value)),
-              ),
-            ],
-            onChanged: (value) => setState(() => product = value),
-          ),
           DropdownButtonFormField<String?>(
             initialValue: severity,
             decoration: const InputDecoration(labelText: 'Severity'),
@@ -636,12 +633,11 @@ class _DefectFilterSheetState extends State<_DefectFilterSheet> {
           ),
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: () =>
-                Navigator.pop(context, [product, severity, status]),
+            onPressed: () => Navigator.pop(context, [severity, status]),
             child: const Text('Apply filters'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, [null, null, null]),
+            onPressed: () => Navigator.pop(context, [null, null]),
             child: const Text('Reset filters'),
           ),
         ],

@@ -174,9 +174,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           children: [
-            _DetailRow(label: 'Batch ID', value: defect.batchId),
             _DetailRow(label: 'SKU Code', value: _skuCode ?? 'Unavailable'),
-            _DetailRow(label: 'Product type', value: defect.productType),
             Row(
               children: [
                 Expanded(
