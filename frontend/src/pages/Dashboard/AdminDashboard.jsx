@@ -69,16 +69,24 @@ export default function AdminDashboard() {
   const totalPurchaseValue = orders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
   const pendingApprovalAmount = pendingOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
   const supplierCount = suppliers.length;
-  const supplierPerformance = 96.8; // Average supplier SLA rating
-  const aiWorkflowCount = orders.length; // Active multi-agent procurement workflows
+  const activeSuppliersCount = suppliers.filter((s) => s.isActive).length;
+  const supplierPerformance = supplierCount > 0 ? Math.round((activeSuppliersCount / supplierCount) * 100) : 100;
+  const aiWorkflowCount = orders.filter((o) => o.requiresApproval || o.status === 'Approved').length || orders.length;
   const highRiskOrders = orders.filter((o) => (o.totalCost || 0) > 10000 || o.requiresApproval);
 
   return (
     <AppLayout
       title="Supply Chain Manager Dashboard"
-      subtitle={`Welcome back, ${user?.fullName || 'Sukirthan'}. Here is your live procurement and supply chain command center.`}
+      subtitle={`Welcome back, ${user?.fullName || 'Manager'}. Here is your live procurement and supply chain command center.`}
       actionButton={
         <div className="flex items-center gap-2.5">
+          <Link
+            to="/purchase-orders/procurement"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-purple-600/20 transition-all"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Procurement</span>
+          </Link>
           <Link
             to="/purchase-orders/create"
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-brand-600/20 transition-all"

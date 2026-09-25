@@ -17,6 +17,7 @@ import SupplierDetail from './pages/Suppliers/SupplierDetail';
 import PurchaseOrderList from './pages/PurchaseOrders/PurchaseOrderList';
 import PurchaseOrderCreate from './pages/PurchaseOrders/PurchaseOrderCreate';
 import PurchaseOrderDetail from './pages/PurchaseOrders/PurchaseOrderDetail';
+import ProcurementResearch from './pages/PurchaseOrders/ProcurementResearch';
 import AiApprovals from './pages/PurchaseOrders/AiApprovals';
 import SupplierAnalytics from './pages/PurchaseOrders/SupplierAnalytics';
 import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
@@ -100,6 +101,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <PurchaseOrderCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/purchase-orders/procurement"
+            element={
+              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin', 3]}>
+                <ProcurementResearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/procurement-research"
+            element={
+              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin', 3]}>
+                <ProcurementResearch />
               </ProtectedRoute>
             }
           />

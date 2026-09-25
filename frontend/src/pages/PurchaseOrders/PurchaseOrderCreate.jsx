@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Send,
   Info,
-  Package
+  Package,
+  Sparkles
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import purchaseOrderService from '../../services/purchaseOrderService';
@@ -191,13 +192,45 @@ export default function PurchaseOrderCreate() {
     >
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Back Link */}
-        <div>
+        <div className="flex items-center justify-between">
           <Link
             to="/purchase-orders"
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Purchase Orders</span>
+          </Link>
+
+          <Link
+            to="/purchase-orders/procurement"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-semibold transition-all"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>AI Procurement Research</span>
+          </Link>
+        </div>
+
+        {/* AI Assisted Procurement Callout */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-900 border border-purple-800/40 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">
+                Want AI-Assisted Sourcing & Constraint Optimization?
+              </h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Use the autonomous multi-agent pipeline to discover external suppliers, calculate net deficit, and enforce quality standards before creating a PO.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/purchase-orders/procurement"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Launch AI Procurement</span>
           </Link>
         </div>
 

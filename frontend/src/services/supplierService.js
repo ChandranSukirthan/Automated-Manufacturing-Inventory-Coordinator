@@ -34,6 +34,11 @@ export const supplierService = {
   async getPerformance(id) {
     const response = await api.get(`/suppliers/${id}/performance`);
     return response.data;
+  },
+
+  async verifySupplier(id, data = {}) {
+    const response = await api.post(`/suppliers/${id}/verify`, data);
+    return response.data;
   }
 };
 

@@ -12,7 +12,8 @@ import {
   Bell,
   ChevronRight,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import purchaseOrderService from '../../services/purchaseOrderService';
@@ -68,7 +69,16 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
           location.pathname === '/purchase-orders/create' ||
           (location.pathname.startsWith('/purchase-orders/') &&
             !location.pathname.includes('/approvals') &&
-            !location.pathname.includes('/analytics')))
+            !location.pathname.includes('/analytics') &&
+            !location.pathname.includes('/procurement')))
+    },
+    {
+      label: 'AI Procurement',
+      path: '/purchase-orders/procurement',
+      icon: <Sparkles className="w-5 h-5" />,
+      active:
+        location.pathname === '/purchase-orders/procurement' ||
+        location.pathname === '/procurement-research'
     },
     {
       label: 'AI Approvals',
