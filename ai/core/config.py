@@ -13,12 +13,23 @@ class Settings(BaseSettings):
     db_user: str = "postgres"
     db_password: str = ""
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-flash"
     fastapi_port: int = 8000
 
     model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 
     @property
+    def GEMINI_API_KEY(self) -> str:
+        return self.gemini_api_key
+
+    @property
+    def GEMINI_MODEL(self) -> str:
+        return self.gemini_model
+
+    @property
     def DB_HOST(self) -> str:
+
         return self.db_host
 
     @property
