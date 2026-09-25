@@ -31,6 +31,18 @@ namespace backend.Tests
         {
             return Task.FromResult(new List<SupplierCandidateDto>());
         }
+
+        public Task<(string? workflowId, List<SupplierCandidateDto> candidates)> ResearchProcurementSuppliersWithWorkflowAsync(
+            string materialName, 
+            string specification, 
+            decimal requiredQuantity, 
+            string? preferredRegion)
+        {
+            return Task.FromResult<(string?, List<SupplierCandidateDto>)>((
+                "WF-TEST-12345", 
+                new List<SupplierCandidateDto>()
+            ));
+        }
     }
 
     public class FakePurchaseOrderService : IPurchaseOrderService
@@ -363,6 +375,154 @@ namespace backend.Tests
 
             Assert.False(poUnder.RequiresApproval);
             Assert.True(poOver.RequiresApproval);
+        }
+
+        [Fact]
+        public async Task GetStatusTrackingAsync_ReturnsFullPipelineTrackingData()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var rawMaterial = new RawMaterial { Id = 301, Name = "Polyester Film", SkuCode = "PET-01" };
+            db.RawMaterials.Add(rawMaterial);
+
+            var request = new ProcurementRequest
+            {
+                Id = 30,
+                RawMaterialId = 301,
+                RequiredSpecification = "PET 12 micron",
+                ProductionRequirement = 1000m,
+                SafetyStock = 200m,
+                CurrentStock = 100m,
+                ExistingOpenPoQuantity = 0m,
+                CalculatedNetQuantity = 1100m,
+                MaximumBudget = 5000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(14),
+                Status = ProcurementRequestStatus.RecommendationReady,
+                WorkflowId = "WF-TRACK-999"
+            };
+            db.ProcurementRequests.Add(request);
+
+            var candidate = new SupplierCandidate
+            {
+                Id = 301,
+                ProcurementRequestId = 30,
+                SupplierName = "Apex Film Solutions",
+                MaterialName = "Polyester Film",
+                UnitPrice = 1.25m,
+                MinimumOrderQuantity = 500m,
+                PackSize = 50m,
+                LeadTimeDays = 5,
+                QualityEvidence = "ISO 9001 certified",
+                Availability = "In Stock",
+                SupplierStatus = "APPROVED",
+                IsValidated = true,
+                RecommendedOrderQuantity = 1100m,
+                TotalCost = 1375.00m
+            };
+            db.SupplierCandidates.Add(candidate);
+            await db.SaveChangesAsync();
+
+            var tracking = await service.GetStatusTrackingAsync(30);
+
+            Assert.NotNull(tracking);
+            Assert.Equal(30, tracking.ProcurementId);
+            Assert.Equal("WF-TRACK-999", tracking.WorkflowId);
+            Assert.Equal("Apex Film Solutions", tracking.SupplierName);
+            Assert.Equal(1100m, tracking.NetDeficit);
+            Assert.Equal("In Stock", tracking.Availability);
+            Assert.False(tracking.RequiresSupplierVerification);
+        }
+
+        [Fact]
+        public async Task GetRecommendationAsync_WithUnverifiedCandidate_FlagsRequiresVerification()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var rawMaterial = new RawMaterial { Id = 401, Name = "Nylon Barrier Film", SkuCode = "NY-01" };
+            db.RawMaterials.Add(rawMaterial);
+
+            var request = new ProcurementRequest
+            {
+                Id = 40,
+                RawMaterialId = 401,
+                RequiredSpecification = "BOPA 15 micron",
+                ProductionRequirement = 500m,
+                SafetyStock = 100m,
+                CurrentStock = 50m,
+                ExistingOpenPoQuantity = 0m,
+                CalculatedNetQuantity = 550m,
+                MaximumBudget = 3000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(10),
+                Status = ProcurementRequestStatus.RecommendationReady,
+                WorkflowId = "WF-RECOMMEND-001"
+            };
+            db.ProcurementRequests.Add(request);
+
+            var unverifiedCandidate = new SupplierCandidate
+            {
+                Id = 401,
+                ProcurementRequestId = 40,
+                SupplierName = "Global Barrier Web Ltd",
+                MaterialName = "Nylon Barrier Film",
+                UnitPrice = 2.10m,
+                MinimumOrderQuantity = 200m,
+                PackSize = 50m,
+                LeadTimeDays = 6,
+                QualityEvidence = "FDA food compliant",
+                Availability = "In Stock",
+                SupplierStatus = "UNVERIFIED",
+                ConfidenceScore = 91.0m,
+                IsValidated = false
+            };
+            db.SupplierCandidates.Add(unverifiedCandidate);
+            await db.SaveChangesAsync();
+
+            var recommendation = await service.GetRecommendationAsync(40);
+
+            Assert.NotNull(recommendation);
+            Assert.True(recommendation.RequiresSupplierVerification);
+            Assert.NotNull(recommendation.RecommendedCandidate);
+            Assert.Equal("Global Barrier Web Ltd", recommendation.RecommendedCandidate.SupplierName);
+            Assert.Contains("UNVERIFIED", recommendation.Rationale);
+        }
+
+        [Fact]
+        public async Task CreateDraftPoFromCandidateAsync_WhenCandidateIsUnverified_ThrowsInvalidOperationException()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var rawMaterial = new RawMaterial { Id = 501, Name = "Spec A Material", SkuCode = "SP-01" };
+            db.RawMaterials.Add(rawMaterial);
+
+            var request = new ProcurementRequest
+            {
+                RawMaterialId = 501,
+                RequiredSpecification = "Spec A",
+                CalculatedNetQuantity = 500m,
+                MaximumBudget = 2000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(10),
+                Status = ProcurementRequestStatus.RecommendationReady
+            };
+            db.ProcurementRequests.Add(request);
+            await db.SaveChangesAsync();
+
+            var unverifiedCandidate = new SupplierCandidate
+            {
+                ProcurementRequestId = request.Id,
+                SupplierName = "Unknown Discovered Supplier",
+                MaterialName = "Spec A Material",
+                UnitPrice = 1.00m,
+                MinimumOrderQuantity = 100m,
+                SupplierStatus = "UNVERIFIED" // Not approved
+            };
+            db.SupplierCandidates.Add(unverifiedCandidate);
+            await db.SaveChangesAsync();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.CreateDraftPoFromCandidateAsync(request.Id, unverifiedCandidate.Id));
         }
     }
 }

@@ -139,11 +139,16 @@ WORKFLOW_SESSIONS: Dict[str, AgentState] = {}
 COMPILED_APP = build_workflow_graph()
 
 
-def run_workflow(objective: str, workflow_id: Optional[str] = None) -> AgentState:
+def run_workflow(
+    objective: str,
+    workflow_id: Optional[str] = None,
+    procurement_requirement: Optional[Dict[str, Any]] = None
+) -> AgentState:
     """
     Starts and executes a workflow up to completion or approval gate.
     """
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
+    now_iso = datetime.now(timezone.utc).isoformat()
 
     initial_state: AgentState = {
         "workflow_id": wf_id,
@@ -154,6 +159,8 @@ def run_workflow(objective: str, workflow_id: Optional[str] = None) -> AgentStat
         "plan": [],
         "completed_steps": [],
         "tool_results": {},
+        "tool_call_log": [],
+        "procurement_requirement": procurement_requirement or {},
         "inventory_data": {},
         "production_data": {},
         "purchasing_data": {},
@@ -161,6 +168,8 @@ def run_workflow(objective: str, workflow_id: Optional[str] = None) -> AgentStat
         "final_outcome": None,
         "errors": [],
         "requires_approval": False,
+        "created_at": now_iso,
+        "updated_at": now_iso,
     }
 
     sync_to_database(initial_state)

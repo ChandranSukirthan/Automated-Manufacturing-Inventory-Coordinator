@@ -36,6 +36,11 @@ class AgentState(TypedDict, total=False):
     validation_results: dict[str, Any]
     completed_steps: list[str]
     tool_results: dict[str, Any]
+    tool_call_log: list[dict[str, Any]]
+    procurement_requirement: dict[str, Any]
     final_outcome: str | None
     errors: list[str]
     requires_approval: bool
+    approved_by: str | None
+    created_at: str | None
+    updated_at: str | None

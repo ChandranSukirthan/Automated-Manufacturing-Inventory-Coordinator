@@ -36,8 +36,11 @@ from ai.tools.purchasing_tools import (
     select_supplier,
     create_draft_po,
     sanitize_untrusted_web_content,
+    validate_candidate_schema,
+    REQUIRED_CANDIDATE_KEYS,
 )
 from ai.agents.purchasing import purchasing_node
+from ai.agents.validation import validation_node
 from ai.core.state import WorkflowStatus, ApprovalStatus
 
 
@@ -353,6 +356,122 @@ class TestPurchasingAgent(unittest.TestCase):
         self.assertEqual(output["purchasing_data"]["draft_po"]["estimatedCostUsd"], 5800.0)
         self.assertEqual(output["purchasing_data"]["draft_po"]["paymentStatus"], "UNPAID")
         self.assertFalse(output["purchasing_data"]["draft_po"]["emailSent"])
+
+    # 19. Exact Net Deficit & Pack Size Rounding (Prompt Specification Example)
+    def test_exact_net_deficit_and_pack_size_rounding(self):
+        """
+        Prompt Example:
+        Net deficit = 850
+        Pack size = 100
+        Recommended quantity = 900
+        Return both: netDeficit, recommendedQuantity
+        """
+        result = calculate_purchase_quantity(
+            net_deficit=850.0,
+            pack_size=100.0,
+            moq=0.0
+        )
+        self.assertEqual(result["netDeficit"], 850.0)
+        self.assertEqual(result["recommendedQuantity"], 900.0)
+        self.assertEqual(result["requiredPurchaseQuantity"], 850.0)
+        self.assertEqual(result["adjustedQuantity"], 900.0)
+        self.assertTrue(result["packSizeApplied"])
+
+    # 20. Structured Candidate Schema Validator
+    def test_structured_candidate_schema_validator(self):
+        valid_candidate = {
+            "supplierName": "Test Supplier",
+            "origin": "Global",
+            "productName": "Poly Film",
+            "material": "Film",
+            "specification": "Spec A",
+            "unitPrice": 1.50,
+            "currency": "USD",
+            "unit": "meters",
+            "minimumOrderQuantity": 100.0,
+            "packSize": 50.0,
+            "availableQuantity": 2000.0,
+            "leadTimeDays": 5,
+            "qualityEvidence": "ISO 9001",
+            "certifications": ["ISO 9001"],
+            "sourceUrl": "https://example.com",
+            "sourceTitle": "Example",
+            "retrievedAt": "2026-09-26T00:00:00Z"
+        }
+        self.assertTrue(validate_candidate_schema(valid_candidate))
+
+        # Missing key should fail validation
+        incomplete_candidate = dict(valid_candidate)
+        del incomplete_candidate["origin"]
+        self.assertFalse(validate_candidate_schema(incomplete_candidate))
+
+        # Non-positive unitPrice should fail validation
+        zero_price_candidate = dict(valid_candidate)
+        zero_price_candidate["unitPrice"] = 0.0
+        self.assertFalse(validate_candidate_schema(zero_price_candidate))
+
+    # 21. Full Purchasing Output Structure
+    def test_purchasing_node_full_output_structure(self):
+        state = {
+            "procurement_requirement": {
+                "materialName": "BoxPouch Film",
+                "requiredSpecification": "BP-FILM-001",
+                "netDeficit": 900.0,
+                "maximumBudget": 15000.0
+            },
+            "completed_steps": [],
+            "errors": [],
+            "tool_call_log": []
+        }
+        output = purchasing_node(state)
+        self.assertIn("purchasing_data", output)
+        pd = output["purchasing_data"]
+
+        # Check required output dictionary keys
+        self.assertIn("recommendation", pd)
+        self.assertIn("alternatives", pd)
+        self.assertIn("rejectedCandidates", pd)
+        self.assertIn("validationSummary", pd)
+        self.assertIn("sources", pd)
+        self.assertTrue(pd["requiresHumanApproval"])
+
+        # Check recommendation structure
+        rec = pd["recommendation"]
+        self.assertIsNotNone(rec)
+        self.assertIn("supplier", rec)
+        self.assertIn("product", rec)
+        self.assertIn("quantity", rec)
+        self.assertIn("unitPrice", rec)
+        self.assertIn("totalCost", rec)
+        self.assertIn("qualityStatus", rec)
+        self.assertIn("supplierStatus", rec)
+
+    # 22. Validation Agent Human Approval Pause
+    def test_validation_agent_human_approval_pause(self):
+        state = {
+            "workflow_id": "WF-TEST-PAUSE",
+            "status": WorkflowStatus.Running,
+            "approval_status": ApprovalStatus.Pending,
+            "purchasing_data": {
+                "draft_po": {
+                    "poNumber": "PO-DRAFT-2026-001",
+                    "supplier": "Apex Polymer Solutions Ltd",
+                    "quantity": 900,
+                    "estimatedCostUsd": 1305.0,
+                    "paymentStatus": "UNPAID",
+                    "emailSent": False,
+                    "requiresApproval": True
+                },
+                "requiresHumanApproval": True
+            },
+            "completed_steps": [],
+            "errors": []
+        }
+        result = validation_node(state)
+        # Any procurement expenditure must trigger approval requirement and pause
+        self.assertTrue(result["requires_approval"])
+        self.assertEqual(result["status"], WorkflowStatus.WaitingForApproval)
+        self.assertIn("Waiting for Supply Chain Manager human approval", result["completed_steps"][-1])
 
 
 if __name__ == "__main__":

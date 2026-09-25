@@ -24,25 +24,31 @@ tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 class RunWorkflowRequest(BaseModel):
     objective: str = Field(
         ...,
-        example="Replenish BoxPouch film because inventory is low.",
         description="The business objective for the Planner agent."
     )
-    workflowId: Optional[str] = Field(None, example="WF-1004")
+    workflowId: Optional[str] = Field(None)
+    materialName: Optional[str] = None
+    specification: Optional[str] = None
+    requiredQuantity: Optional[float] = None
+    netDeficit: Optional[float] = None
+    maximumBudget: Optional[float] = None
+    preferredRegion: Optional[str] = None
+    requiredByDate: Optional[str] = None
 
 
 class RejectWorkflowRequest(BaseModel):
-    reason: Optional[str] = Field("Rejected by human administrator", example="Exceeds daily budget")
+    reason: Optional[str] = Field("Rejected by human administrator")
 
 
 class MaintenanceCheckRequest(BaseModel):
-    uptime: float = Field(..., example=480.0)
-    maintenanceInterval: float = Field(..., example=500.0)
-    machineId: str = Field("M001", example="M001")
+    uptime: float = Field(...)
+    maintenanceInterval: float = Field(...)
+    machineId: str = Field("M001")
 
 
 class ProductionImpactRequest(BaseModel):
-    target: int = Field(..., example=10000)
-    availableMaterial: int = Field(..., example=6000)
+    target: int = Field(...)
+    availableMaterial: int = Field(...)
 
 
 # Workflow Endpoints
@@ -51,7 +57,29 @@ def trigger_workflow(request: RunWorkflowRequest):
     """
     Triggers a multi-agent autonomous workflow via the Planner/Coordinator agent.
     """
-    result = run_workflow(objective=request.objective, workflow_id=request.workflowId)
+    req_dict: Dict[str, Any] = {}
+    if request.materialName:
+        req_dict["materialName"] = request.materialName
+    if request.specification:
+        req_dict["requiredSpecification"] = request.specification
+    if request.netDeficit is not None:
+        req_dict["netDeficit"] = request.netDeficit
+        req_dict["requiredQuantity"] = request.netDeficit
+    elif request.requiredQuantity is not None:
+        req_dict["netDeficit"] = request.requiredQuantity
+        req_dict["requiredQuantity"] = request.requiredQuantity
+    if request.maximumBudget is not None:
+        req_dict["maximumBudget"] = request.maximumBudget
+    if request.preferredRegion:
+        req_dict["preferredRegion"] = request.preferredRegion
+    if request.requiredByDate:
+        req_dict["requiredByDate"] = request.requiredByDate
+
+    result = run_workflow(
+        objective=request.objective,
+        workflow_id=request.workflowId,
+        procurement_requirement=req_dict if req_dict else None
+    )
     return result
 
 

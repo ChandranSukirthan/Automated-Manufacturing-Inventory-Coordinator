@@ -35,10 +35,16 @@ from ai.core.config import settings
 INJECTION_PATTERNS = [
     re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions", re.IGNORECASE),
     re.compile(r"change\s+(the\s+)?budget", re.IGNORECASE),
-    re.compile(r"approve\s+(this\s+)?purchase", re.IGNORECASE),
-    re.compile(r"override\s+(permission|rules|validation)", re.IGNORECASE),
-    re.compile(r"bypass\s+(backend|security|validation)", re.IGNORECASE),
+    re.compile(r"set\s+(the\s+)?budget", re.IGNORECASE),
+    re.compile(r"approve\s+(this\s+)?(purchase|po|order)", re.IGNORECASE),
+    re.compile(r"override\s+(permission|rules|validation|budget)", re.IGNORECASE),
+    re.compile(r"bypass\s+(backend|security|validation|approval)", re.IGNORECASE),
     re.compile(r"you\s+are\s+now\s+in\s+developer\s+mode", re.IGNORECASE),
+    re.compile(r"call\s+payment", re.IGNORECASE),
+    re.compile(r"execute\s+payment", re.IGNORECASE),
+    re.compile(r"reveal\s+(api\s+)?key", re.IGNORECASE),
+    re.compile(r"system\s+instruction", re.IGNORECASE),
+    re.compile(r"disregard\s+(the\s+)?above", re.IGNORECASE),
 ]
 
 
@@ -77,6 +83,32 @@ def get_db_connection() -> Optional[psycopg.Connection[Any]]:
         return conn
     except Exception:
         return None
+
+
+REQUIRED_CANDIDATE_KEYS = {
+    "supplierName", "origin", "productName", "material", "specification",
+    "unitPrice", "currency", "unit", "minimumOrderQuantity", "packSize",
+    "availableQuantity", "leadTimeDays", "qualityEvidence", "certifications",
+    "sourceUrl", "sourceTitle", "retrievedAt"
+}
+
+
+def validate_candidate_schema(candidate: Dict[str, Any]) -> bool:
+    """
+    Validates that a supplier candidate strictly adheres to the required schema.
+    Returns True if valid, False if any mandatory key is missing or invalid.
+    """
+    if not isinstance(candidate, dict):
+        return False
+    for key in REQUIRED_CANDIDATE_KEYS:
+        if key not in candidate:
+            return False
+    try:
+        if float(candidate.get("unitPrice", 0)) <= 0:
+            return False
+    except (ValueError, TypeError):
+        return False
+    return True
 
 
 # =====================================================================
@@ -133,19 +165,27 @@ def search_external_supplier_market(
     # Sanitize and validate every field against the required schema
     validated_candidates = []
     for cand in candidates:
+        raw_quality = str(cand.get("qualityEvidence", "")).strip()
+        if not raw_quality or raw_quality.upper() in ["NONE", "N/A"]:
+            certs = cand.get("certifications", [])
+            raw_quality = ", ".join(certs) if certs else "UNKNOWN"
+
         validated = {
             "supplierName": sanitize_untrusted_web_content(str(cand.get("supplierName", "Unknown Supplier"))),
+            "origin": sanitize_untrusted_web_content(str(cand.get("origin", cand.get("region", region_clean)))),
             "productName": sanitize_untrusted_web_content(str(cand.get("productName", material_clean))),
+            "material": sanitize_untrusted_web_content(str(cand.get("material", cand.get("materialName", material_clean)))),
             "materialName": sanitize_untrusted_web_content(str(cand.get("materialName", material_clean))),
             "specification": sanitize_untrusted_web_content(str(cand.get("specification", spec_clean))),
             "unitPrice": max(0.01, float(cand.get("unitPrice", 1.50))),
             "currency": str(cand.get("currency", "USD")).upper()[:5],
             "unit": str(cand.get("unit", "meters")),
             "minimumOrderQuantity": max(0.0, float(cand.get("minimumOrderQuantity", 100.0))),
+            "packSize": max(1.0, float(cand.get("packSize", 50.0))),
             "availableQuantity": max(0.0, float(cand.get("availableQuantity", required_quantity * 2))),
             "leadTimeDays": max(1, int(cand.get("leadTimeDays", 5))),
-            "qualityEvidence": sanitize_untrusted_web_content(str(cand.get("qualityEvidence", "ISO 9001 Certified"))),
-            "certifications": [sanitize_untrusted_web_content(str(c)) for c in cand.get("certifications", ["ISO 9001"])],
+            "qualityEvidence": sanitize_untrusted_web_content(raw_quality),
+            "certifications": [sanitize_untrusted_web_content(str(c)) for c in cand.get("certifications", [])],
             "availabilityStatus": str(cand.get("availabilityStatus", "AVAILABLE")).upper(),
             "supplierStatus": "UNVERIFIED",  # Strictly UNVERIFIED until reviewed by manager
             "sourceUrl": str(cand.get("sourceUrl", "https://market.b2b-procurement.example/catalog")),
@@ -248,54 +288,66 @@ def _get_synthetic_market_candidates(
     return [
         {
             "supplierName": "Apex Polymer Solutions Ltd",
+            "origin": region,
             "productName": f"Premium {material}",
+            "material": material,
             "materialName": material,
             "specification": specification,
             "unitPrice": 1.45,
             "currency": "USD",
             "unit": "meters",
             "minimumOrderQuantity": 500.0,
+            "packSize": 50.0,
             "availableQuantity": max(quantity * 2, 4000.0),
             "leadTimeDays": 4,
             "qualityEvidence": "ISO 9001 Certified, ASTM D882 tensile testing passed, Batch COA #APX-2026-9",
             "certifications": ["ISO 9001", "ASTM D882"],
             "availabilityStatus": "AVAILABLE",
+            "supplierStatus": "UNVERIFIED",
             "sourceUrl": "https://market.b2b-polymers.example/apex-solutions",
             "sourceTitle": "Apex Polymer Solutions - Industrial B2B Portal",
             "retrievedAt": timestamp
         },
         {
             "supplierName": "Global Film & Foil Industries",
+            "origin": region,
             "productName": f"Standard {material}",
+            "material": material,
             "materialName": material,
             "specification": specification,
             "unitPrice": 1.38,
             "currency": "USD",
             "unit": "meters",
             "minimumOrderQuantity": 1000.0,
+            "packSize": 100.0,
             "availableQuantity": max(quantity * 1.5, 3000.0),
             "leadTimeDays": 7,
             "qualityEvidence": "ISO 14001, FDA food contact barrier compliant",
             "certifications": ["ISO 14001", "FDA 21 CFR"],
             "availabilityStatus": "AVAILABLE",
+            "supplierStatus": "UNVERIFIED",
             "sourceUrl": "https://supplier-portal.example/global-film",
             "sourceTitle": "Global Film B2B Marketplace",
             "retrievedAt": timestamp
         },
         {
             "supplierName": "Vanguard Synthetics Co",
+            "origin": region,
             "productName": f"High-Durability {material}",
+            "material": material,
             "materialName": material,
             "specification": specification,
             "unitPrice": 1.60,
             "currency": "USD",
             "unit": "meters",
             "minimumOrderQuantity": 200.0,
+            "packSize": 25.0,
             "availableQuantity": max(quantity * 3, 5000.0),
             "leadTimeDays": 3,
             "qualityEvidence": "EN 13432 tensile & compostability validation",
             "certifications": ["EN 13432", "ISO 9001"],
             "availabilityStatus": "AVAILABLE",
+            "supplierStatus": "UNVERIFIED",
             "sourceUrl": "https://vanguard-synthetics.example/catalog",
             "sourceTitle": "Vanguard Synthetics Official Catalog",
             "retrievedAt": timestamp
@@ -308,27 +360,37 @@ def _get_synthetic_market_candidates(
 # =====================================================================
 
 def calculate_purchase_quantity(
-    production_requirement: float,
-    safety_stock: float,
-    current_stock: float,
-    open_po_quantity: float,
+    production_requirement: float = 0.0,
+    safety_stock: float = 0.0,
+    current_stock: float = 0.0,
+    open_po_quantity: float = 0.0,
     moq: float = 0.0,
-    pack_size: float = 1.0
+    pack_size: float = 1.0,
+    net_deficit: Optional[float] = None,
+    available_quantity: Optional[float] = None
 ) -> Dict[str, Any]:
     """
     Deterministic net purchase quantity calculation:
-    netRequiredQuantity = productionRequirement + safetyStock - currentStock - openPurchaseOrderQuantity
-    Adjusts strictly for Minimum Order Quantity (MOQ) and Pack / Roll Size.
+    netRequiredQuantity = net_deficit (if provided authoritatively by ASP.NET Core)
+    OR productionRequirement + safetyStock - currentStock - openPurchaseOrderQuantity
+    Adjusts strictly for Minimum Order Quantity (MOQ), Pack Size, and Availability.
     """
-    net_qty = production_requirement + safety_stock - current_stock - open_po_quantity
+    if net_deficit is not None:
+        net_qty = float(net_deficit)
+    else:
+        net_qty = production_requirement + safety_stock - current_stock - open_po_quantity
+
     if net_qty <= 0:
         return {
+            "netDeficit": 0.0,
+            "recommendedQuantity": 0.0,
             "requiredPurchaseQuantity": 0.0,
             "adjustedQuantity": 0.0,
             "moqApplied": False,
             "packSizeApplied": False,
+            "availabilityConstrained": False,
             "purchaseRequired": False,
-            "formula": "prodReq + safetyStock - currentStock - openPO <= 0"
+            "formula": "netDeficit <= 0"
         }
 
     # Adjust for MOQ
@@ -343,13 +405,20 @@ def calculate_purchase_quantity(
         final_qty = packs * pack_size
         pack_size_applied = final_qty > order_qty
 
+    availability_constrained = False
+    if available_quantity is not None and available_quantity < final_qty:
+        availability_constrained = True
+
     return {
+        "netDeficit": round(net_qty, 3),
+        "recommendedQuantity": round(final_qty, 3),
         "requiredPurchaseQuantity": round(net_qty, 3),
         "adjustedQuantity": round(final_qty, 3),
         "moqApplied": moq_applied,
         "packSizeApplied": pack_size_applied,
+        "availabilityConstrained": availability_constrained,
         "purchaseRequired": True,
-        "formula": f"max(netQty ({net_qty}), moq ({moq})) rounded to packSize ({pack_size})"
+        "formula": f"max(netDeficit ({net_qty}), moq ({moq})) rounded to packSize ({pack_size})"
     }
 
 
@@ -573,20 +642,34 @@ def select_supplier(
     if not valid_candidates:
         return {
             "status": "NO_VALID_SUPPLIER",
+            "recommendation": None,
             "selectedCandidate": None,
             "selectionReasons": [],
+            "alternatives": [],
             "rejectedCandidates": rejected_candidates,
+            "validationSummary": {
+                "validCandidatesCount": 0,
+                "rejectedCandidatesCount": len(rejected_candidates),
+                "rulesChecked": 8,
+                "status": "FAILED"
+            },
+            "sources": [],
+            "requiresHumanApproval": False,
             "message": "No supplier candidates satisfied all 8 mandatory validation rules."
         }
 
     # Sorting priority:
     # 1. APPROVED status preferred over UNVERIFIED
-    # 2. Lowest total cost
+    # 2. Quality status: VERIFIED preferred over UNKNOWN
     # 3. Shortest lead time
+    # 4. Total cost
     def rank_key(item: Tuple[Dict[str, Any], Dict[str, Any]]):
         c, r = item
         is_approved = 0 if r["supplierStatus"] == "APPROVED" else 1
-        return (is_approved, r["totalCost"], c.get("leadTimeDays", 99))
+        quality_score = 0 if r.get("qualityStatus") == "VERIFIED" else 1
+        lead_time = c.get("leadTimeDays", 99)
+        cost = r["totalCost"]
+        return (is_approved, quality_score, lead_time, cost)
 
     valid_candidates.sort(key=rank_key)
     top_cand, top_report = valid_candidates[0]
@@ -600,14 +683,34 @@ def select_supplier(
     ]
 
     alternatives = [c[0].get("supplierName") for c in valid_candidates[1:]]
+    sources = [c[0].get("sourceUrl") for c in valid_candidates if c[0].get("sourceUrl")]
+
+    recommendation = {
+        "supplier": top_cand.get("supplierName"),
+        "product": top_cand.get("productName", top_cand.get("materialName")),
+        "quantity": top_report.get("adjustedQuantity", top_report.get("recommendedQuantity")),
+        "unitPrice": top_cand.get("unitPrice"),
+        "totalCost": top_report.get("totalCost"),
+        "qualityStatus": top_report.get("qualityStatus", "VERIFIED"),
+        "supplierStatus": top_cand.get("supplierStatus", "UNVERIFIED")
+    }
 
     return {
         "status": "RECOMMENDATION_READY",
+        "recommendation": recommendation,
         "selectedCandidate": top_cand,
         "validationReport": top_report,
         "selectionReasons": reasons,
         "alternatives": alternatives,
-        "rejectedCandidates": rejected_candidates
+        "rejectedCandidates": rejected_candidates,
+        "validationSummary": {
+            "validCandidatesCount": len(valid_candidates),
+            "rejectedCandidatesCount": len(rejected_candidates),
+            "rulesChecked": 8,
+            "status": "PASSED"
+        },
+        "sources": sources,
+        "requiresHumanApproval": True
     }
 
 

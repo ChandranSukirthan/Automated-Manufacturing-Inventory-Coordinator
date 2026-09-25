@@ -102,12 +102,13 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         except Exception:
             quality_safety_status = "CLEAR"
 
-    # 3. Risk check: High impact triggers Human Approval requirement
-    is_high_impact = cost > 1000.0 or (adjusted_output < planned_target) or (quarantined_rolls_count > 0)
+    # 3. Risk check: Any company procurement expenditure triggers Human Approval
+    has_spending = cost > 0 or purchasing_data.get("requiresHumanApproval", False)
+    is_high_impact = has_spending or (adjusted_output < planned_target) or (quarantined_rolls_count > 0)
 
     impact_reasons = []
-    if cost > 1000.0:
-        impact_reasons.append("Procurement cost exceeds $1,000 threshold")
+    if has_spending:
+        impact_reasons.append(f"Company procurement expenditure (${cost:,.2f}) requires human approval")
     if adjusted_output < planned_target:
         impact_reasons.append("Production output is material-constrained")
     if quarantined_rolls_count > 0:
@@ -145,7 +146,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "requires_approval": True,
             "status": WorkflowStatus.WaitingForApproval,
             "approval_status": ApprovalStatus.Pending,
-            "completed_steps": completed + ["Waiting for IT Admin human approval"],
+            "completed_steps": completed + ["Waiting for Supply Chain Manager human approval"],
             "errors": errors
         }
 
