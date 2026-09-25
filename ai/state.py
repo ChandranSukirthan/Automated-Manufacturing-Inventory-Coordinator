@@ -27,21 +27,13 @@ class AgentState(TypedDict, total=False):
     data_extraction_result: Dict[str, Any]
     inventory_result: Dict[str, Any]
     tool_execution_summary: List[Dict[str, Any]]
-    tool_call_log: List[Dict[str, Any]]
-
-    # Student 2: Procurement & Purchasing Agent telemetry
-    procurement_requirement: Dict[str, Any]
-    purchasing_data: Dict[str, Any]
-    required_quantity: float
-    total_cost: float
-
+    
     # Human approval gate
     requires_human_approval: bool
     human_approval_status: str  # "PENDING", "APPROVED", "REJECTED"
-
+    
     # Workflow auditing
     timestamps: Dict[str, str]
     errors: List[str]
     final_decision: str
-
 

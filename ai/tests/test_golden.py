@@ -1,29 +1,16 @@
 import pytest
 from fastapi.testclient import TestClient
 
-try:
-    from ai.main import app
-    from ai.tools.production_tools import (
-        calculate_production_impact,
-        check_maintenance_requirement,
-        calculate_machine_uptime,
-        query_production_schedule,
-    )
-    from ai.agents.planner import planner_node
-    from ai.graph.workflow import run_workflow, approve_and_resume
-    from ai.core.state import WorkflowStatus, ApprovalStatus
-except ImportError:
-    from main import app
-    from tools.production_tools import (
-        calculate_production_impact,
-        check_maintenance_requirement,
-        calculate_machine_uptime,
-        query_production_schedule,
-    )
-    from agents.planner import planner_node
-    from graph.workflow import run_workflow, approve_and_resume
-    from core.state import WorkflowStatus, ApprovalStatus
-
+from main import app
+from tools.production_tools import (
+    calculate_production_impact,
+    check_maintenance_requirement,
+    calculate_machine_uptime,
+    query_production_schedule,
+)
+from agents.planner import planner_node
+from graph.workflow import run_workflow, approve_and_resume
+from core.state import WorkflowStatus, ApprovalStatus
 
 
 client = TestClient(app)
@@ -183,12 +170,7 @@ def test_cross_agent_quality_and_planner_coordination():
     When a defect is attached to the state, the Validation Agent runs
     the Quality Agent validation and requires quarantine approval.
     """
-    try:
-        from ai.agents.validation import validation_node
-
-    except ImportError:
-        from agents.validation import validation_node
-
+    from agents.validation import validation_node
 
     state = {
         "purchasing_data": {

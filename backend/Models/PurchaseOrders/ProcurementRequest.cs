@@ -78,12 +78,6 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [MaxLength(1000)]
         public string? FailureReason { get; set; }
 
-        [MaxLength(100)]
-        public string? WorkflowId { get; set; }
-
-        [MaxLength(200)]
-        public string? MaterialName { get; set; }
-
         public Guid? CreatedById { get; set; }
 
         [ForeignKey(nameof(CreatedById))]
@@ -91,42 +85,6 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-        // ── Convenience Aliases for Flexible API Mapping ──────────────────────────
-        [NotMapped]
-        public int MaterialId
-        {
-            get => RawMaterialId;
-            set => RawMaterialId = value;
-        }
-
-        [NotMapped]
-        public string Specification
-        {
-            get => RequiredSpecification;
-            set => RequiredSpecification = value;
-        }
-
-        [NotMapped]
-        public decimal NetDeficit
-        {
-            get => CalculatedNetQuantity;
-            set => CalculatedNetQuantity = value;
-        }
-
-        [NotMapped]
-        public decimal OpenPOQuantity
-        {
-            get => ExistingOpenPoQuantity;
-            set => ExistingOpenPoQuantity = value;
-        }
-
-        [NotMapped]
-        public DateTime RequiredDeliveryDate
-        {
-            get => RequiredByDate;
-            set => RequiredByDate = value;
-        }
 
         // Navigation
         public ICollection<SupplierCandidate> Candidates { get; set; } = new List<SupplierCandidate>();
