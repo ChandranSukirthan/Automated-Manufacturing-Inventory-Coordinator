@@ -704,6 +704,12 @@ namespace ManufacturingCoordinator.Data
                     .HasConversion<string>()
                     .IsRequired();
 
+                entity.Property(pr => pr.WorkflowId)
+                    .HasMaxLength(100);
+
+                entity.Property(pr => pr.MaterialName)
+                    .HasMaxLength(200);
+
                 entity.Property(pr => pr.FailureReason)
                     .HasMaxLength(1000);
 
@@ -763,6 +769,10 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(sc => sc.QualityEvidence)
                     .HasMaxLength(500);
+
+                entity.Property(sc => sc.Availability)
+                    .HasMaxLength(100)
+                    .HasDefaultValue("In Stock");
 
                 entity.Property(sc => sc.SupplierStatus)
                     .IsRequired()

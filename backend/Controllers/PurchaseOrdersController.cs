@@ -251,5 +251,31 @@ namespace ManufacturingCoordinator.Controllers
             var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
             return Guid.TryParse(claim, out var id) ? id : null;
         }
+
+        /// <summary>
+        /// POST /api/purchase-orders/{id}/request-revision — Alias for /revise.
+        /// Allows the React Supply Chain Manager UI to use RESTful naming.
+        /// </summary>
+        [HttpPost("{id:int}/request-revision")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderResponseDto>> RequestRevision(int id, [FromBody] ApprovalActionDto dto)
+        {
+            var approverId = GetCurrentUserId();
+            if (approverId is null)
+                return Unauthorized(new { message = "Cannot resolve approver identity from token." });
+
+            try
+            {
+                var po = await _poService.RequestRevisionAsync(id, approverId.Value, dto.Notes);
+                return Ok(po);
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+            catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
     }
 }

@@ -47,8 +47,14 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public string QualityEvidence { get; set; } = string.Empty;
 
         /// <summary>
+        /// Stock availability status reported by supplier (e.g. "In Stock", "Limited", "Pre-order").
+        /// </summary>
+        [MaxLength(100)]
+        public string Availability { get; set; } = "In Stock";
+
+        /// <summary>
         /// "APPROVED", "UNVERIFIED", or "BLOCKED".
-        /// Candidates found online are UNVERIFIED until reviewed.
+        /// Candidates found online are UNVERIFIED until reviewed by Supply Chain Manager.
         /// </summary>
         [Required]
         [MaxLength(50)]

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Models.PurchaseOrders;
+using ManufacturingCoordinator.Enums;
 using backend.Services;
 
 namespace ManufacturingCoordinator.Services.PurchaseOrders
@@ -34,19 +35,26 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             _logger = logger;
         }
 
-        // ── Deterministic Calculations ──────────────────────────────────────────
+        // ── Deterministic Calculations ────────────────────────────────────────────
 
-        public decimal CalculateNetRequiredQuantity(decimal prodRequirement, decimal safetyStock, decimal currentStock, decimal openPoQuantity)
+        /// <summary>
+        /// ASP.NET Core is the authoritative calculator of net deficit.
+        /// Formula: netQty = productionRequirement + safetyStock - currentStock - openPoQuantity
+        /// Returns 0 if result is negative (surplus stock).
+        /// </summary>
+        public decimal CalculateNetRequiredQuantity(
+            decimal prodRequirement, decimal safetyStock, decimal currentStock, decimal openPoQuantity)
         {
             var net = prodRequirement + safetyStock - currentStock - openPoQuantity;
             return net <= 0 ? 0m : net;
         }
 
+        /// <summary>
+        /// Adjusts quantity upward to satisfy MOQ and pack-size constraints.
+        /// Returns both final order quantity and total landed cost.
+        /// </summary>
         public (decimal finalQuantity, decimal totalCost) CalculateOrderQuantityAndCost(
-            decimal netQuantity, 
-            decimal moq, 
-            decimal packSize, 
-            decimal unitPrice)
+            decimal netQuantity, decimal moq, decimal packSize, decimal unitPrice)
         {
             if (netQuantity <= 0) return (0m, 0m);
 
@@ -67,6 +75,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (finalQuantity, totalCost);
         }
 
+        /// <summary>
+        /// 6-point deterministic validation engine for a supplier candidate against procurement constraints.
+        /// </summary>
         public CandidateValidationResultDto ValidateCandidate(SupplierCandidate candidate, ProcurementRequest request)
         {
             var result = new CandidateValidationResultDto();
@@ -85,47 +96,40 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             result.SpecificationMatches = !string.IsNullOrWhiteSpace(candidate.MaterialName) &&
                                          !string.IsNullOrWhiteSpace(request.RequiredSpecification);
             if (!result.SpecificationMatches)
-            {
                 result.ValidationMessages.Add("Material specification does not match requested specification.");
-            }
 
-            // 3. Supplier Approval Check (Architectural requirement: UNVERIFIED cannot auto-proceed to Draft PO)
+            // 3. Supplier Approval Check (ARCHITECTURAL REQUIREMENT: UNVERIFIED cannot auto-proceed)
             result.SupplierApproved = string.Equals(candidate.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase);
             if (!result.SupplierApproved)
-            {
-                result.ValidationMessages.Add($"Supplier '{candidate.SupplierName}' is UNVERIFIED. Manager review and onboarding required.");
-            }
+                result.ValidationMessages.Add(
+                    $"Supplier '{candidate.SupplierName}' is UNVERIFIED. Supply Chain Manager review and onboarding required.");
 
             // 4. Quality Evidence Check
-            result.QualityEvidenceSufficient = !string.IsNullOrWhiteSpace(candidate.QualityEvidence) && candidate.QualityEvidence.Length >= 5;
+            result.QualityEvidenceSufficient = !string.IsNullOrWhiteSpace(candidate.QualityEvidence) &&
+                                               candidate.QualityEvidence.Length >= 5;
             if (!result.QualityEvidenceSufficient)
-            {
-                result.ValidationMessages.Add("Supplier candidate does not provide sufficient quality certification evidence.");
-            }
+                result.ValidationMessages.Add("Supplier does not provide sufficient quality certification evidence.");
 
-            // 5. MOQ Check
+            // 5. MOQ Respected
             result.MoqRespected = finalQty >= candidate.MinimumOrderQuantity;
             if (!result.MoqRespected)
-            {
-                result.ValidationMessages.Add($"Calculated quantity {finalQty} is below minimum order quantity {candidate.MinimumOrderQuantity}.");
-            }
+                result.ValidationMessages.Add(
+                    $"Calculated quantity {finalQty} is below minimum order quantity {candidate.MinimumOrderQuantity}.");
 
-            // 6. Lead Time Feasibility Check
+            // 6. Lead Time Feasibility
             var estimatedArrival = DateTime.UtcNow.AddDays(candidate.LeadTimeDays);
             result.LeadTimeFeasible = estimatedArrival <= request.RequiredByDate;
             if (!result.LeadTimeFeasible)
-            {
-                result.ValidationMessages.Add($"Lead time of {candidate.LeadTimeDays} days exceeds required date ({request.RequiredByDate:yyyy-MM-dd}).");
-            }
+                result.ValidationMessages.Add(
+                    $"Lead time of {candidate.LeadTimeDays} days exceeds required date ({request.RequiredByDate:yyyy-MM-dd}).");
 
-            // 7. Budget Limit Check
+            // 7. Budget Constraint
             result.BudgetRespected = cost <= request.MaximumBudget;
             if (!result.BudgetRespected)
-            {
-                result.ValidationMessages.Add($"Calculated total cost ${cost:F2} exceeds maximum budget of ${request.MaximumBudget:F2}.");
-            }
+                result.ValidationMessages.Add(
+                    $"Calculated total cost ${cost:F2} exceeds maximum budget of ${request.MaximumBudget:F2}.");
 
-            // Overall validity: All 6 core checks must pass
+            // Overall: all 6 core checks must pass
             result.IsValid = result.SpecificationMatches &&
                              result.SupplierApproved &&
                              result.QualityEvidenceSufficient &&
@@ -136,37 +140,53 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return result;
         }
 
-        // ── Workflow Operations ─────────────────────────────────────────────────
+        // ── Workflow Operations ───────────────────────────────────────────────────
 
         public async Task<ProcurementResponseDto> CreateRequestAsync(CreateProcurementRequestDto dto, Guid? createdById = null)
         {
             var rawMaterial = await _context.RawMaterials.FindAsync(dto.RawMaterialId);
             if (rawMaterial == null)
-            {
                 throw new KeyNotFoundException($"RawMaterial with ID {dto.RawMaterialId} was not found.");
+
+            // Auto-calculate stock parameters if not supplied
+            decimal currentStock = dto.CurrentStock;
+            decimal openPoQty = dto.ExistingOpenPoQuantity;
+
+            // NOTE: Stock levels live in ManufacturingContext (StockAlert/InventoryItem).
+            // The Flutter/React caller is responsible for passing currentStock from the Inventory API.
+            // We only auto-query open PO quantity from OrderLines in ApplicationDbContext.
+            if (openPoQty == 0)
+            {
+                var openOrderQty = await _context.OrderLines
+                    .Where(ol => ol.RawMaterialId == dto.RawMaterialId &&
+                                 (ol.PurchaseOrder.Status == PurchaseOrderStatus.Draft ||
+                                  ol.PurchaseOrder.Status == PurchaseOrderStatus.PendingApproval))
+                    .SumAsync(ol => (decimal?)ol.Quantity) ?? 0m;
+                openPoQty = openOrderQty;
             }
 
+            // AUTHORITATIVE NET DEFICIT CALCULATION — ASP.NET Core only, NOT AI
             var netQty = CalculateNetRequiredQuantity(
-                dto.ProductionRequirement,
-                dto.SafetyStock,
-                dto.CurrentStock,
-                dto.ExistingOpenPoQuantity);
+                dto.ProductionRequirement, dto.SafetyStock, currentStock, openPoQty);
 
             var request = new ProcurementRequest
             {
                 RawMaterialId = dto.RawMaterialId,
+                MaterialName = rawMaterial.Name,
                 RequiredSpecification = dto.RequiredSpecification,
                 ProductionRequirement = dto.ProductionRequirement,
-                CurrentStock = dto.CurrentStock,
+                CurrentStock = currentStock,
                 SafetyStock = dto.SafetyStock,
-                ExistingOpenPoQuantity = dto.ExistingOpenPoQuantity,
+                ExistingOpenPoQuantity = openPoQty,
                 CalculatedNetQuantity = netQty,
                 MaximumBudget = dto.MaximumBudget,
                 RequiredByDate = dto.RequiredByDate,
                 QualityRequirement = dto.QualityRequirement ?? string.Empty,
                 PreferredRegion = dto.PreferredRegion,
                 Status = netQty <= 0 ? ProcurementRequestStatus.Completed : ProcurementRequestStatus.Requested,
-                FailureReason = netQty <= 0 ? "Current stock and open POs sufficiently meet requirements. No purchase required." : null,
+                FailureReason = netQty <= 0
+                    ? "Current stock and open POs sufficiently meet requirements. No purchase required."
+                    : null,
                 CreatedById = createdById,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -186,9 +206,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
 
             if (request == null)
-            {
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
-            }
 
             if (request.CalculatedNetQuantity <= 0)
             {
@@ -211,7 +229,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var candidateEntities = new List<SupplierCandidate>();
 
-            // 1. Include active approved suppliers from existing database if available
+            // 1. Pull active approved suppliers from existing PostgreSQL database
             var existingSuppliers = await _context.Suppliers
                 .Where(s => s.IsActive)
                 .ToListAsync();
@@ -224,12 +242,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     SupplierId = sup.Id,
                     SupplierName = sup.Name,
                     MaterialName = request.RawMaterial?.Name ?? "Raw Material",
-                    UnitPrice = 1.35m, // Database contract baseline price
+                    UnitPrice = 1.35m,
                     Currency = "USD",
                     MinimumOrderQuantity = 200m,
                     PackSize = 50m,
                     LeadTimeDays = sup.LeadTimeDays > 0 ? sup.LeadTimeDays : 5,
-                    QualityEvidence = "Existing approved supplier - ISO 9001 on file",
+                    QualityEvidence = "Existing approved supplier — ISO 9001 on file",
+                    Availability = "In Stock",
                     SupplierStatus = "APPROVED",
                     ConfidenceScore = 95.0m,
                     SourceUrl = "internal://database/suppliers/" + sup.Id,
@@ -237,36 +256,52 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 });
             }
 
-            // 2. Discover market candidates via AI Agent research
-            var aiCandidates = await _agentService.ResearchProcurementSuppliersAsync(
-                request.RawMaterial?.Name ?? "Raw Material",
-                request.RequiredSpecification,
-                request.CalculatedNetQuantity,
-                request.PreferredRegion);
-
-            foreach (var c in aiCandidates)
+            // 2. Invoke Python FastAPI LangGraph workflow via AgentIntegrationService
+            //    ASP.NET Core → FastAPI (internal boundary). React/Flutter never call FastAPI directly.
+            string? workflowId = null;
+            try
             {
-                // Ensure discovered online candidates remain UNVERIFIED until reviewed
-                candidateEntities.Add(new SupplierCandidate
+                var (wfId, aiCandidates) = await _agentService.ResearchProcurementSuppliersWithWorkflowAsync(
+                    request.RawMaterial?.Name ?? "Raw Material",
+                    request.RequiredSpecification,
+                    request.CalculatedNetQuantity,
+                    request.PreferredRegion);
+
+                workflowId = wfId;
+
+                foreach (var c in aiCandidates)
                 {
-                    ProcurementRequestId = request.Id,
-                    SupplierId = null,
-                    SupplierName = c.SupplierName,
-                    MaterialName = c.MaterialName,
-                    UnitPrice = c.UnitPrice,
-                    Currency = string.IsNullOrWhiteSpace(c.Currency) ? "USD" : c.Currency,
-                    MinimumOrderQuantity = c.MinimumOrderQuantity,
-                    PackSize = c.PackSize > 0 ? c.PackSize : 1m,
-                    LeadTimeDays = c.LeadTimeDays,
-                    QualityEvidence = c.QualityEvidence,
-                    SupplierStatus = "UNVERIFIED",
-                    ConfidenceScore = c.ConfidenceScore,
-                    SourceUrl = c.SourceUrl,
-                    CreatedAt = DateTime.UtcNow
-                });
+                    // Architectural Rule: online discovered candidates are always UNVERIFIED
+                    candidateEntities.Add(new SupplierCandidate
+                    {
+                        ProcurementRequestId = request.Id,
+                        SupplierId = null,
+                        SupplierName = c.SupplierName,
+                        MaterialName = c.MaterialName,
+                        UnitPrice = c.UnitPrice,
+                        Currency = string.IsNullOrWhiteSpace(c.Currency) ? "USD" : c.Currency,
+                        MinimumOrderQuantity = c.MinimumOrderQuantity,
+                        PackSize = c.PackSize > 0 ? c.PackSize : 1m,
+                        LeadTimeDays = c.LeadTimeDays,
+                        QualityEvidence = c.QualityEvidence,
+                        Availability = c.Availability,
+                        SupplierStatus = "UNVERIFIED",
+                        ConfidenceScore = c.ConfidenceScore,
+                        SourceUrl = c.SourceUrl,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "AI workflow unreachable for ProcurementRequest {Id}. Proceeding with existing database suppliers only.", procurementRequestId);
             }
 
-            // 3. Run deterministic calculations & validation engine on all candidates
+            // Persist WorkflowId for audit trail
+            if (!string.IsNullOrWhiteSpace(workflowId))
+                request.WorkflowId = workflowId;
+
+            // 3. Run deterministic 6-point validation on all candidates
             SupplierCandidate? bestCandidate = null;
             decimal lowestCost = decimal.MaxValue;
 
@@ -280,7 +315,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
                 _context.SupplierCandidates.Add(candidate);
 
-                // Check for best APPROVED candidate that passed validation
                 if (validation.IsValid && validation.SupplierApproved && validation.TotalCost < lowestCost)
                 {
                     lowestCost = validation.TotalCost;
@@ -296,7 +330,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 request.RecommendedSupplierId = bestCandidate.SupplierId;
                 request.Status = ProcurementRequestStatus.RecommendationReady;
 
-                // Auto-create real Draft Purchase Order in PostgreSQL DB
                 try
                 {
                     var po = await CreateDraftPoInternalAsync(request, bestCandidate);
@@ -315,7 +348,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 request.Status = ProcurementRequestStatus.RecommendationReady;
                 var unverifiedCount = candidateEntities.Count(c => c.SupplierStatus == "UNVERIFIED");
                 request.FailureReason = unverifiedCount > 0
-                    ? $"Found {unverifiedCount} market candidate(s), but all are UNVERIFIED. Supply Chain Manager verification required."
+                    ? $"Found {unverifiedCount} market candidate(s) via AI research, but all are UNVERIFIED. Supply Chain Manager verification required before Draft PO can be generated."
                     : "No suitable approved candidate passed specification, lead time, or budget constraints.";
             }
 
@@ -325,6 +358,142 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (await GetByIdAsync(request.Id))!;
         }
 
+        public async Task<IEnumerable<SupplierCandidateDto>> GetCandidatesAsync(int procurementRequestId)
+        {
+            var candidates = await _context.SupplierCandidates
+                .Where(sc => sc.ProcurementRequestId == procurementRequestId)
+                .OrderByDescending(sc => sc.IsValidated)
+                .ThenBy(sc => sc.TotalCost)
+                .ToListAsync();
+
+            return candidates.Select(MapCandidateToDto);
+        }
+
+        public async Task<ProcurementRecommendationDto> GetRecommendationAsync(int procurementRequestId)
+        {
+            var request = await _context.ProcurementRequests
+                .Include(pr => pr.RawMaterial)
+                .Include(pr => pr.RecommendedSupplier)
+                .Include(pr => pr.GeneratedPurchaseOrder)
+                .Include(pr => pr.Candidates)
+                .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
+
+            if (request == null)
+                throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
+
+            // Find best candidate: prefer APPROVED + validated, then lowest cost
+            var bestCandidate = request.Candidates
+                .Where(c => c.IsValidated && string.Equals(c.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.TotalCost)
+                .FirstOrDefault()
+                ?? request.Candidates
+                    .OrderByDescending(c => c.ConfidenceScore)
+                    .FirstOrDefault();
+
+            bool requiresVerification = bestCandidate != null &&
+                !string.Equals(bestCandidate.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase);
+
+            string? rationale = null;
+            if (bestCandidate != null)
+            {
+                rationale = requiresVerification
+                    ? $"AI research identified '{bestCandidate.SupplierName}' as the highest-confidence candidate (score: {bestCandidate.ConfidenceScore}%). " +
+                      "Supplier is UNVERIFIED — Supply Chain Manager must verify and onboard before Draft PO can be generated."
+                    : $"Recommended '{bestCandidate.SupplierName}' based on lowest validated total cost (${bestCandidate.TotalCost:F2}), " +
+                      $"quality certification ({bestCandidate.QualityEvidence}), and {bestCandidate.LeadTimeDays}-day lead time within required delivery window.";
+            }
+
+            return new ProcurementRecommendationDto
+            {
+                ProcurementRequestId = procurementRequestId,
+                Status = request.Status.ToString(),
+                WorkflowId = request.WorkflowId,
+                RecommendedCandidate = bestCandidate != null ? MapCandidateToDto(bestCandidate) : null,
+                GeneratedPurchaseOrderId = request.GeneratedPurchaseOrderId,
+                GeneratedPoNumber = request.GeneratedPurchaseOrder?.PoNumber,
+                Rationale = rationale,
+                RequiresSupplierVerification = requiresVerification,
+                RequiresHumanApproval = request.GeneratedPurchaseOrderId.HasValue &&
+                    (request.GeneratedPurchaseOrder?.Status == PurchaseOrderStatus.PendingApproval ||
+                     request.GeneratedPurchaseOrder?.Status == PurchaseOrderStatus.Draft),
+                FailureReason = request.FailureReason,
+                UpdatedAt = request.UpdatedAt
+            };
+        }
+
+        public async Task<ProcurementStatusTrackingDto?> GetStatusTrackingAsync(int procurementRequestId)
+        {
+            var request = await _context.ProcurementRequests
+                .Include(pr => pr.RawMaterial)
+                .Include(pr => pr.RecommendedSupplier)
+                .Include(pr => pr.GeneratedPurchaseOrder)
+                    .ThenInclude(po => po != null ? po.Transactions : null)
+                .Include(pr => pr.Candidates)
+                .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
+
+            if (request == null) return null;
+
+            var po = request.GeneratedPurchaseOrder;
+
+            // Determine Stripe payment status from latest transaction
+            string? paymentStatus = null;
+            if (po != null)
+            {
+                var latestTx = po.Transactions?
+                    .OrderByDescending(tx => tx.Timestamp)
+                    .FirstOrDefault();
+
+                paymentStatus = latestTx != null
+                    ? latestTx.PaymentStatus
+                    : (po.Status >= PurchaseOrderStatus.Payment ? "Processing" : "Pending");
+            }
+
+            // SendGrid notification status from PO status
+            string? notificationStatus = null;
+            if (po != null)
+            {
+                notificationStatus = po.Status == PurchaseOrderStatus.Sent ? "Sent" :
+                                     po.Status > PurchaseOrderStatus.Payment ? "Delivered" : "NotSent";
+            }
+
+            // Best candidate for display
+            var bestCandidate = request.Candidates
+                .Where(c => c.IsValidated && string.Equals(c.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.TotalCost)
+                .FirstOrDefault()
+                ?? request.Candidates.OrderByDescending(c => c.ConfidenceScore).FirstOrDefault();
+
+            bool requiresVerification = bestCandidate != null &&
+                !string.Equals(bestCandidate.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase);
+
+            return new ProcurementStatusTrackingDto
+            {
+                ProcurementId = request.Id,
+                MaterialName = request.MaterialName ?? request.RawMaterial?.Name ?? string.Empty,
+                RequiredSpecification = request.RequiredSpecification,
+                NetDeficit = request.CalculatedNetQuantity,
+                ProcurementStatus = request.Status.ToString(),
+                WorkflowId = request.WorkflowId,
+                PurchaseOrderId = request.GeneratedPurchaseOrderId,
+                PurchaseOrderNumber = po?.PoNumber,
+                PurchaseOrderStatus = po?.Status.ToString(),
+                PaymentStatus = paymentStatus,
+                SupplierNotificationStatus = notificationStatus,
+                SupplierName = bestCandidate?.SupplierName,
+                SupplierStatus = bestCandidate?.SupplierStatus,
+                RecommendedQuantity = bestCandidate?.RecommendedOrderQuantity,
+                UnitPrice = bestCandidate?.UnitPrice,
+                TotalCost = bestCandidate?.TotalCost,
+                QualityEvidence = bestCandidate?.QualityEvidence,
+                LeadTimeDays = bestCandidate?.LeadTimeDays,
+                Availability = bestCandidate?.Availability,
+                RequiresSupplierVerification = requiresVerification,
+                RequiresHumanApproval = po != null &&
+                    (po.Status == PurchaseOrderStatus.Draft || po.Status == PurchaseOrderStatus.PendingApproval),
+                LastUpdated = request.UpdatedAt
+            };
+        }
+
         public async Task<PurchaseOrderResponseDto> CreateDraftPoFromCandidateAsync(int procurementRequestId, int candidateId, Guid? userId = null)
         {
             var request = await _context.ProcurementRequests
@@ -332,29 +501,22 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
 
             if (request == null)
-            {
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
-            }
 
             var candidate = await _context.SupplierCandidates
                 .FirstOrDefaultAsync(c => c.Id == candidateId && c.ProcurementRequestId == procurementRequestId);
 
             if (candidate == null)
-            {
                 throw new KeyNotFoundException($"SupplierCandidate {candidateId} not found for this request.");
-            }
 
+            // Architectural Gate: UNVERIFIED suppliers cannot generate a Draft PO
             if (!string.Equals(candidate.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase))
-            {
                 throw new InvalidOperationException(
                     $"Supplier '{candidate.SupplierName}' is UNVERIFIED. It must be verified and onboarded before a Draft PO can be generated.");
-            }
 
             var validation = ValidateCandidate(candidate, request);
             if (!validation.MoqRespected || !validation.BudgetRespected)
-            {
                 throw new InvalidOperationException($"Candidate validation failed: {string.Join(", ", validation.ValidationMessages)}");
-            }
 
             var po = await CreateDraftPoInternalAsync(request, candidate, userId);
             request.GeneratedPurchaseOrderId = po.Id;
@@ -367,20 +529,18 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         }
 
         public async Task<ProcurementResponseDto> VerifyAndOnboardSupplierAsync(
-            int procurementRequestId, 
-            int candidateId, 
-            VerifySupplierCandidateDto dto, 
+            int procurementRequestId,
+            int candidateId,
+            VerifySupplierCandidateDto dto,
             Guid? userId = null)
         {
             var candidate = await _context.SupplierCandidates
                 .FirstOrDefaultAsync(c => c.Id == candidateId && c.ProcurementRequestId == procurementRequestId);
 
             if (candidate == null)
-            {
-                throw new KeyNotFoundException($"Candidate {candidateId} not found.");
-            }
+                throw new KeyNotFoundException($"Candidate {candidateId} not found for ProcurementRequest {procurementRequestId}.");
 
-            // Create new verified Supplier in PostgreSQL database
+            // Create new verified Supplier entity in PostgreSQL
             var supplier = new Supplier
             {
                 SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
@@ -398,16 +558,18 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             _context.Suppliers.Add(supplier);
             await _context.SaveChangesAsync();
 
-            // Link candidate to newly approved supplier
+            // Link candidate to newly onboarded supplier and approve
             candidate.SupplierId = supplier.Id;
             candidate.SupplierStatus = "APPROVED";
-            candidate.ValidationRemarks = "Verified and onboarded by Supply Chain Manager.";
+            candidate.ValidationRemarks = $"Verified and onboarded by Supply Chain Manager on {DateTime.UtcNow:yyyy-MM-dd}.";
             candidate.IsValidated = true;
 
             await _context.SaveChangesAsync();
 
             return (await GetByIdAsync(procurementRequestId))!;
         }
+
+        // ── Read Queries ──────────────────────────────────────────────────────────
 
         public async Task<ProcurementResponseDto?> GetByIdAsync(int id)
         {
@@ -418,54 +580,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(p => p.Candidates)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            if (pr == null) return null;
-
-            return new ProcurementResponseDto
-            {
-                Id = pr.Id,
-                RawMaterialId = pr.RawMaterialId,
-                RawMaterialName = pr.RawMaterial?.Name ?? string.Empty,
-                RawMaterialSku = pr.RawMaterial?.SkuCode ?? string.Empty,
-                RequiredSpecification = pr.RequiredSpecification,
-                ProductionRequirement = pr.ProductionRequirement,
-                CurrentStock = pr.CurrentStock,
-                SafetyStock = pr.SafetyStock,
-                ExistingOpenPoQuantity = pr.ExistingOpenPoQuantity,
-                CalculatedNetQuantity = pr.CalculatedNetQuantity,
-                MaximumBudget = pr.MaximumBudget,
-                RequiredByDate = pr.RequiredByDate,
-                QualityRequirement = pr.QualityRequirement,
-                PreferredRegion = pr.PreferredRegion,
-                Status = pr.Status.ToString(),
-                RecommendedSupplierId = pr.RecommendedSupplierId,
-                RecommendedSupplierName = pr.RecommendedSupplier?.Name,
-                GeneratedPurchaseOrderId = pr.GeneratedPurchaseOrderId,
-                GeneratedPoNumber = pr.GeneratedPurchaseOrder?.PoNumber,
-                FailureReason = pr.FailureReason,
-                CreatedAt = pr.CreatedAt,
-                UpdatedAt = pr.UpdatedAt,
-                Candidates = pr.Candidates.Select(c => new SupplierCandidateDto
-                {
-                    Id = c.Id,
-                    SupplierId = c.SupplierId,
-                    SupplierName = c.SupplierName,
-                    MaterialName = c.MaterialName,
-                    UnitPrice = c.UnitPrice,
-                    Currency = c.Currency,
-                    MinimumOrderQuantity = c.MinimumOrderQuantity,
-                    PackSize = c.PackSize,
-                    LeadTimeDays = c.LeadTimeDays,
-                    QualityEvidence = c.QualityEvidence,
-                    SupplierStatus = c.SupplierStatus,
-                    ConfidenceScore = c.ConfidenceScore,
-                    SourceUrl = c.SourceUrl,
-                    IsValidated = c.IsValidated,
-                    ValidationRemarks = c.ValidationRemarks,
-                    RecommendedOrderQuantity = c.RecommendedOrderQuantity,
-                    TotalCost = c.TotalCost,
-                    CreatedAt = c.CreatedAt
-                }).ToList()
-            };
+            return pr == null ? null : MapToDto(pr);
         }
 
         public async Task<IEnumerable<ProcurementResponseDto>> GetAllAsync()
@@ -483,6 +598,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 RawMaterialId = pr.RawMaterialId,
                 RawMaterialName = pr.RawMaterial?.Name ?? string.Empty,
                 RawMaterialSku = pr.RawMaterial?.SkuCode ?? string.Empty,
+                MaterialName = pr.MaterialName ?? pr.RawMaterial?.Name,
                 RequiredSpecification = pr.RequiredSpecification,
                 ProductionRequirement = pr.ProductionRequirement,
                 CurrentStock = pr.CurrentStock,
@@ -494,6 +610,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 QualityRequirement = pr.QualityRequirement,
                 PreferredRegion = pr.PreferredRegion,
                 Status = pr.Status.ToString(),
+                WorkflowId = pr.WorkflowId,
                 RecommendedSupplierId = pr.RecommendedSupplierId,
                 RecommendedSupplierName = pr.RecommendedSupplier?.Name,
                 GeneratedPurchaseOrderId = pr.GeneratedPurchaseOrderId,
@@ -505,15 +622,67 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             });
         }
 
+        // ── Private Helpers ───────────────────────────────────────────────────────
+
+        private ProcurementResponseDto MapToDto(ProcurementRequest pr) => new()
+        {
+            Id = pr.Id,
+            RawMaterialId = pr.RawMaterialId,
+            RawMaterialName = pr.RawMaterial?.Name ?? string.Empty,
+            RawMaterialSku = pr.RawMaterial?.SkuCode ?? string.Empty,
+            MaterialName = pr.MaterialName ?? pr.RawMaterial?.Name,
+            RequiredSpecification = pr.RequiredSpecification,
+            ProductionRequirement = pr.ProductionRequirement,
+            CurrentStock = pr.CurrentStock,
+            SafetyStock = pr.SafetyStock,
+            ExistingOpenPoQuantity = pr.ExistingOpenPoQuantity,
+            CalculatedNetQuantity = pr.CalculatedNetQuantity,
+            MaximumBudget = pr.MaximumBudget,
+            RequiredByDate = pr.RequiredByDate,
+            QualityRequirement = pr.QualityRequirement,
+            PreferredRegion = pr.PreferredRegion,
+            Status = pr.Status.ToString(),
+            WorkflowId = pr.WorkflowId,
+            RecommendedSupplierId = pr.RecommendedSupplierId,
+            RecommendedSupplierName = pr.RecommendedSupplier?.Name,
+            GeneratedPurchaseOrderId = pr.GeneratedPurchaseOrderId,
+            GeneratedPoNumber = pr.GeneratedPurchaseOrder?.PoNumber,
+            FailureReason = pr.FailureReason,
+            CreatedAt = pr.CreatedAt,
+            UpdatedAt = pr.UpdatedAt,
+            Candidates = pr.Candidates.Select(MapCandidateToDto).ToList()
+        };
+
+        private static SupplierCandidateDto MapCandidateToDto(SupplierCandidate c) => new()
+        {
+            Id = c.Id,
+            SupplierId = c.SupplierId,
+            SupplierName = c.SupplierName,
+            MaterialName = c.MaterialName,
+            UnitPrice = c.UnitPrice,
+            Currency = c.Currency,
+            MinimumOrderQuantity = c.MinimumOrderQuantity,
+            PackSize = c.PackSize,
+            LeadTimeDays = c.LeadTimeDays,
+            QualityEvidence = c.QualityEvidence,
+            Availability = c.Availability,
+            SupplierStatus = c.SupplierStatus,
+            ConfidenceScore = c.ConfidenceScore,
+            SourceUrl = c.SourceUrl,
+            IsValidated = c.IsValidated,
+            ValidationRemarks = c.ValidationRemarks,
+            RecommendedOrderQuantity = c.RecommendedOrderQuantity,
+            TotalCost = c.TotalCost,
+            CreatedAt = c.CreatedAt
+        };
+
         private async Task<PurchaseOrderResponseDto> CreateDraftPoInternalAsync(
-            ProcurementRequest request, 
-            SupplierCandidate candidate, 
+            ProcurementRequest request,
+            SupplierCandidate candidate,
             Guid? userId = null)
         {
             if (!candidate.SupplierId.HasValue)
-            {
                 throw new InvalidOperationException("Cannot generate Purchase Order without an assigned SupplierId in the database.");
-            }
 
             var poDto = new CreatePurchaseOrderDto
             {
@@ -521,8 +690,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 Currency = string.IsNullOrWhiteSpace(candidate.Currency) ? "USD" : candidate.Currency,
                 BudgetLimit = request.MaximumBudget,
                 Notes = $"AI-Assisted Procurement for Request #{request.Id}. " +
-                        $"Discovered Candidate: {candidate.SupplierName}. Unit Price: ${candidate.UnitPrice}. " +
-                        $"Quality Evidence: {candidate.QualityEvidence}.",
+                        $"Candidate: {candidate.SupplierName}. Unit Price: ${candidate.UnitPrice}. " +
+                        $"Quality: {candidate.QualityEvidence}. Availability: {candidate.Availability}.",
                 Lines = new List<OrderLineDto>
                 {
                     new OrderLineDto

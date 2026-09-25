@@ -48,6 +48,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         /// <summary>
         /// Deterministically computed:
         /// netRequiredQuantity = productionRequirement + safetyStock - currentStock - openPOQuantity
+        /// ASP.NET Core is the authoritative calculator. AI does NOT compute this.
         /// </summary>
         [Column(TypeName = "decimal(18,3)")]
         public decimal CalculatedNetQuantity { get; set; }
@@ -64,6 +65,14 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public string? PreferredRegion { get; set; }
 
         public ProcurementRequestStatus Status { get; set; } = ProcurementRequestStatus.Requested;
+
+        /// <summary>LangGraph Workflow ID returned by the Python FastAPI service.</summary>
+        [MaxLength(100)]
+        public string? WorkflowId { get; set; }
+
+        /// <summary>Human-readable material name stored for fast display without joins.</summary>
+        [MaxLength(200)]
+        public string? MaterialName { get; set; }
 
         public int? RecommendedSupplierId { get; set; }
 
@@ -85,6 +94,48 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // ── Convenience Aliases for Flexible API Mapping ──────────────────────────
+
+        /// <summary>Alias for RawMaterialId.</summary>
+        [NotMapped]
+        public int MaterialId
+        {
+            get => RawMaterialId;
+            set => RawMaterialId = value;
+        }
+
+        /// <summary>Alias for RequiredSpecification.</summary>
+        [NotMapped]
+        public string Specification
+        {
+            get => RequiredSpecification;
+            set => RequiredSpecification = value;
+        }
+
+        /// <summary>Alias for CalculatedNetQuantity — the authoritative deficit.</summary>
+        [NotMapped]
+        public decimal NetDeficit
+        {
+            get => CalculatedNetQuantity;
+            set => CalculatedNetQuantity = value;
+        }
+
+        /// <summary>Alias for ExistingOpenPoQuantity.</summary>
+        [NotMapped]
+        public decimal OpenPOQuantity
+        {
+            get => ExistingOpenPoQuantity;
+            set => ExistingOpenPoQuantity = value;
+        }
+
+        /// <summary>Alias for RequiredByDate.</summary>
+        [NotMapped]
+        public DateTime RequiredDeliveryDate
+        {
+            get => RequiredByDate;
+            set => RequiredByDate = value;
+        }
 
         // Navigation
         public ICollection<SupplierCandidate> Candidates { get; set; } = new List<SupplierCandidate>();

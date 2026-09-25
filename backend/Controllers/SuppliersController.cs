@@ -124,5 +124,46 @@ namespace ManufacturingCoordinator.Controllers
             if (!deleted) return NotFound(new { message = $"Supplier {id} not found." });
             return NoContent();
         }
+
+        /// <summary>
+        /// POST /api/suppliers/{id}/verify — Verify and activate an existing supplier record.
+        /// Used by Supply Chain Manager and IT Admin to mark a supplier as trusted.
+        /// Separate from candidate onboarding (which creates a new Supplier entity).
+        /// </summary>
+        [HttpPost("{id:int}/verify")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [ProducesResponseType(typeof(SupplierResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<SupplierResponseDto>> VerifySupplier(int id, [FromBody] VerifySupplierDto dto)
+        {
+            try
+            {
+                var supplier = await _supplierService.GetByIdAsync(id);
+                if (supplier is null) return NotFound(new { message = $"Supplier {id} not found." });
+
+                // Mark supplier as active (verified) via standard update
+                var updateDto = new UpdateSupplierDto
+                {
+                    Name = supplier.Name,
+                    ContactEmail = supplier.ContactEmail,
+                    ContactPhone = supplier.ContactPhone,
+                    Address = supplier.Address,
+                    PaymentTerms = supplier.PaymentTerms,
+                    LeadTimeDays = supplier.LeadTimeDays,
+                    IsActive = true
+                };
+
+                var updated = await _supplierService.UpdateAsync(id, updateDto);
+                if (updated is null) return NotFound(new { message = $"Supplier {id} not found during update." });
+                return Ok(updated);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }
