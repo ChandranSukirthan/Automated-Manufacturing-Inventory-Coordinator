@@ -30,6 +30,8 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
+        public DbSet<ProcurementRequest> ProcurementRequests { get; set; } = null!;
+        public DbSet<SupplierCandidate> SupplierCandidates { get; set; } = null!;
 
         // Student 3 — QA / Defect Reporting & Inventory
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
@@ -663,6 +665,137 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(w => w.FinalOutcome)
                     .HasMaxLength(1000);
+            });
+
+            // ── ProcurementRequest (Student 2) ───────────────────────────────────
+            modelBuilder.Entity<ProcurementRequest>(entity =>
+            {
+                entity.HasKey(pr => pr.Id);
+
+                entity.Property(pr => pr.RequiredSpecification)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(pr => pr.ProductionRequirement)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.CurrentStock)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.SafetyStock)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.ExistingOpenPoQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.CalculatedNetQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.MaximumBudget)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(pr => pr.QualityRequirement)
+                    .HasMaxLength(500);
+
+                entity.Property(pr => pr.PreferredRegion)
+                    .HasMaxLength(100);
+
+                entity.Property(pr => pr.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(pr => pr.FailureReason)
+                    .HasMaxLength(1000);
+
+                entity.Property(pr => pr.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(pr => pr.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(pr => pr.RawMaterial)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.RawMaterialId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(pr => pr.RecommendedSupplier)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.RecommendedSupplierId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(pr => pr.GeneratedPurchaseOrder)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.GeneratedPurchaseOrderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(pr => pr.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── SupplierCandidate (Student 2) ────────────────────────────────────
+            modelBuilder.Entity<SupplierCandidate>(entity =>
+            {
+                entity.HasKey(sc => sc.Id);
+
+                entity.Property(sc => sc.SupplierName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(sc => sc.MaterialName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(sc => sc.UnitPrice)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sc => sc.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("USD");
+
+                entity.Property(sc => sc.MinimumOrderQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(sc => sc.PackSize)
+                    .HasColumnType("decimal(18,3)")
+                    .HasDefaultValue(1m);
+
+                entity.Property(sc => sc.QualityEvidence)
+                    .HasMaxLength(500);
+
+                entity.Property(sc => sc.SupplierStatus)
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasDefaultValue("UNVERIFIED");
+
+                entity.Property(sc => sc.ConfidenceScore)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sc => sc.SourceUrl)
+                    .HasMaxLength(500);
+
+                entity.Property(sc => sc.ValidationRemarks)
+                    .HasMaxLength(1000);
+
+                entity.Property(sc => sc.RecommendedOrderQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(sc => sc.TotalCost)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sc => sc.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(sc => sc.ProcurementRequest)
+                    .WithMany(pr => pr.Candidates)
+                    .HasForeignKey(sc => sc.ProcurementRequestId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(sc => sc.Supplier)
+                    .WithMany()
+                    .HasForeignKey(sc => sc.SupplierId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }
