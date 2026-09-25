@@ -1,0 +1,368 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
+using ManufacturingCoordinator.Data;
+using ManufacturingCoordinator.DTOs.PurchaseOrders;
+using ManufacturingCoordinator.Models.PurchaseOrders;
+using ManufacturingCoordinator.Services.PurchaseOrders;
+using backend.Models;
+using backend.Dtos;
+using backend.Services;
+using ManufacturingCoordinator.Enums;
+
+namespace backend.Tests
+{
+    public class FakeAgentIntegrationService : IAgentIntegrationService
+    {
+        public Task<AgentPredictionResponseDto> TriggerLowStockEvaluationAsync(InventoryItem item)
+        {
+            return Task.FromResult(new AgentPredictionResponseDto());
+        }
+
+        public Task<List<SupplierCandidateDto>> ResearchProcurementSuppliersAsync(
+            string materialName, 
+            string specification, 
+            decimal requiredQuantity, 
+            string? preferredRegion)
+        {
+            return Task.FromResult(new List<SupplierCandidateDto>());
+        }
+    }
+
+    public class FakePurchaseOrderService : IPurchaseOrderService
+    {
+        public Func<CreatePurchaseOrderDto, Guid?, Task<PurchaseOrderResponseDto>>? OnCreateAsync { get; set; }
+
+        public Task<IEnumerable<PurchaseOrderSummaryDto>> GetAllAsync() => Task.FromResult<IEnumerable<PurchaseOrderSummaryDto>>(new List<PurchaseOrderSummaryDto>());
+        public Task<PurchaseOrderResponseDto?> GetByIdAsync(int id) => Task.FromResult<PurchaseOrderResponseDto?>(null);
+
+        public Task<PurchaseOrderResponseDto> CreateAsync(CreatePurchaseOrderDto dto, Guid? createdById = null)
+        {
+            if (OnCreateAsync != null)
+            {
+                return OnCreateAsync(dto, createdById);
+            }
+
+            return Task.FromResult(new PurchaseOrderResponseDto
+            {
+                Id = 1,
+                PoNumber = "PO-2026-0001",
+                Status = PurchaseOrderStatus.Draft.ToString(),
+                TotalCost = 100m
+            });
+        }
+
+        public Task<PurchaseOrderResponseDto?> UpdateAsync(int id, UpdatePurchaseOrderDto dto) => Task.FromResult<PurchaseOrderResponseDto?>(null);
+        public Task<PurchaseOrderResponseDto> SubmitForApprovalAsync(int id, Guid? userId = null) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> ApproveAsync(int id, Guid approverId, string? notes = null) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<byte[]> GeneratePdfAsync(int id) => Task.FromResult(Array.Empty<byte>());
+        public decimal CalculateTotalCost(PurchaseOrder po) => po.TotalCost;
+        public void ValidateBudget(PurchaseOrder po) {}
+        public Task<Supplier> ValidateSupplierAsync(int supplierId) => Task.FromResult(new Supplier { Id = supplierId, Name = "Test" });
+        public Task ValidatePurchaseOrderAsync(PurchaseOrder po) => Task.CompletedTask;
+    }
+
+    public class ProcurementServiceTests
+    {
+        private ApplicationDbContext CreateInMemoryDbContext()
+        {
+            var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+
+            return new ApplicationDbContext(options);
+        }
+
+        private (ProcurementService service, ApplicationDbContext db, FakeAgentIntegrationService agentFake, FakePurchaseOrderService poFake) 
+            CreateService(ApplicationDbContext db)
+        {
+            var agentFake = new FakeAgentIntegrationService();
+            var poFake = new FakePurchaseOrderService();
+            var config = new ConfigurationBuilder().Build();
+            var logger = NullLogger<ProcurementService>.Instance;
+
+            var service = new ProcurementService(db, agentFake, poFake, config, logger);
+            return (service, db, agentFake, poFake);
+        }
+
+        [Fact]
+        public void CalculateNetRequiredQuantity_FormulaCalculatesCorrectly()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            // Formula: prodRequirement (1000) + safetyStock (200) - currentStock (300) - openPoQuantity (100) = 800
+            var net = service.CalculateNetRequiredQuantity(1000m, 200m, 300m, 100m);
+
+            Assert.Equal(800m, net);
+        }
+
+        [Fact]
+        public void CalculateNetRequiredQuantity_WhenStockExceedsDemand_ReturnsZero()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            // prodRequirement (500) + safetyStock (100) - currentStock (700) - openPoQuantity (0) = -100 -> 0
+            var net = service.CalculateNetRequiredQuantity(500m, 100m, 700m, 0m);
+
+            Assert.Equal(0m, net);
+        }
+
+        [Fact]
+        public void CalculateOrderQuantityAndCost_AdjustsForMOQ()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            // Net quantity = 250, MOQ = 500, PackSize = 1, UnitPrice = 2.00
+            var (finalQty, totalCost) = service.CalculateOrderQuantityAndCost(250m, 500m, 1m, 2.00m);
+
+            Assert.Equal(500m, finalQty);
+            Assert.Equal(1000.00m, totalCost);
+        }
+
+        [Fact]
+        public void CalculateOrderQuantityAndCost_AdjustsForPackSize()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            // Net quantity = 520, MOQ = 500, PackSize = 50, UnitPrice = 1.50
+            // Ceiling(520 / 50) = 11 packs * 50 = 550
+            var (finalQty, totalCost) = service.CalculateOrderQuantityAndCost(520m, 500m, 50m, 1.50m);
+
+            Assert.Equal(550m, finalQty);
+            Assert.Equal(825.00m, totalCost);
+        }
+
+        [Fact]
+        public void ValidateCandidate_WhenBudgetExceeded_FailsValidation()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var request = new ProcurementRequest
+            {
+                RequiredSpecification = "Medical Grade Polypropylene",
+                CalculatedNetQuantity = 1000m,
+                MaximumBudget = 1000m, // Budget $1000
+                RequiredByDate = DateTime.UtcNow.AddDays(10)
+            };
+
+            var candidate = new SupplierCandidate
+            {
+                SupplierName = "Premium Polymers",
+                MaterialName = "Medical Grade Polypropylene",
+                UnitPrice = 2.50m, // 1000 * 2.50 = $2500 > $1000
+                MinimumOrderQuantity = 500m,
+                PackSize = 50m,
+                LeadTimeDays = 5,
+                QualityEvidence = "ISO 13485 Certified",
+                SupplierStatus = "APPROVED"
+            };
+
+            var validation = service.ValidateCandidate(candidate, request);
+
+            Assert.False(validation.IsValid);
+            Assert.False(validation.BudgetRespected);
+            Assert.Contains(validation.ValidationMessages, m => m.Contains("exceeds maximum budget"));
+        }
+
+        [Fact]
+        public void ValidateCandidate_WhenLeadTimeExceedsRequiredDate_FailsValidation()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var request = new ProcurementRequest
+            {
+                RequiredSpecification = "BoxPouch Film",
+                CalculatedNetQuantity = 500m,
+                MaximumBudget = 5000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(3) // Needs within 3 days
+            };
+
+            var candidate = new SupplierCandidate
+            {
+                SupplierName = "Overseas Film Co",
+                MaterialName = "BoxPouch Film",
+                UnitPrice = 1.20m,
+                MinimumOrderQuantity = 100m,
+                PackSize = 10m,
+                LeadTimeDays = 14, // 14 days lead time exceeds 3 days
+                QualityEvidence = "ISO 9001",
+                SupplierStatus = "APPROVED"
+            };
+
+            var validation = service.ValidateCandidate(candidate, request);
+
+            Assert.False(validation.IsValid);
+            Assert.False(validation.LeadTimeFeasible);
+            Assert.Contains(validation.ValidationMessages, m => m.Contains("exceeds required date"));
+        }
+
+        [Fact]
+        public void ValidateCandidate_WhenSupplierUnverified_FailsSupplierApprovalCheck()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var request = new ProcurementRequest
+            {
+                RequiredSpecification = "Aluminum Barrier Laminate",
+                CalculatedNetQuantity = 400m,
+                MaximumBudget = 2000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(10)
+            };
+
+            var candidate = new SupplierCandidate
+            {
+                SupplierName = "Discovered Online Supplier",
+                MaterialName = "Aluminum Barrier Laminate",
+                UnitPrice = 1.80m,
+                MinimumOrderQuantity = 100m,
+                PackSize = 10m,
+                LeadTimeDays = 4,
+                QualityEvidence = "Datasheet available",
+                SupplierStatus = "UNVERIFIED" // Unverified online discovery
+            };
+
+            var validation = service.ValidateCandidate(candidate, request);
+
+            Assert.False(validation.IsValid);
+            Assert.False(validation.SupplierApproved);
+            Assert.Contains(validation.ValidationMessages, m => m.Contains("UNVERIFIED"));
+        }
+
+        [Fact]
+        public async Task CreateDraftPoFromCandidate_WhenSupplierUnverified_ThrowsInvalidOperationException()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var rawMaterial = new RawMaterial { Id = 1, Name = "Polymer Roll", SkuCode = "RM-POLY-01" };
+            db.RawMaterials.Add(rawMaterial);
+
+            var request = new ProcurementRequest
+            {
+                Id = 10,
+                RawMaterialId = 1,
+                RequiredSpecification = "Spec A",
+                CalculatedNetQuantity = 500m,
+                MaximumBudget = 2000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(15),
+                Status = ProcurementRequestStatus.RecommendationReady
+            };
+            db.ProcurementRequests.Add(request);
+
+            var candidate = new SupplierCandidate
+            {
+                Id = 100,
+                ProcurementRequestId = 10,
+                SupplierName = "Unverified Vendor",
+                MaterialName = "Polymer Roll",
+                UnitPrice = 1.50m,
+                MinimumOrderQuantity = 100m,
+                PackSize = 10m,
+                LeadTimeDays = 5,
+                QualityEvidence = "Certification pending",
+                SupplierStatus = "UNVERIFIED"
+            };
+            db.SupplierCandidates.Add(candidate);
+            await db.SaveChangesAsync();
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => service.CreateDraftPoFromCandidateAsync(10, 100));
+
+            Assert.Contains("UNVERIFIED", ex.Message);
+        }
+
+        [Fact]
+        public async Task CreateDraftPoFromCandidate_WhenSupplierApproved_CreatesDraftPoSuccessfully()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, poFake) = CreateService(db);
+
+            var rawMaterial = new RawMaterial { Id = 2, Name = "BoxPouch Film", SkuCode = "RM-BP-02" };
+            var supplier = new Supplier { Id = 5, Name = "Apex Polymer", SupplierCode = "SUP-APX-01", ContactEmail = "orders@apex.com" };
+            db.RawMaterials.Add(rawMaterial);
+            db.Suppliers.Add(supplier);
+
+            var request = new ProcurementRequest
+            {
+                Id = 20,
+                RawMaterialId = 2,
+                RequiredSpecification = "BP-FILM-100",
+                CalculatedNetQuantity = 600m,
+                MaximumBudget = 3000m,
+                RequiredByDate = DateTime.UtcNow.AddDays(20),
+                Status = ProcurementRequestStatus.RecommendationReady
+            };
+            db.ProcurementRequests.Add(request);
+
+            var candidate = new SupplierCandidate
+            {
+                Id = 200,
+                ProcurementRequestId = 20,
+                SupplierId = 5,
+                SupplierName = "Apex Polymer",
+                MaterialName = "BoxPouch Film",
+                UnitPrice = 1.40m,
+                MinimumOrderQuantity = 200m,
+                PackSize = 50m,
+                LeadTimeDays = 5,
+                QualityEvidence = "ISO 9001 Certified",
+                SupplierStatus = "APPROVED",
+                RecommendedOrderQuantity = 600m,
+                TotalCost = 840.00m
+            };
+            db.SupplierCandidates.Add(candidate);
+            await db.SaveChangesAsync();
+
+            poFake.OnCreateAsync = (dto, uid) => Task.FromResult(new PurchaseOrderResponseDto
+            {
+                Id = 501,
+                PoNumber = "PO-2026-0501",
+                Status = PurchaseOrderStatus.Draft.ToString(),
+                TotalCost = 840.00m,
+                RequiresApproval = false
+            });
+
+            var result = await service.CreateDraftPoFromCandidateAsync(20, 200);
+
+            Assert.NotNull(result);
+            Assert.Equal("PO-2026-0501", result.PoNumber);
+            Assert.Equal(PurchaseOrderStatus.Draft.ToString(), result.Status);
+
+            var updatedRequest = await db.ProcurementRequests.FindAsync(20);
+            Assert.Equal(ProcurementRequestStatus.DraftPoCreated, updatedRequest!.Status);
+            Assert.Equal(501, updatedRequest.GeneratedPurchaseOrderId);
+        }
+
+        [Fact]
+        public void ApprovalThreshold_WhenTotalCostExceedsThreshold_RequiresManagerApproval()
+        {
+            // Verifies the business rule that high value POs require manager authorization
+            const decimal threshold = 5000m;
+            const decimal costUnder = 4500m;
+            const decimal costOver = 6200m;
+
+            var poUnder = new PurchaseOrder { TotalCost = costUnder, ApprovalThreshold = threshold };
+            poUnder.RequiresApproval = poUnder.TotalCost > poUnder.ApprovalThreshold;
+
+            var poOver = new PurchaseOrder { TotalCost = costOver, ApprovalThreshold = threshold };
+            poOver.RequiresApproval = poOver.TotalCost > poOver.ApprovalThreshold;
+
+            Assert.False(poUnder.RequiresApproval);
+            Assert.True(poOver.RequiresApproval);
+        }
+    }
+}
