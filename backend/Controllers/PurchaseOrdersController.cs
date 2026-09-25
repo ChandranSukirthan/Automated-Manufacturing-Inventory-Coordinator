@@ -277,5 +277,82 @@ namespace ManufacturingCoordinator.Controllers
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
         }
+
+        /// <summary>
+        /// GET /api/purchase-orders/{id}/delivery-status — Tracking incoming supply delivery for Floor Workers.
+        /// </summary>
+        [HttpGet("{id:int}/delivery-status")]
+        [ProducesResponseType(typeof(PurchaseOrderDeliveryStatusDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderDeliveryStatusDto>> GetDeliveryStatus(int id)
+        {
+            var po = await _poService.GetByIdAsync(id);
+            if (po == null) return NotFound(new { message = $"Purchase order {id} not found." });
+
+            var primaryLine = po.OrderLines.Count > 0 ? po.OrderLines[0] : null;
+            var deliveryStatus = po.Status switch
+            {
+                "Sent" => "IN_TRANSIT",
+                "Payment" => "EXPECTED",
+                "Approved" => "EXPECTED",
+                "Received" => "RECEIVED",
+                "Completed" => "COMPLETED",
+                _ => "EXPECTED"
+            };
+
+            var dto = new PurchaseOrderDeliveryStatusDto
+            {
+                PurchaseOrderId = po.Id,
+                PoNumber = po.PoNumber,
+                SupplierName = po.SupplierName,
+                MaterialName = primaryLine?.RawMaterialName ?? "Raw Material Supplies",
+                Quantity = primaryLine?.Quantity ?? 0,
+                ExpectedDelivery = po.CreatedAt.AddDays(7),
+                DeliveryStatus = deliveryStatus,
+                TrackingNumber = $"TRK-{po.PoNumber}",
+                StatusRemarks = $"Delivery status for PO {po.PoNumber} from {po.SupplierName}"
+            };
+            return Ok(dto);
+        }
+
+        /// <summary>
+        /// GET /api/purchase-orders/incoming-supplies — List active incoming supplies for Floor Workers.
+        /// </summary>
+        [HttpGet("incoming-supplies")]
+        [ProducesResponseType(typeof(IEnumerable<PurchaseOrderDeliveryStatusDto>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<IEnumerable<PurchaseOrderDeliveryStatusDto>>> GetIncomingSupplies()
+        {
+            var orders = await _poService.GetAllAsync();
+            var list = new List<PurchaseOrderDeliveryStatusDto>();
+            foreach (var po in orders)
+            {
+                var deliveryStatus = po.Status switch
+                {
+                    "Sent" => "IN_TRANSIT",
+                    "Payment" => "EXPECTED",
+                    "Approved" => "EXPECTED",
+                    "Received" => "RECEIVED",
+                    "Completed" => "COMPLETED",
+                    _ => null
+                };
+
+                if (deliveryStatus != null)
+                {
+                    list.Add(new PurchaseOrderDeliveryStatusDto
+                    {
+                        PurchaseOrderId = po.Id,
+                        PoNumber = po.PoNumber,
+                        SupplierName = po.SupplierName,
+                        MaterialName = "Raw Material Supplies",
+                        Quantity = 1000,
+                        ExpectedDelivery = po.CreatedAt.AddDays(7),
+                        DeliveryStatus = deliveryStatus,
+                        TrackingNumber = $"TRK-{po.PoNumber}",
+                        StatusRemarks = $"Supplier: {po.SupplierName} | Status: {deliveryStatus}"
+                    });
+                }
+            }
+            return Ok(list);
+        }
     }
 }

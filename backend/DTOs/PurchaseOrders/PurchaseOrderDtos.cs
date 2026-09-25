@@ -158,4 +158,26 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string? FailureReason { get; set; }
         public DateTime Timestamp { get; set; }
     }
+
+    /// <summary>
+    /// Delivery and incoming supply tracking DTO for Floor Workers on mobile.
+    /// </summary>
+    public class PurchaseOrderDeliveryStatusDto
+    {
+        public int PurchaseOrderId { get; set; }
+        public string PoNumber { get; set; } = string.Empty;
+        public string SupplierName { get; set; } = string.Empty;
+        public string MaterialName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public DateTime ExpectedDelivery { get; set; }
+
+        /// <summary>
+        /// EXPECTED, IN_TRANSIT, RECEIVED, PARTIALLY_RECEIVED, DELAYED, COMPLETED
+        /// </summary>
+        public string DeliveryStatus { get; set; } = "EXPECTED";
+
+        public string? TrackingNumber { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+        public string StatusRemarks { get; set; } = string.Empty;
+    }
 }

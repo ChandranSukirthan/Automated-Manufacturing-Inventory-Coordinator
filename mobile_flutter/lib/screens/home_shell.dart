@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../controllers/inventory_controller.dart';
 import '../services/purchase_order_service.dart';
 import '../services/quality_service.dart';
+import '../views/factory_assistant_view.dart';
 import 'dashboard_screen.dart';
 import 'defects_screen.dart';
 import 'quarantine_screen.dart';
@@ -14,6 +16,8 @@ import 'purchase_orders/po_list_screen.dart';
 import 'purchase_orders/ai_workflow_status_screen.dart';
 import 'purchase_orders/supplier_status_screen.dart';
 import 'purchase_orders/notification_status_screen.dart';
+import 'purchase_orders/procurement_details_screen.dart';
+import 'purchase_orders/incoming_supplies_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -33,6 +37,19 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
+  late final InventoryController _inventoryController;
+
+  @override
+  void initState() {
+    super.initState();
+    _inventoryController = InventoryController(poService: widget.poService);
+  }
+
+  @override
+  void dispose() {
+    _inventoryController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,12 +88,20 @@ class _HomeShellState extends State<HomeShell> {
       titles = ['Dashboard', 'Defect reports', 'Quarantine', 'History'];
     } else {
       screens = [
-        RoleDashboardScreen(
-          service: widget.qualityService,
-          role: user.role,
+        FactoryAssistantView(
+          controller: _inventoryController,
+          poService: widget.poService,
         ),
+        ProcurementDetailsScreen(service: widget.poService),
+        IncomingSuppliesScreen(service: widget.poService),
+        NotificationStatusScreen(service: widget.poService),
       ];
-      titles = ['Dashboard'];
+      titles = [
+        'Factory Assistant',
+        'Procurement Tracker',
+        'Incoming Supplies',
+        'Alerts',
+      ];
     }
 
     return Scaffold(
@@ -189,7 +214,33 @@ class _HomeShellState extends State<HomeShell> {
                     ),
                   ],
                 )
-              : null,
+              : NavigationBar(
+                  selectedIndex: _selectedIndex < 4 ? _selectedIndex : 0,
+                  onDestinationSelected: (index) =>
+                      setState(() => _selectedIndex = index),
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.precision_manufacturing_outlined),
+                      selectedIcon: Icon(Icons.precision_manufacturing),
+                      label: 'Factory',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.auto_awesome_outlined),
+                      selectedIcon: Icon(Icons.auto_awesome),
+                      label: 'Procurement',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.local_shipping_outlined),
+                      selectedIcon: Icon(Icons.local_shipping),
+                      label: 'Deliveries',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.notifications_active_outlined),
+                      selectedIcon: Icon(Icons.notifications_active),
+                      label: 'Alerts',
+                    ),
+                  ],
+                ),
     );
   }
 }

@@ -1,23 +1,52 @@
 import 'package:flutter/material.dart';
 
-/// 12-stage procurement pipeline requested for mobile tracking
+/// 11-stage procurement pipeline requested for mobile tracking:
+/// LOW STOCK → PROCUREMENT REQUESTED → AI RESEARCHING → RECOMMENDATION READY →
+/// WAITING FOR MANAGER APPROVAL → APPROVED → PAYMENT PROCESSING → PAID →
+/// SUPPLIER NOTIFIED → INCOMING SUPPLY → COMPLETED
 enum ProcurementPipelineStep {
-  lowStock('LOW STOCK', 'Inventory breached threshold; replenishment required'),
-  procurementRequested('PROCUREMENT REQUESTED', 'Procurement requirement logged and initialized'),
-  aiResearching('AI RESEARCHING', 'Goal-based agent researching market via Gemini search grounding'),
-  suppliersFound('SUPPLIERS FOUND', 'Market candidates discovered with quotes & specifications'),
-  candidatesValidated('CANDIDATES VALIDATED', 'Candidates evaluated against quality, MOQ, lead time & budget'),
-  recommendationReady('RECOMMENDATION READY', 'Top supplier selected with deterministic pricing'),
-  waitingForApproval('WAITING FOR APPROVAL', 'Draft PO formulated; awaiting Supply Chain Manager authorization'),
+  lowStock('LOW STOCK', 'Warehouse inventory breached safety threshold'),
+  procurementRequested('PROCUREMENT REQUESTED', 'Procurement requirement logged and persisted in ERP'),
+  aiResearching('AI RESEARCHING', 'Goal-based agent researching market via search grounding'),
+  recommendationReady('RECOMMENDATION READY', 'Top candidate selected with deterministic quantity & cost'),
+  waitingForApproval('WAITING FOR MANAGER APPROVAL', 'Draft PO formulated; awaiting Supply Chain Manager authorization'),
   approved('APPROVED', 'Purchase order authorized by Supply Chain Manager'),
-  paymentProcessing('PAYMENT PROCESSING', 'Settlement transaction initiated via payment gateway'),
-  paid('PAID', 'Payment confirmed and reconciled'),
-  sentToSupplier('SENT TO SUPPLIER', 'PO documentation dispatched to supplier contact'),
-  completed('COMPLETED', 'Procurement lifecycle completed');
+  paymentProcessing('PAYMENT PROCESSING', 'Stripe payment transaction initiated'),
+  paid('PAID', 'Stripe payment confirmed and reconciled'),
+  supplierNotified('SUPPLIER NOTIFIED', 'Signed PO invoice PDF dispatched to supplier via SendGrid'),
+  incomingSupply('INCOMING SUPPLY', 'Order acknowledged by supplier and shipment en route'),
+  completed('COMPLETED', 'Raw material supplies received and verified in inventory');
 
   const ProcurementPipelineStep(this.title, this.description);
   final String title;
   final String description;
+}
+
+/// Incoming supply delivery status for Floor Workers
+enum SupplyDeliveryStatus {
+  expected('EXPECTED', Color(0xFF5CC8F8)),
+  inTransit('IN_TRANSIT', Color(0xFFF59E0B)),
+  received('RECEIVED', Color(0xFF10B981)),
+  partiallyReceived('PARTIALLY_RECEIVED', Color(0xFF8B5CF6)),
+  delayed('DELAYED', Color(0xFFEF4444)),
+  completed('COMPLETED', Color(0xFF10B981));
+
+  const SupplyDeliveryStatus(this.label, this.color);
+  final String label;
+  final Color color;
+
+  static SupplyDeliveryStatus fromString(String? value) {
+    if (value == null) return SupplyDeliveryStatus.expected;
+    final normalized = value.trim().toUpperCase().replaceAll(' ', '_');
+    for (final status in SupplyDeliveryStatus.values) {
+      if (status.label == normalized) return status;
+    }
+    return switch (normalized) {
+      'SENT' || 'SHIPPED' => SupplyDeliveryStatus.inTransit,
+      'ARRIVED' => SupplyDeliveryStatus.received,
+      _ => SupplyDeliveryStatus.expected,
+    };
+  }
 }
 
 /// Evaluated supplier candidate from AI research
@@ -41,6 +70,7 @@ class SupplierCandidateItem {
     required this.recommendedOrderQuantity,
     required this.totalCost,
     required this.createdAt,
+    this.availability = 'In Stock',
   });
 
   final int id;
@@ -61,6 +91,7 @@ class SupplierCandidateItem {
   final double recommendedOrderQuantity;
   final double totalCost;
   final DateTime createdAt;
+  final String availability;
 
   factory SupplierCandidateItem.fromJson(Map<String, dynamic> json) {
     return SupplierCandidateItem(
@@ -82,6 +113,7 @@ class SupplierCandidateItem {
       recommendedOrderQuantity: (json['recommendedOrderQuantity'] as num? ?? 0).toDouble(),
       totalCost: (json['totalCost'] as num? ?? 0).toDouble(),
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      availability: json['availability'] as String? ?? 'In Stock',
     );
   }
 
@@ -91,7 +123,7 @@ class SupplierCandidateItem {
     if (lower.contains('iso') || lower.contains('certified') || lower.contains('astm') || lower.contains('approved') || lower.contains('passed')) {
       return 'VERIFIED';
     }
-    if (qualityEvidence.trim().isEmpty) {
+    if (qualityEvidence.trim().isEmpty || lower.contains('unknown')) {
       return 'UNKNOWN';
     }
     return 'NOT VERIFIED';
@@ -133,7 +165,185 @@ class SupplierCandidateItem {
   }
 }
 
-/// Procurement Request entity matching backend ProcurementResponseDto
+/// Real-time status tracking payload from ASP.NET Core: GET /api/procurement/{id}/status
+class ProcurementStatusTracking {
+  const ProcurementStatusTracking({
+    required this.procurementId,
+    required this.materialName,
+    required this.requiredSpecification,
+    required this.netDeficit,
+    required this.procurementStatus,
+    this.workflowId,
+    this.purchaseOrderId,
+    this.purchaseOrderNumber,
+    this.purchaseOrderStatus,
+    this.paymentStatus,
+    this.supplierNotificationStatus,
+    this.supplierName,
+    this.supplierStatus,
+    this.recommendedQuantity,
+    this.unitPrice,
+    this.totalCost,
+    this.qualityEvidence,
+    this.leadTimeDays,
+    this.availability,
+    required this.requiresSupplierVerification,
+    required this.requiresHumanApproval,
+    this.lastUpdated,
+  });
+
+  final int procurementId;
+  final String materialName;
+  final String requiredSpecification;
+  final double netDeficit;
+  final String procurementStatus;
+  final String? workflowId;
+  final int? purchaseOrderId;
+  final String? purchaseOrderNumber;
+  final String? purchaseOrderStatus;
+  final String? paymentStatus;
+  final String? supplierNotificationStatus;
+  final String? supplierName;
+  final String? supplierStatus;
+  final double? recommendedQuantity;
+  final double? unitPrice;
+  final double? totalCost;
+  final String? qualityEvidence;
+  final int? leadTimeDays;
+  final String? availability;
+  final bool requiresSupplierVerification;
+  final bool requiresHumanApproval;
+  final DateTime? lastUpdated;
+
+  factory ProcurementStatusTracking.fromJson(Map<String, dynamic> json) {
+    return ProcurementStatusTracking(
+      procurementId: json['procurementId'] as int? ?? json['id'] as int? ?? 0,
+      materialName: json['materialName'] as String? ?? json['rawMaterialName'] as String? ?? 'Raw Material',
+      requiredSpecification: json['requiredSpecification'] as String? ?? '',
+      netDeficit: (json['netDeficit'] as num? ?? json['calculatedNetQuantity'] as num? ?? 0).toDouble(),
+      procurementStatus: json['procurementStatus'] as String? ?? json['status'] as String? ?? 'Requested',
+      workflowId: json['workflowId'] as String?,
+      purchaseOrderId: json['purchaseOrderId'] as int? ?? json['generatedPurchaseOrderId'] as int?,
+      purchaseOrderNumber: json['purchaseOrderNumber'] as String? ?? json['generatedPoNumber'] as String?,
+      purchaseOrderStatus: json['purchaseOrderStatus'] as String?,
+      paymentStatus: json['paymentStatus'] as String?,
+      supplierNotificationStatus: json['supplierNotificationStatus'] as String?,
+      supplierName: json['supplierName'] as String? ?? json['recommendedSupplierName'] as String?,
+      supplierStatus: json['supplierStatus'] as String?,
+      recommendedQuantity: (json['recommendedQuantity'] as num?)?.toDouble(),
+      unitPrice: (json['unitPrice'] as num?)?.toDouble(),
+      totalCost: (json['totalCost'] as num?)?.toDouble(),
+      qualityEvidence: json['qualityEvidence'] as String?,
+      leadTimeDays: json['leadTimeDays'] as int?,
+      availability: json['availability'] as String?,
+      requiresSupplierVerification: json['requiresSupplierVerification'] as bool? ?? false,
+      requiresHumanApproval: json['requiresHumanApproval'] as bool? ?? false,
+      lastUpdated: DateTime.tryParse(json['lastUpdated']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
+
+  /// Maps backend state to the 11-step pipeline
+  ProcurementPipelineStep get pipelineStep {
+    final poStatus = (purchaseOrderStatus ?? '').toLowerCase();
+    final payStatus = (paymentStatus ?? '').toLowerCase();
+    final notifStatus = (supplierNotificationStatus ?? '').toLowerCase();
+    final procStatus = procurementStatus.toLowerCase();
+
+    if (poStatus == 'completed' || poStatus == 'received') {
+      return ProcurementPipelineStep.completed;
+    }
+    if (poStatus == 'sent') {
+      return ProcurementPipelineStep.incomingSupply;
+    }
+    if (notifStatus == 'sent' || notifStatus == 'delivered') {
+      return ProcurementPipelineStep.supplierNotified;
+    }
+    if (payStatus == 'paid' || payStatus == 'succeeded') {
+      return ProcurementPipelineStep.paid;
+    }
+    if (payStatus == 'processing' || poStatus == 'payment') {
+      return ProcurementPipelineStep.paymentProcessing;
+    }
+    if (poStatus == 'approved') {
+      return ProcurementPipelineStep.approved;
+    }
+    if (requiresHumanApproval || poStatus == 'pendingapproval' || poStatus == 'draft' || procStatus == 'draftpocreated') {
+      return ProcurementPipelineStep.waitingForApproval;
+    }
+    if (procStatus == 'recommendationready' || (supplierName != null && supplierName!.isNotEmpty)) {
+      return ProcurementPipelineStep.recommendationReady;
+    }
+    if (procStatus == 'researching') {
+      return ProcurementPipelineStep.aiResearching;
+    }
+    if (procStatus == 'requested' || procStatus == 'initiated') {
+      return ProcurementPipelineStep.procurementRequested;
+    }
+    return ProcurementPipelineStep.lowStock;
+  }
+
+  int get pipelineIndex => pipelineStep.index;
+
+  bool get isApprovalPending =>
+      requiresHumanApproval ||
+      (purchaseOrderStatus != null && purchaseOrderStatus!.toLowerCase() == 'pendingapproval') ||
+      pipelineStep == ProcurementPipelineStep.waitingForApproval;
+
+  String get qualityStatus {
+    final q = (qualityEvidence ?? '').toLowerCase();
+    if (q.contains('iso') || q.contains('astm') || q.contains('certified') || q.contains('approved')) {
+      return 'VERIFIED';
+    }
+    if (q.isEmpty || q.contains('unknown')) {
+      return 'UNKNOWN';
+    }
+    return 'NOT VERIFIED';
+  }
+}
+
+/// Incoming supply record for delivery tracking
+class IncomingSupplyItem {
+  const IncomingSupplyItem({
+    required this.purchaseOrderId,
+    required this.poNumber,
+    required this.supplierName,
+    required this.materialName,
+    required this.quantity,
+    required this.expectedDelivery,
+    required this.deliveryStatus,
+    this.trackingNumber,
+    this.actualDeliveryDate,
+    required this.statusRemarks,
+  });
+
+  final int purchaseOrderId;
+  final String poNumber;
+  final String supplierName;
+  final String materialName;
+  final double quantity;
+  final DateTime expectedDelivery;
+  final SupplyDeliveryStatus deliveryStatus;
+  final String? trackingNumber;
+  final DateTime? actualDeliveryDate;
+  final String statusRemarks;
+
+  factory IncomingSupplyItem.fromJson(Map<String, dynamic> json) {
+    return IncomingSupplyItem(
+      purchaseOrderId: json['purchaseOrderId'] as int? ?? json['id'] as int? ?? 0,
+      poNumber: json['poNumber'] as String? ?? 'PO-${json['purchaseOrderId'] ?? json['id']}',
+      supplierName: json['supplierName'] as String? ?? 'Supplier',
+      materialName: json['materialName'] as String? ?? 'Raw Materials',
+      quantity: (json['quantity'] as num? ?? 0).toDouble(),
+      expectedDelivery: DateTime.tryParse(json['expectedDelivery']?.toString() ?? '') ?? DateTime.now().add(const Duration(days: 7)),
+      deliveryStatus: SupplyDeliveryStatus.fromString(json['deliveryStatus'] as String?),
+      trackingNumber: json['trackingNumber'] as String?,
+      actualDeliveryDate: json['actualDeliveryDate'] != null ? DateTime.tryParse(json['actualDeliveryDate'].toString()) : null,
+      statusRemarks: json['statusRemarks'] as String? ?? '',
+    );
+  }
+}
+
+/// Full Procurement Request entity matching backend ProcurementResponseDto
 class ProcurementItem {
   const ProcurementItem({
     required this.id,
@@ -151,6 +361,7 @@ class ProcurementItem {
     required this.qualityRequirement,
     this.preferredRegion,
     required this.status,
+    this.workflowId,
     this.recommendedSupplierId,
     this.recommendedSupplierName,
     this.generatedPurchaseOrderId,
@@ -176,6 +387,7 @@ class ProcurementItem {
   final String qualityRequirement;
   final String? preferredRegion;
   final String status;
+  final String? workflowId;
   final int? recommendedSupplierId;
   final String? recommendedSupplierName;
   final int? generatedPurchaseOrderId;
@@ -212,6 +424,7 @@ class ProcurementItem {
       qualityRequirement: json['qualityRequirement'] as String? ?? '',
       preferredRegion: json['preferredRegion'] as String?,
       status: json['status'] as String? ?? 'Requested',
+      workflowId: json['workflowId'] as String?,
       recommendedSupplierId: json['recommendedSupplierId'] as int?,
       recommendedSupplierName: json['recommendedSupplierName'] as String?,
       generatedPurchaseOrderId: json['generatedPurchaseOrderId'] as int?,
@@ -223,19 +436,15 @@ class ProcurementItem {
     );
   }
 
-  /// Required stock = Production Requirement + Safety Stock
   double get requiredStock => productionRequirement + safetyStock;
 
-  /// Shortage = Required Stock - Current Stock - Existing Open POs
   double get shortage {
     final diff = (productionRequirement + safetyStock) - (currentStock + existingOpenPoQuantity);
     return diff > 0 ? diff : 0.0;
   }
 
-  /// Recommended Purchase Quantity matches calculatedNetQuantity from backend
   double get recommendedPurchaseQuantity => calculatedNetQuantity > 0 ? calculatedNetQuantity : shortage;
 
-  /// Get the recommended candidate from candidates list
   SupplierCandidateItem? get recommendedCandidate {
     if (recommendedSupplierName != null && recommendedSupplierName!.isNotEmpty) {
       try {
@@ -250,13 +459,12 @@ class ProcurementItem {
     return null;
   }
 
-  /// Map backend status to 12-stage pipeline step
   ProcurementPipelineStep get pipelineStep {
     switch (status.toLowerCase()) {
       case 'failed':
       case 'rejected':
-        return ProcurementPipelineStep.procurementRequested;
       case 'requested':
+      case 'initiated':
         return ProcurementPipelineStep.procurementRequested;
       case 'researching':
         return ProcurementPipelineStep.aiResearching;
@@ -270,46 +478,9 @@ class ProcurementItem {
       case 'completed':
         return ProcurementPipelineStep.completed;
       default:
-        if (candidates.isNotEmpty) {
-          return ProcurementPipelineStep.candidatesValidated;
-        }
         return ProcurementPipelineStep.procurementRequested;
     }
   }
 
-  /// Index (0 to 11) for linear progress indicator
   int get pipelineIndex => pipelineStep.index;
-}
-
-/// Represents a low-stock alert event linked to procurement
-class LowStockEventItem {
-  const LowStockEventItem({
-    required this.material,
-    required this.sku,
-    required this.currentStock,
-    required this.requiredStock,
-    required this.shortage,
-    required this.recommendedPurchaseQuantity,
-    this.procurementRequestId,
-  });
-
-  final String material;
-  final String sku;
-  final double currentStock;
-  final double requiredStock;
-  final double shortage;
-  final double recommendedPurchaseQuantity;
-  final int? procurementRequestId;
-
-  factory LowStockEventItem.fromProcurement(ProcurementItem item) {
-    return LowStockEventItem(
-      material: item.rawMaterialName,
-      sku: item.rawMaterialSku,
-      currentStock: item.currentStock,
-      requiredStock: item.requiredStock,
-      shortage: item.shortage,
-      recommendedPurchaseQuantity: item.recommendedPurchaseQuantity,
-      procurementRequestId: item.id,
-    );
-  }
 }
