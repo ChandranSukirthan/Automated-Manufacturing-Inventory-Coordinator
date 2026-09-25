@@ -328,8 +328,31 @@ export default function PurchaseOrderDetail() {
         </div>
       )}
 
+      {/* AI Procurement Research Link Badge */}
+      <div className="p-3.5 rounded-xl bg-gradient-to-r from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/30 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-white">AI-Assisted Procurement Pipeline</span>
+            <p className="text-[11px] text-slate-400">
+              Procurement research, candidate validation, and deterministic costing evaluated by Agentic AI.
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/purchase-orders/procurement"
+          className="flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300"
+        >
+          <span>View Procurement Console</span>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
       {/* Lifecycle Progress Stepper */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4">
+
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Order Status & Workflow Stepper
