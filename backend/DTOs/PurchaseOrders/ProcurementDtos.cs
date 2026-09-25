@@ -19,6 +19,9 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
             set => RawMaterialId = value;
         }
 
+        [MaxLength(200)]
+        public string? MaterialName { get; set; }
+
         [Required]
         [MaxLength(200)]
         public string RequiredSpecification { get; set; } = string.Empty;

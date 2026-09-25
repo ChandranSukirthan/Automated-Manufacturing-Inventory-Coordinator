@@ -40,7 +40,7 @@ namespace ManufacturingCoordinator.Controllers
             {
                 var userId = GetCurrentUserId();
                 var result = await _procurementService.CreateRequestAsync(dto, userId);
-                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+                return StatusCode(StatusCodes.Status201Created, result);
             }
             catch (KeyNotFoundException ex)
             {
@@ -81,7 +81,7 @@ namespace ManufacturingCoordinator.Controllers
         /// <summary>
         /// GET /api/procurement/{id} — Retrieve procurement request with evaluated supplier candidates.
         /// </summary>
-        [HttpGet("{id:int}")]
+        [HttpGet("{id:int}", Name = "GetProcurementById")]
         [ProducesResponseType(typeof(ProcurementResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProcurementResponseDto>> GetById(int id)
@@ -116,11 +116,7 @@ namespace ManufacturingCoordinator.Controllers
             {
                 var userId = GetCurrentUserId();
                 var po = await _procurementService.CreateDraftPoFromCandidateAsync(id, candidateId, userId);
-                return CreatedAtAction(
-                    actionName: "GetById",
-                    controllerName: "PurchaseOrders",
-                    routeValues: new { id = po.Id },
-                    value: po);
+                return StatusCode(StatusCodes.Status201Created, po);
             }
             catch (KeyNotFoundException ex)
             {
@@ -261,11 +257,7 @@ namespace ManufacturingCoordinator.Controllers
             {
                 var userId = GetCurrentUserId();
                 var po = await _procurementService.CreateDraftPoFromCandidateAsync(id, candidateId, userId);
-                return CreatedAtAction(
-                    actionName: "GetById",
-                    controllerName: "PurchaseOrders",
-                    routeValues: new { id = po.Id },
-                    value: po);
+                return StatusCode(StatusCodes.Status201Created, po);
             }
             catch (KeyNotFoundException ex)
             {

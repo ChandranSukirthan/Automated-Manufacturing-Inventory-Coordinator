@@ -67,6 +67,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
+builder.Services.AddScoped<IProcurementService, ProcurementService>();
 
 // Register Student 3 - Quality & Defect Services
 builder.Services.AddScoped<IDefectReportService, DefectReportService>();

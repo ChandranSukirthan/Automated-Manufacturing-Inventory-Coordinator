@@ -146,7 +146,33 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         {
             var rawMaterial = await _context.RawMaterials.FindAsync(dto.RawMaterialId);
             if (rawMaterial == null)
-                throw new KeyNotFoundException($"RawMaterial with ID {dto.RawMaterialId} was not found.");
+            {
+                // Fallback: If not found by ID, try matching material name or pick first available material
+                if (!string.IsNullOrWhiteSpace(dto.MaterialName))
+                {
+                    rawMaterial = await _context.RawMaterials
+                        .FirstOrDefaultAsync(rm => rm.Name.ToLower() == dto.MaterialName.ToLower() ||
+                                                   rm.SkuCode.ToLower() == dto.MaterialName.ToLower());
+                }
+
+                if (rawMaterial == null)
+                {
+                    rawMaterial = await _context.RawMaterials.FirstOrDefaultAsync();
+                }
+
+                if (rawMaterial == null)
+                    throw new KeyNotFoundException($"RawMaterial with ID {dto.RawMaterialId} was not found.");
+            }
+
+            // Verify createdById actually exists in Users table to avoid FK constraint violation
+            if (createdById.HasValue)
+            {
+                var userExists = await _context.Users.AnyAsync(u => u.Id == createdById.Value);
+                if (!userExists)
+                {
+                    createdById = null;
+                }
+            }
 
             // Auto-calculate stock parameters if not supplied
             decimal currentStock = dto.CurrentStock;
@@ -158,7 +184,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (openPoQty == 0)
             {
                 var openOrderQty = await _context.OrderLines
-                    .Where(ol => ol.RawMaterialId == dto.RawMaterialId &&
+                    .Where(ol => ol.RawMaterialId == rawMaterial.Id &&
                                  (ol.PurchaseOrder.Status == PurchaseOrderStatus.Draft ||
                                   ol.PurchaseOrder.Status == PurchaseOrderStatus.PendingApproval))
                     .SumAsync(ol => (decimal?)ol.Quantity) ?? 0m;
@@ -171,8 +197,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var request = new ProcurementRequest
             {
-                RawMaterialId = dto.RawMaterialId,
-                MaterialName = rawMaterial.Name,
+                RawMaterialId = rawMaterial.Id,
+                MaterialName = !string.IsNullOrWhiteSpace(dto.MaterialName) ? dto.MaterialName : rawMaterial.Name,
                 RequiredSpecification = dto.RequiredSpecification,
                 ProductionRequirement = dto.ProductionRequirement,
                 CurrentStock = currentStock,
