@@ -19,6 +19,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
   bool _loading = true;
   String? _error;
   List<PurchaseOrderSummary> _orders = [];
+  List<Map<String, dynamic>> _alerts = [];
 
   @override
   void initState() {
@@ -34,9 +35,11 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
 
     try {
       final data = await widget.service.getPurchaseOrders();
+      final alerts = await widget.service.getStockAlerts();
       if (mounted) {
         setState(() {
           _orders = data;
+          _alerts = alerts;
           _loading = false;
         });
       }
@@ -132,6 +135,143 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
 
                         const SizedBox(height: 20),
 
+                        // Low Stock Alerts Section
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Low Stock Alerts',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: amberAccent.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${_alerts.length} ALERTS',
+                                style: TextStyle(color: amberAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (_alerts.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'No low stock alerts recorded.',
+                                style: TextStyle(color: Colors.white54, fontSize: 13),
+                              ),
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _alerts.length > 5 ? 5 : _alerts.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 10),
+                            itemBuilder: (context, idx) {
+                              final alert = _alerts[idx];
+                              final material = alert['materialName']?.toString() ?? alert['sku']?.toString() ?? 'Material Alert';
+                              final deficit = (alert['netDeficit'] ?? alert['shortage'] ?? alert['quantityRequested'] ?? 0).toString();
+                              final status = alert['status']?.toString() ?? 'Active';
+                              final time = alert['timestamp']?.toString() ?? alert['createdAt']?.toString() ?? '';
+                              final timeStr = time.length >= 16 ? time.substring(0, 16).replaceAll('T', ' ') : time;
+                              final severity = (alert['severity'] ?? alert['priority'] ?? 'Normal').toString().toUpperCase();
+                              final isHigh = severity == 'HIGH' || severity == 'CRITICAL';
+
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isHigh ? const Color(0xFFEF4444).withOpacity(0.3) : Colors.white.withOpacity(0.06),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              isHigh ? Icons.warning_amber_rounded : Icons.notifications_outlined,
+                                              size: 16,
+                                              color: isHigh ? const Color(0xFFEF4444) : cyanAccent,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              material,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isHigh ? const Color(0x33EF4444) : const Color(0x3310B981),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            severity,
+                                            style: TextStyle(
+                                              color: isHigh ? const Color(0xFFEF4444) : emeraldAccent,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Deficit: $deficit units',
+                                          style: TextStyle(
+                                            color: isHigh ? const Color(0xFFFFD700) : Colors.white70,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Status: $status',
+                                          style: const TextStyle(color: Colors.white60, fontSize: 11),
+                                        ),
+                                        if (timeStr.isNotEmpty)
+                                          Text(
+                                            timeStr,
+                                            style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 10),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+
+                        const SizedBox(height: 24),
+
                         const Text(
                           'Supplier Notification Outbox',
                           style: TextStyle(
@@ -149,10 +289,25 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: const Center(
-                              child: Text(
-                                'No notification history available.',
-                                style: TextStyle(color: Colors.white54),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'No notification history available.',
+                                    style: TextStyle(color: Colors.white54),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: _fetchNotificationTelemetry,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: cyanAccent,
+                                      foregroundColor: Colors.black,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.refresh, size: 16),
+                                    label: const Text('Tap to Retry', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
                               ),
                             ),
                           )

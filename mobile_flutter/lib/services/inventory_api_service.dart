@@ -65,9 +65,9 @@ class InventoryApiService {
   String get baseUrl {
     // Android emulator maps 10.0.2.2 to the host machine's localhost
     if (!kIsWeb && Platform.isAndroid) {
-      return 'http://10.0.2.2:5158/api/Inventory';
+      return 'http://10.0.2.2:5070/api/Inventory';
     }
-    return 'http://localhost:5158/api/Inventory';
+    return 'http://localhost:5070/api/Inventory';
   }
 
   Future<List<InventoryItemModel>> fetchInventory() async {
@@ -87,7 +87,8 @@ class InventoryApiService {
 
   Future<List<StockAlertModel>> fetchAlerts() async {
     try {
-      final response = await http.get(Uri.parse('\$baseUrl/alerts'));
+      final alertsUrl = baseUrl.replaceAll(RegExp(r'/Inventory$'), '/stock-alerts');
+      final response = await http.get(Uri.parse(alertsUrl));
       if (response.statusCode == 200) {
         Iterable list = json.decode(response.body);
         return list.map((model) => StockAlertModel.fromJson(model)).toList();
@@ -100,18 +101,18 @@ class InventoryApiService {
     }
   }
 
-  // Phase 3: Agent Integration
-  String get agentBaseUrl {
+  // Phase 3: Agent Integration via ASP.NET Core API
+  String get agentWorkflowUrl {
     if (!kIsWeb && Platform.isAndroid) {
-      return 'http://10.0.2.2:8000/api/agent';
+      return 'http://10.0.2.2:5070/api/AgentWorkflow';
     }
-    return 'http://localhost:8000/api/agent';
+    return 'http://localhost:5070/api/AgentWorkflow';
   }
 
-  Future<Map<String, dynamic>?> triggerDataExtractionAgent(String batchName) async {
+  Future<Map<String, dynamic>?> triggerDataExtractionAgent(String batchName, {int itemId = 1}) async {
     try {
       final response = await http.post(
-        Uri.parse('$agentBaseUrl/extract-data'),
+        Uri.parse('$agentWorkflowUrl/trigger/$itemId'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'batchName': batchName}),
       );

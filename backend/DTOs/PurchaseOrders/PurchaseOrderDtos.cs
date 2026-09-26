@@ -183,12 +183,4 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public DateTime? ActualDeliveryDate { get; set; }
         public string StatusRemarks { get; set; } = string.Empty;
     }
-
-    public class UpdateDeliveryStatusDto
-    {
-        [Required]
-        public string DeliveryStatus { get; set; } = string.Empty;
-
-        public string? Remarks { get; set; }
-    }
 }

@@ -175,16 +175,36 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
                       Expanded(
                         child: filteredList.isEmpty
                             ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    Icon(Icons.local_shipping_outlined, size: 48, color: Colors.white24),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'No matching deliveries found',
-                                      style: TextStyle(color: Colors.white54, fontSize: 14),
-                                    ),
-                                  ],
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24.0),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.local_shipping_outlined, size: 54, color: Colors.white24),
+                                      const SizedBox(height: 14),
+                                      const Text(
+                                        'No Incoming Orders Found',
+                                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      const Text(
+                                        'No shipments currently match the selected filter.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton.icon(
+                                        onPressed: _fetchSupplies,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: cyanAccent,
+                                          foregroundColor: Colors.black,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        icon: const Icon(Icons.refresh, size: 18),
+                                        label: const Text('Tap to Retry', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               )
                             : ListView.separated(
@@ -289,8 +309,171 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _showUpdateDeliveryStatusDialog(item),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cyanAccent,
+                side: BorderSide(color: cyanAccent.withOpacity(0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.edit_road_outlined, size: 16),
+              label: const Text(
+                'UPDATE DELIVERY STATUS',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  void _showUpdateDeliveryStatusDialog(IncomingSupplyItem item) {
+    String selectedStatus = item.deliveryStatus.label;
+    final remarksController = TextEditingController(text: item.statusRemarks);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F1B2B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Update Status • ${item.poNumber}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white54),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Material: ${item.materialName}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'DELIVERY STATUS',
+                    style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: const ['EXPECTED', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED'].contains(selectedStatus)
+                        ? selectedStatus
+                        : 'IN_TRANSIT',
+                    dropdownColor: const Color(0xFF1E293B),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'EXPECTED', child: Text('EXPECTED')),
+                      DropdownMenuItem(value: 'IN_TRANSIT', child: Text('IN_TRANSIT')),
+                      DropdownMenuItem(value: 'RECEIVED', child: Text('RECEIVED / DELIVERED')),
+                      DropdownMenuItem(value: 'COMPLETED', child: Text('COMPLETED')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() => selectedStatus = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'STATUS REMARKS',
+                    style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: remarksController,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Received at Loading Bay 2, verified seal intact',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        setState(() => _loading = true);
+                        try {
+                          await widget.service.updateDeliveryStatus(
+                            item.purchaseOrderId,
+                            selectedStatus,
+                            remarks: remarksController.text,
+                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Delivery status for ${item.poNumber} updated to $selectedStatus.'),
+                                backgroundColor: const Color(0xFF10B981),
+                              ),
+                            );
+                            _fetchSupplies();
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to update: $e'),
+                                backgroundColor: const Color(0xFFEF4444),
+                              ),
+                            );
+                            setState(() => _loading = false);
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5CC8F8),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('CONFIRM UPDATE', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

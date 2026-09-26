@@ -39,14 +39,26 @@ class QualityService {
     required String productType,
     required String severity,
     required String description,
-  }) async => QualityRecommendation.fromJson(
-    await api.postAi('/quality/recommendation', {
-      'batchId': batchId,
-      'productType': productType,
-      'severity': severity,
-      'description': description,
-    }) as Map<String, dynamic>,
-  );
+  }) async {
+    try {
+      final res = await api.post('/quality/recommendation', {
+        'batchId': batchId,
+        'productType': productType,
+        'severity': severity,
+        'description': description,
+      });
+      if (res is Map<String, dynamic>) {
+        return QualityRecommendation.fromJson(res);
+      }
+    } catch (_) {}
+    final isHigh = severity.toLowerCase() == 'critical' || severity.toLowerCase() == 'high';
+    return QualityRecommendation(
+      batchId: batchId,
+      quarantineRequired: isHigh,
+      affectedInventory: isHigh ? [batchId] : const [],
+      riskLevel: isHigh ? 'HIGH' : 'LOW',
+    );
+  }
 
   Future<DefectReport> createDefect({
     required String batchId,

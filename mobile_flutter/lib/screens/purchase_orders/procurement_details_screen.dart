@@ -372,25 +372,36 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                   color: amberAccent.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.lock_outline_rounded, color: amberAccent, size: 22),
+                child: Icon(Icons.shield_outlined, color: amberAccent, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Waiting for Supply Chain Manager approval',
-                  style: TextStyle(
-                    color: amberAccent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SAFETY GATE REMINDER',
+                      style: TextStyle(
+                        color: amberAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Manager must approve in web dashboard before supplier order or payment occurs.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Review and approval are handled in the Supply Chain Manager Web Console. Floor Workers cannot authorize financial expenditures or release purchase orders.',
-            style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 10),
           Container(
@@ -405,7 +416,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 Icon(Icons.security, size: 14, color: Colors.white54),
                 SizedBox(width: 6),
                 Text(
-                  'Safety Policy Enforced • Read-Only Mode Active',
+                  'Financial Safety Gate • Mobile Read-Only View',
                   style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -618,17 +629,12 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 14),
 
-          // Detail rows
+          // Concise AI Recommendation Summary
           _buildDetailRow('Material', t.materialName),
-          _buildDetailRow('Recommended Supplier', t.supplierName ?? 'Pending'),
-          _buildDetailRow('Recommended Product', t.requiredSpecification.isNotEmpty ? t.requiredSpecification : t.materialName),
+          _buildDetailRow('Recommended Supplier', t.supplierName ?? 'Pending Evaluation'),
           _buildDetailRow(
             'Recommended Quantity',
             '${t.recommendedQuantity?.toStringAsFixed(0) ?? t.netDeficit.toStringAsFixed(0)} units',
-          ),
-          _buildDetailRow(
-            'Unit Price',
-            t.unitPrice != null ? '\$${t.unitPrice!.toStringAsFixed(2)}' : 'TBD',
           ),
           _buildDetailRow(
             'Estimated Total',
@@ -636,8 +642,18 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
             valueColor: cyanAccent,
             isBold: true,
           ),
-          _buildDetailRow('Availability', t.availability ?? 'In Stock'),
-          _buildDetailRow('Lead Time', t.leadTimeDays != null ? '${t.leadTimeDays} days' : 'Standard'),
+          _buildDetailRow(
+            'Validation',
+            t.requiresSupplierVerification ? 'In Verification' : 'Passed',
+            valueColor: t.requiresSupplierVerification ? amberAccent : emeraldAccent,
+            isBold: true,
+          ),
+          _buildDetailRow(
+            'Manager Approval',
+            _statusTracking!.isApprovalPending ? 'Pending' : 'Approved',
+            valueColor: _statusTracking!.isApprovalPending ? amberAccent : emeraldAccent,
+            isBold: true,
+          ),
 
           const SizedBox(height: 12),
           Row(
