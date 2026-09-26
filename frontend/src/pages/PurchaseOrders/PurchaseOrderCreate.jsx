@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -24,6 +24,10 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryMaterialId = searchParams.get('materialId');
+  const queryQuantity = searchParams.get('quantity');
+  const querySku = searchParams.get('sku');
 
   const [suppliers, setSuppliers] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -57,11 +61,26 @@ export default function PurchaseOrderCreate() {
         }
         setMaterials(materialsData || []);
         if ((materialsData || []).length > 0) {
+          let selectedMat = materialsData[0];
+          if (queryMaterialId) {
+            const found = materialsData.find((m) => m.id.toString() === queryMaterialId.toString());
+            if (found) selectedMat = found;
+          } else if (querySku) {
+            const found = materialsData.find(
+              (m) => (m.skuCode || '').toLowerCase() === querySku.toLowerCase()
+            );
+            if (found) selectedMat = found;
+          }
+
+          const prefillQty = queryQuantity && !isNaN(parseFloat(queryQuantity)) && parseFloat(queryQuantity) > 0
+            ? String(queryQuantity)
+            : '100';
+
           setLines([
             {
-              rawMaterialId: materialsData[0].id.toString(),
-              description: materialsData[0].name || '',
-              quantity: '100',
+              rawMaterialId: selectedMat.id.toString(),
+              description: selectedMat.name || '',
+              quantity: prefillQty,
               unitPrice: '15.00'
             }
           ]);
@@ -233,6 +252,21 @@ export default function PurchaseOrderCreate() {
             <span>Launch AI Procurement</span>
           </Link>
         </div>
+
+        {/* Prefilled from Stock Alert Banner */}
+        {(queryMaterialId || queryQuantity) && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                Prefilled from Low Stock Alert (Material ID: #{queryMaterialId || 'N/A'}{queryQuantity ? `, Shortage: ${queryQuantity}` : ''}). You can adjust quantities, unit prices, or select a different vendor.
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+              Low Stock Alert Link
+            </span>
+          </div>
+        )}
 
         {/* Error Alert */}
         {errorMessage && (

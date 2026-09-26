@@ -77,6 +77,8 @@ export default function ProcurementResearch() {
     leadTimeDays: 7
   });
 
+  const [procurementHistory, setProcurementHistory] = useState([]);
+
   // Approval Modals
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -86,10 +88,10 @@ export default function ProcurementResearch() {
   // New Request Form State
   const [showNewForm, setShowNewForm] = useState(!searchParams.get('id'));
   const [formValues, setFormValues] = useState({
-    rawMaterialId: 1,
-    materialName: '',
+    rawMaterialId: parseInt(searchParams.get('materialId'), 10) || 1,
+    materialName: searchParams.get('material') || '',
     specification: 'ISO 9001 certified, barrier laminated pouch film, food-grade compliance',
-    productionRequirement: 3500,
+    productionRequirement: parseFloat(searchParams.get('deficit')) || 3500,
     safetyStock: 500,
     currentStock: 0,
     maximumBudget: 15000,
@@ -98,24 +100,38 @@ export default function ProcurementResearch() {
     requiredByDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
   });
 
-  // 1. Initial Load: Raw materials & list of existing procurement requests
+  // 1. Initial Load: Raw materials, existing procurement requests, and historical learning data
   useEffect(() => {
     let isMounted = true;
     const fetchInitialData = async () => {
       setLoadingInitial(true);
       setErrorMessage('');
       try {
-        const [materialsData, requestsData] = await Promise.all([
+        const [materialsData, requestsData, historyData] = await Promise.all([
           rawMaterialService.getRawMaterials().catch(() => []),
-          procurementService.getAllRequests().catch(() => [])
+          procurementService.getAllRequests().catch(() => []),
+          procurementService.getHistory().catch(() => [])
         ]);
 
         if (!isMounted) return;
 
         setMaterials(materialsData || []);
         setRequests(requestsData || []);
+        setProcurementHistory(historyData || []);
 
-        if (materialsData && materialsData.length > 0 && !formValues.materialName) {
+        const paramMatId = searchParams.get('materialId') ? parseInt(searchParams.get('materialId'), 10) : null;
+        const paramMatName = searchParams.get('material');
+        const paramDeficit = searchParams.get('deficit') ? parseFloat(searchParams.get('deficit')) : null;
+
+        if (paramMatId) {
+          const matchedMat = (materialsData || []).find((m) => m.id === paramMatId);
+          setFormValues((prev) => ({
+            ...prev,
+            rawMaterialId: paramMatId,
+            materialName: paramMatName || (matchedMat ? matchedMat.name : prev.materialName),
+            productionRequirement: paramDeficit || prev.productionRequirement
+          }));
+        } else if (materialsData && materialsData.length > 0 && !formValues.materialName) {
           setFormValues((prev) => ({
             ...prev,
             rawMaterialId: materialsData[0].id,
@@ -128,9 +144,11 @@ export default function ProcurementResearch() {
         if (paramId) {
           setSelectedRequestId(paramId);
           setShowNewForm(false);
-        } else if (requestsData && requestsData.length > 0) {
+        } else if (requestsData && requestsData.length > 0 && !paramMatId) {
           setSelectedRequestId(requestsData[0].id);
           setShowNewForm(false);
+        } else if (paramMatId) {
+          setShowNewForm(true);
         }
       } catch (err) {
         if (isMounted) {
@@ -226,9 +244,9 @@ export default function ProcurementResearch() {
       setSelectedRequestId(newRequest.id);
       setSearchParams({ id: newRequest.id });
 
-      // Step B: Multi-agent execution in LangGraph (via ASP.NET Core)
+      // Step B: Multi-agent execution in LangGraph (via ASP.NET Core: POST /api/procurement-requests/{id}/analyze)
       setAgentStep('purchasing');
-      const completedRequest = await procurementService.startResearch(newRequest.id);
+      const completedRequest = await procurementService.analyzeRequest(newRequest.id);
 
       setAgentStep('validation');
       // Fetch recommendation and updated tracking
@@ -258,7 +276,7 @@ export default function ProcurementResearch() {
     setAgentStep('purchasing');
 
     try {
-      await procurementService.startResearch(selectedRequestId);
+      await procurementService.analyzeRequest(selectedRequestId);
       setAgentStep('validation');
       await loadRequestDetails(selectedRequestId);
       setAgentStep('done');
@@ -772,13 +790,22 @@ export default function ProcurementResearch() {
 
       {/* MULTI-AGENT LIVE EXECUTION TIMELINE */}
       {isResearching && (
-        <div className="p-6 rounded-2xl bg-slate-900/80 border border-purple-500/40 backdrop-blur-md space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h4 className="text-sm font-bold text-white flex items-center gap-2">
-              <Bot className="w-4 h-4 text-purple-400 animate-spin" />
-              <span>Multi-Agent LangGraph Execution Pipeline</span>
-            </h4>
-            <span className="text-xs text-purple-400 font-medium">Live Coordination</span>
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-950/70 via-slate-900 to-slate-950 border border-purple-500/50 backdrop-blur-md space-y-4 animate-fade-in shadow-2xl shadow-purple-950/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 text-purple-400 animate-spin shrink-0" />
+              <div>
+                <h4 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>AI is analyzing procurement options...</span>
+                </h4>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Autonomous multi-agent procurement analysis evaluating market grounding, MOQ/pack size compliance, quality evidence, and budget limits. (Screen remains interactive).
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 text-xs font-bold rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 w-fit shrink-0">
+              Live Coordination Active
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -926,95 +953,130 @@ export default function ProcurementResearch() {
             </div>
           </div>
 
-          {/* AI RECOMMENDATION CARD */}
+          {/* AI RECOMMENDATION CARD (Requirement 6) */}
           {activeCandidate && (
-            <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-950/50 via-slate-900 to-slate-900 border border-purple-500/40 backdrop-blur-sm space-y-4">
+            <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-900 border border-purple-500/40 backdrop-blur-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-                    <Sparkles className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 text-lg">
+                    🤖
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                      Primary AI Agent Recommendation
+                    <span className="text-[11px] font-black uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                      <span>🤖 AI RECOMMENDATION</span>
                     </span>
-                    <h4 className="text-base font-bold text-white">{activeCandidate.supplierName}</h4>
+                    <h4 className="text-base font-bold text-white mt-0.5">
+                      Recommended Supplier: <span className="text-purple-300">{activeCandidate.supplierName}</span>
+                    </h4>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Supplier Status Badge */}
+                  {/* Verification Badge (Requirement 5) */}
                   {activeCandidate.supplierStatus === 'APPROVED' ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>APPROVED SUPPLIER</span>
+                      <span>VERIFIED</span>
+                    </span>
+                  ) : activeCandidate.supplierStatus === 'BLOCKED' ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>BLOCKED</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
                       <AlertTriangle className="w-3.5 h-3.5" />
-                      <span>UNVERIFIED SUPPLIER</span>
+                      <span>UNVERIFIED</span>
                     </span>
                   )}
 
-                  {/* Quality Badge */}
+                  {/* Quality Badge (Requirement 5) */}
                   <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
                       activeCandidate.qualityEvidence && !activeCandidate.qualityEvidence.includes('UNKNOWN')
                         ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
                         : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                     }`}
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{activeCandidate.qualityEvidence || 'UNKNOWN'}</span>
+                    <span>
+                      {activeCandidate.qualityEvidence && !activeCandidate.qualityEvidence.includes('UNKNOWN')
+                        ? 'QUALITY EVIDENCE AVAILABLE'
+                        : 'QUALITY EVIDENCE UNKNOWN'}
+                    </span>
                   </span>
                 </div>
               </div>
 
-              {/* Rationale & Metrics Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                <div className="md:col-span-2 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
-                  <span className="text-slate-400 font-semibold uppercase text-[10px] block mb-1">
-                    AI Selection Rationale
-                  </span>
-                  <p className="text-slate-300 leading-relaxed">
+              {/* Exact Fields Required for AI Recommendation Card */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 uppercase text-[10px] font-bold block">Recommended Supplier:</span>
+                  <p className="text-white font-bold text-sm truncate">{activeCandidate.supplierName}</p>
+                  <span className="text-[10px] text-slate-500 font-mono">Lead Time: {activeCandidate.leadTimeDays || 7} days</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 uppercase text-[10px] font-bold block">Recommended Quantity:</span>
+                  <p className="text-white font-bold text-sm font-mono">
+                    {(activeCandidate.recommendedOrderQuantity || 0).toLocaleString()} units
+                  </p>
+                  <span className="text-[10px] text-slate-500">MOQ: {activeCandidate.minimumOrderQuantity || 1} • Pack: {activeCandidate.packSize || 1}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 uppercase text-[10px] font-bold block">Unit Price:</span>
+                  <p className="text-emerald-400 font-bold text-sm font-mono">
+                    ${(activeCandidate.unitPrice || 0).toFixed(2)}
+                  </p>
+                  <span className="text-[10px] text-slate-500">Per unit landed cost</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 uppercase text-[10px] font-bold block">Total Estimated Cost:</span>
+                  <p className="text-emerald-400 font-extrabold text-base font-mono">
+                    ${(activeCandidate.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                  <span className="text-[10px] text-slate-500">Budget Limit: ${(currentRequest.maximumBudget || 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Explanations & Risks */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 font-bold uppercase text-[10px] block">Reason Summary:</span>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
                     {recommendation?.rationale ||
-                      `Ranked #1 based on lowest total landed cost ($${(activeCandidate.totalCost || 0).toLocaleString()}), full specification compatibility with ${activeCandidate.materialName}, and verified delivery within ${activeCandidate.leadTimeDays} days.`}
+                      `Ranked #1 candidate based on lowest total landed cost ($${(activeCandidate.totalCost || 0).toLocaleString()}), full specification compatibility with ${activeCandidate.materialName}, and verified delivery within ${activeCandidate.leadTimeDays} days.`}
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
-                  <span className="text-slate-400 font-semibold uppercase text-[10px] block">
-                    Order Quantity & Cost
-                  </span>
-                  <div>
-                    <div className="text-base font-bold text-white">
-                      {(activeCandidate.recommendedOrderQuantity || 0).toLocaleString()} units
-                    </div>
-                    <div className="text-slate-400 text-[11px] mt-0.5">
-                      @ ${(activeCandidate.unitPrice || 0).toFixed(2)} / unit
-                    </div>
-                  </div>
-                  <div className="text-emerald-400 font-bold text-sm mt-1">
-                    Total: ${(activeCandidate.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </div>
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 font-bold uppercase text-[10px] block">Risk / Warnings:</span>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    {activeCandidate.supplierStatus !== 'APPROVED'
+                      ? 'UNVERIFIED SUPPLIER: Enterprise policy requires manager verification and onboarding into ERP before generating a Draft PO.'
+                      : 'Low operational risk. Supplier SLA and compliance verified with active vendor record.'}
+                  </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
-                  <span className="text-slate-400 font-semibold uppercase text-[10px] block">
-                    Terms & Logistics
-                  </span>
-                  <div className="space-y-1 text-slate-300">
-                    <div>
-                      MOQ: <span className="text-white font-medium">{activeCandidate.minimumOrderQuantity}</span>
-                    </div>
-                    <div>
-                      Pack Size: <span className="text-white font-medium">{activeCandidate.packSize}</span>
-                    </div>
-                    <div>
-                      Lead Time:{' '}
-                      <span className="text-white font-medium">{activeCandidate.leadTimeDays} days</span>
-                    </div>
-                  </div>
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 font-bold uppercase text-[10px] block">Source Information:</span>
+                  <p className="text-slate-300 break-all leading-relaxed text-[11px]">
+                    {activeCandidate.sourceUrl ? (
+                      <a
+                        href={activeCandidate.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-400 hover:text-purple-300 underline inline-flex items-center gap-1"
+                      >
+                        <span className="truncate max-w-[200px]">{activeCandidate.sourceUrl}</span>
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                      </a>
+                    ) : (
+                      'Enterprise Supplier Database (ERP Catalog)'
+                    )}
+                  </p>
                 </div>
               </div>
 
@@ -1046,13 +1108,13 @@ export default function ProcurementResearch() {
             </div>
           )}
 
-          {/* SUPPLIER CANDIDATES COMPARISON TABLE */}
+          {/* SUPPLIER CANDIDATES COMPARISON TABLE (Requirement 5) */}
           <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-purple-400" />
-                  <span>Evaluated Supplier Candidates</span>
+                  <span>Supplier Comparison Table</span>
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Comparison matrix of external candidates discovered via Gemini Search Grounding & ERP vendors.
@@ -1066,29 +1128,32 @@ export default function ProcurementResearch() {
                 <thead>
                   <tr className="border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px]">
                     <th className="py-2.5 px-3">Supplier</th>
-                    <th className="py-2.5 px-3">Material</th>
-                    <th className="py-2.5 px-3 text-right">Unit Price</th>
+                    <th className="py-2.5 px-3 text-right">Price</th>
                     <th className="py-2.5 px-3 text-center">MOQ</th>
-                    <th className="py-2.5 px-3 text-center">Pack</th>
-                    <th className="py-2.5 px-3 text-center">Availability</th>
+                    <th className="py-2.5 px-3 text-center">Pack Size</th>
+                    <th className="py-2.5 px-3">Quality</th>
                     <th className="py-2.5 px-3 text-center">Lead Time</th>
-                    <th className="py-2.5 px-3">Quality Standard</th>
-                    <th className="py-2.5 px-3">Supplier Status</th>
+                    <th className="py-2.5 px-3 text-center">Verification</th>
                     <th className="py-2.5 px-3 text-right">Total Cost</th>
                     <th className="py-2.5 px-3 text-center">Source</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
                     <th className="py-2.5 px-3 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {candidatesList.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-8 text-center text-slate-500">
+                      <td colSpan={11} className="py-8 text-center text-slate-500">
                         No supplier candidates evaluated yet. Click "Start AI Procurement Research" to run grounding.
                       </td>
                     </tr>
                   ) : (
                     candidatesList.map((cand) => {
                       const isSelected = cand.id === activeCandidate?.id;
+                      const hasQuality = cand.qualityEvidence && !cand.qualityEvidence.includes('UNKNOWN') && cand.qualityEvidence.trim().length > 3;
+                      const isVerified = cand.supplierStatus === 'APPROVED';
+                      const isBlocked = cand.supplierStatus === 'BLOCKED' || cand.isBlocked;
+
                       return (
                         <tr
                           key={cand.id}
@@ -1096,48 +1161,64 @@ export default function ProcurementResearch() {
                             isSelected ? 'bg-purple-950/20' : ''
                           }`}
                         >
+                          {/* Supplier */}
                           <td className="py-3 px-3 font-semibold text-white">
                             <div className="flex items-center gap-1.5">
                               {isSelected && <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />}
                               <span>{cand.supplierName}</span>
                             </div>
+                            <span className="text-[10px] text-slate-400 block max-w-[130px] truncate">{cand.materialName}</span>
                           </td>
-                          <td className="py-3 px-3 text-slate-300 max-w-[150px] truncate" title={cand.materialName}>
-                            {cand.materialName}
-                          </td>
-                          <td className="py-3 px-3 text-right font-medium text-white">
+
+                          {/* Price */}
+                          <td className="py-3 px-3 text-right font-medium text-white font-mono">
                             ${(cand.unitPrice || 0).toFixed(2)}
                           </td>
-                          <td className="py-3 px-3 text-center text-slate-300">
-                            {cand.minimumOrderQuantity}
+
+                          {/* MOQ */}
+                          <td className="py-3 px-3 text-center text-slate-300 font-mono">
+                            {cand.minimumOrderQuantity || 1}
                           </td>
-                          <td className="py-3 px-3 text-center text-slate-300">
-                            {cand.packSize}
+
+                          {/* Pack Size */}
+                          <td className="py-3 px-3 text-center text-slate-300 font-mono">
+                            {cand.packSize || 1}
                           </td>
-                          <td className="py-3 px-3 text-center">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300">
-                              {cand.availability || 'In Stock'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-center text-slate-300">
-                            {cand.leadTimeDays}d
-                          </td>
+
+                          {/* Quality (Explicit badges) */}
                           <td className="py-3 px-3">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                cand.qualityEvidence && !cand.qualityEvidence.includes('UNKNOWN')
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                hasQuality
                                   ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
-                                  : 'bg-zinc-800 text-zinc-400'
+                                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                               }`}
                             >
-                              {cand.qualityEvidence || 'UNKNOWN'}
+                              {hasQuality ? 'QUALITY EVIDENCE AVAILABLE' : 'QUALITY EVIDENCE UNKNOWN'}
                             </span>
+                            {hasQuality && cand.qualityEvidence && (
+                              <span className="block text-[9px] text-slate-400 mt-0.5 truncate max-w-[140px]" title={cand.qualityEvidence}>
+                                {cand.qualityEvidence}
+                              </span>
+                            )}
                           </td>
-                          <td className="py-3 px-3">
-                            {cand.supplierStatus === 'APPROVED' ? (
+
+                          {/* Lead Time */}
+                          <td className="py-3 px-3 text-center text-slate-300 font-mono">
+                            {cand.leadTimeDays || 7}d
+                          </td>
+
+                          {/* Verification (Explicit statuses: VERIFIED, UNVERIFIED, BLOCKED) */}
+                          <td className="py-3 px-3 text-center">
+                            {isVerified ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                                 <Check className="w-3 h-3" />
-                                <span>APPROVED</span>
+                                <span>VERIFIED</span>
+                              </span>
+                            ) : isBlocked ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                <X className="w-3 h-3" />
+                                <span>BLOCKED</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
@@ -1146,9 +1227,13 @@ export default function ProcurementResearch() {
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-right font-bold text-white">
+
+                          {/* Total Cost */}
+                          <td className="py-3 px-3 text-right font-bold text-white font-mono">
                             ${(cand.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
+
+                          {/* Source */}
                           <td className="py-3 px-3 text-center">
                             {cand.sourceUrl ? (
                               <a
@@ -1156,7 +1241,7 @@ export default function ProcurementResearch() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-purple-400 hover:text-purple-300 inline-block p-1"
-                                title="View Supplier Catalog"
+                                title="View Supplier Source"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                               </a>
@@ -1164,12 +1249,21 @@ export default function ProcurementResearch() {
                               <span className="text-slate-600">—</span>
                             )}
                           </td>
+
+                          {/* Status */}
+                          <td className="py-3 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300">
+                              {cand.availability || 'In Stock'}
+                            </span>
+                          </td>
+
+                          {/* Action */}
                           <td className="py-3 px-3 text-center">
                             <button
                               onClick={() => setSelectedCandidateId(cand.id)}
                               className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
                                 isSelected
-                                  ? 'bg-purple-600 text-white'
+                                  ? 'bg-purple-600 text-white shadow-md'
                                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                               }`}
                             >
@@ -1498,6 +1592,140 @@ export default function ProcurementResearch() {
               </div>
             </div>
           )}
+
+          {/* FUTURE LEARNING & PROCUREMENT OUTCOME HISTORY (Requirement 8) */}
+          <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  <span>Future Learning & Historical Procurement Intelligence</span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Actual backend procurement telemetry (GET /api/procurement/history) used to evaluate supplier SLA performance, quality conformance, and lead time trends.
+                </p>
+              </div>
+
+              {procurementHistory.length > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold font-mono">
+                    {procurementHistory.length} Telemetry Records
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {procurementHistory.length === 0 ? (
+              <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/80 space-y-2">
+                <History className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs font-semibold text-slate-300">No historical learning outcomes recorded yet</p>
+                <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                  As procurement workflows conclude, manager decisions and delivery outcomes are deterministically captured by ASP.NET Core for supplier ranking and telemetry.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Telemetry Summary Cards */}
+                {(() => {
+                  const total = procurementHistory.length;
+                  const delivered = procurementHistory.filter((h) => h.deliverySuccess).length;
+                  const deliveryRate = total > 0 ? Math.round((delivered / total) * 100) : 100;
+                  const approved = procurementHistory.filter((h) => h.managerDecision === 'Approved').length;
+                  const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 100;
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] uppercase font-bold block">Historical Delivery Rate</span>
+                        <p className="text-lg font-bold text-emerald-400 mt-1 font-mono">{deliveryRate}%</p>
+                        <span className="text-[10px] text-slate-500">{delivered} of {total} on-time fulfillment</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] uppercase font-bold block">Manager Approval Rate</span>
+                        <p className="text-lg font-bold text-cyan-400 mt-1 font-mono">{approvalRate}%</p>
+                        <span className="text-[10px] text-slate-500">{approved} of {total} proposals approved</span>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <span className="text-slate-400 text-[10px] uppercase font-bold block">Learning Dataset Status</span>
+                        <p className="text-lg font-bold text-purple-400 mt-1 font-mono">ACTIVE</p>
+                        <span className="text-[10px] text-slate-500">PostgreSQL ProcurementOutcome Table</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Telemetry Data Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px] bg-slate-950/60">
+                        <th className="py-2.5 px-3">Material</th>
+                        <th className="py-2.5 px-3">Supplier Selected</th>
+                        <th className="py-2.5 px-3 text-right">Qty (Req / Final)</th>
+                        <th className="py-2.5 px-3 text-right">Price (Est / Final)</th>
+                        <th className="py-2.5 px-3 text-center">Lead Time</th>
+                        <th className="py-2.5 px-3">Quality Standard</th>
+                        <th className="py-2.5 px-3 text-center">Verification</th>
+                        <th className="py-2.5 px-3 text-center">Manager Decision</th>
+                        <th className="py-2.5 px-3 text-right">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {procurementHistory.slice(0, 8).map((record) => (
+                        <tr key={record.id} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="py-3 px-3 font-semibold text-white">
+                            <span>{record.material}</span>
+                          </td>
+                          <td className="py-3 px-3 text-slate-300">
+                            <span>{record.selectedSupplier || record.recommendedSupplier}</span>
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-slate-200">
+                            {record.requestedQuantity} / {record.finalOrderedQuantity || record.recommendedQuantity}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-emerald-400">
+                            ${(record.estimatedPrice || 0).toFixed(2)} / ${(record.finalPrice || record.estimatedPrice || 0).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-center text-slate-300 font-mono">
+                            {record.actualLeadTime > 0 ? `${record.actualLeadTime}d` : `${record.estimatedLeadTime}d est`}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30 truncate max-w-[120px] inline-block" title={record.qualityEvidence}>
+                              {record.qualityEvidence || 'ISO 9001'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              record.supplierVerification === 'VERIFIED'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              {record.supplierVerification || 'VERIFIED'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              record.managerDecision === 'Approved'
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : record.managerDecision === 'Rejected'
+                                ? 'bg-rose-500/10 text-rose-400'
+                                : 'bg-orange-500/10 text-orange-400'
+                            }`}>
+                              {record.managerDecision || 'Approved'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right text-slate-500 font-mono">
+                            {new Date(record.createdAt).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
