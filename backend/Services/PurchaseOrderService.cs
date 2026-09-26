@@ -192,6 +192,155 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             return (await GetByIdAsync(po.Id))!;
         }
 
+        /// <summary>
+        /// DELETE /api/purchase-orders/{id} — Delete PO (Draft status only).
+        /// </summary>
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.OrderLines)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (po == null) return false;
+
+            if (po.Status != PurchaseOrderStatus.Draft)
+            {
+                throw new InvalidOperationException($"Purchase Order {po.PoNumber} cannot be deleted because it is in '{po.Status}' status. Only Draft purchase orders may be deleted.");
+            }
+
+            _context.OrderLines.RemoveRange(po.OrderLines);
+            _context.PurchaseOrders.Remove(po);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        // ── OrderLine Sub-Resource CRUD (Requirement 5) ──────────────────────────
+
+        public async Task<IEnumerable<OrderLineResponseDto>> GetOrderLinesAsync(int poId)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.OrderLines)
+                    .ThenInclude(ol => ol.RawMaterial)
+                .FirstOrDefaultAsync(p => p.Id == poId)
+                ?? throw new KeyNotFoundException($"Purchase Order {poId} not found.");
+
+            return po.OrderLines.Select(MapOrderLineToResponseDto);
+        }
+
+        public async Task<OrderLineResponseDto> AddOrderLineAsync(int poId, OrderLineDto dto)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.OrderLines)
+                .FirstOrDefaultAsync(p => p.Id == poId)
+                ?? throw new KeyNotFoundException($"Purchase Order {poId} not found.");
+
+            if (po.Status != PurchaseOrderStatus.Draft)
+                throw new InvalidOperationException($"Order lines can only be modified on Draft purchase orders. Current status: {po.Status}");
+
+            var rawMaterialId = dto.RawMaterialId > 0 ? dto.RawMaterialId : dto.MaterialId;
+            var material = await _context.RawMaterials.FindAsync(rawMaterialId)
+                ?? throw new KeyNotFoundException($"RawMaterial {rawMaterialId} not found.");
+
+            var line = new OrderLine
+            {
+                PurchaseOrderId = po.Id,
+                RawMaterialId = rawMaterialId,
+                Description = dto.Description,
+                Quantity = dto.Quantity,
+                UnitPrice = dto.UnitPrice,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            line.TotalPrice = CalculateLineCost(line);
+
+            po.OrderLines.Add(line);
+            po.TotalCost = CalculateTotalCost(po);
+            ValidateBudget(po);
+            po.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            line.RawMaterial = material;
+            return MapOrderLineToResponseDto(line);
+        }
+
+        public async Task<OrderLineResponseDto> UpdateOrderLineAsync(int poId, int lineId, OrderLineDto dto)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.OrderLines)
+                    .ThenInclude(ol => ol.RawMaterial)
+                .FirstOrDefaultAsync(p => p.Id == poId)
+                ?? throw new KeyNotFoundException($"Purchase Order {poId} not found.");
+
+            if (po.Status != PurchaseOrderStatus.Draft)
+                throw new InvalidOperationException($"Order lines can only be modified on Draft purchase orders. Current status: {po.Status}");
+
+            var line = po.OrderLines.FirstOrDefault(l => l.Id == lineId)
+                ?? throw new KeyNotFoundException($"OrderLine {lineId} not found on Purchase Order {poId}.");
+
+            var rawMaterialId = dto.RawMaterialId > 0 ? dto.RawMaterialId : dto.MaterialId;
+            var material = await _context.RawMaterials.FindAsync(rawMaterialId)
+                ?? throw new KeyNotFoundException($"RawMaterial {rawMaterialId} not found.");
+
+            line.RawMaterialId = rawMaterialId;
+            line.RawMaterial = material;
+            line.Description = dto.Description;
+            line.Quantity = dto.Quantity;
+            line.UnitPrice = dto.UnitPrice;
+            line.TotalPrice = CalculateLineCost(line);
+            line.UpdatedAt = DateTime.UtcNow;
+
+            po.TotalCost = CalculateTotalCost(po);
+            ValidateBudget(po);
+            po.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return MapOrderLineToResponseDto(line);
+        }
+
+        public async Task<bool> DeleteOrderLineAsync(int poId, int lineId)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.OrderLines)
+                .FirstOrDefaultAsync(p => p.Id == poId)
+                ?? throw new KeyNotFoundException($"Purchase Order {poId} not found.");
+
+            if (po.Status != PurchaseOrderStatus.Draft)
+                throw new InvalidOperationException($"Order lines can only be modified on Draft purchase orders. Current status: {po.Status}");
+
+            var line = po.OrderLines.FirstOrDefault(l => l.Id == lineId);
+            if (line == null) return false;
+
+            if (po.OrderLines.Count <= 1)
+                throw new InvalidOperationException("Cannot remove the only order line. Purchase orders must have at least one line.");
+
+            po.OrderLines.Remove(line);
+            _context.OrderLines.Remove(line);
+
+            po.TotalCost = CalculateTotalCost(po);
+            ValidateBudget(po);
+            po.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        private static OrderLineResponseDto MapOrderLineToResponseDto(OrderLine line)
+        {
+            return new OrderLineResponseDto
+            {
+                Id = line.Id,
+                RawMaterialId = line.RawMaterialId,
+                RawMaterialName = line.RawMaterial?.Name ?? $"Material #{line.RawMaterialId}",
+                RawMaterialSku = line.RawMaterial?.SkuCode ?? string.Empty,
+                Description = line.Description ?? string.Empty,
+                Quantity = line.Quantity,
+                UnitPrice = line.UnitPrice,
+                TotalPrice = line.TotalPrice > 0 ? line.TotalPrice : line.Quantity * line.UnitPrice
+            };
+        }
+
         // ── Approval Workflow ─────────────────────────────────────────────────────
 
         public async Task<PurchaseOrderResponseDto> SubmitForApprovalAsync(int id, Guid? userId = null)
@@ -475,6 +624,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 if (!result.Success)
                 {
                     po.PaymentFailureReason = result.ErrorMessage;
+                    TransitionStatus(po, PurchaseOrderStatus.PaymentFailed);
                     await _context.SaveChangesAsync();
 
                     // Record audit: payment failed
@@ -483,13 +633,14 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     if (tx is not null) await tx.CommitAsync();
 
                     _logger.LogWarning(
-                        "Stripe payment failed for PO {PoNumber}: {Error}. Status remains Payment.",
+                        "Stripe payment failed for PO {PoNumber}: {Error}. Status transitioned to PaymentFailed.",
                         po.PoNumber, result.ErrorMessage);
                     return;
                 }
 
                 // Clear previous failure reasons on success
                 po.PaymentFailureReason = null;
+                TransitionStatus(po, PurchaseOrderStatus.Paid);
                 await _context.SaveChangesAsync();
 
                 // Record audit: payment completed

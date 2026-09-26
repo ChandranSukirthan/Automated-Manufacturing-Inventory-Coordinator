@@ -32,6 +32,7 @@ namespace ManufacturingCoordinator.Data
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
         public DbSet<ProcurementRequest> ProcurementRequests { get; set; } = null!;
         public DbSet<SupplierCandidate> SupplierCandidates { get; set; } = null!;
+        public DbSet<ProcurementOutcome> ProcurementOutcomes { get; set; } = null!;
 
         // Student 3 — QA / Defect Reporting & Inventory
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
@@ -806,6 +807,26 @@ namespace ManufacturingCoordinator.Data
                     .WithMany()
                     .HasForeignKey(sc => sc.SupplierId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── ProcurementOutcome (Student 2 - Future Learning Dataset) ─────────
+            modelBuilder.Entity<ProcurementOutcome>(entity =>
+            {
+                entity.HasKey(po => po.Id);
+                entity.Property(po => po.Material).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.RecommendedSupplier).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.SelectedSupplier).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.RequestedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.RecommendedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.FinalOrderedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.EstimatedPrice).HasColumnType("decimal(18,2)");
+                entity.Property(po => po.FinalPrice).HasColumnType("decimal(18,2)");
+                entity.Property(po => po.QualityEvidence).HasMaxLength(1000);
+                entity.Property(po => po.SupplierVerification).HasMaxLength(100);
+                entity.Property(po => po.ManagerDecision).IsRequired().HasMaxLength(100);
+                entity.Property(po => po.ManagerRevision).HasMaxLength(1000);
+                entity.Property(po => po.QualityOutcome).HasMaxLength(500);
+                entity.Property(po => po.CreatedAt).HasDefaultValueSql("timezone('utc', now())");
             });
         }
     }

@@ -123,6 +123,121 @@ namespace ManufacturingCoordinator.Controllers
             }
         }
 
+        /// <summary>DELETE /api/purchase-orders/{id} — delete purchase order (Draft status only)</summary>
+        [HttpDelete("{id:int}")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var deleted = await _poService.DeleteAsync(id);
+                if (!deleted) return NotFound(new { message = $"Purchase Order {id} not found." });
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // ── OrderLine Sub-Resource CRUD (Requirement 5) ──────────────────────────
+
+        /// <summary>GET /api/purchase-orders/{id}/lines — list order lines for a purchase order</summary>
+        [HttpGet("{id:int}/lines")]
+        [ProducesResponseType(typeof(IEnumerable<OrderLineResponseDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<IEnumerable<OrderLineResponseDto>>> GetOrderLines(int id)
+        {
+            try
+            {
+                var lines = await _poService.GetOrderLinesAsync(id);
+                return Ok(lines);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>POST /api/purchase-orders/{id}/lines — add an order line to a Draft purchase order</summary>
+        [HttpPost("{id:int}/lines")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(OrderLineResponseDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<OrderLineResponseDto>> AddOrderLine(int id, [FromBody] OrderLineDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                var created = await _poService.AddOrderLineAsync(id, dto);
+                return StatusCode(StatusCodes.Status201Created, created);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>PUT /api/purchase-orders/{id}/lines/{lineId} — update an order line on a Draft purchase order</summary>
+        [HttpPut("{id:int}/lines/{lineId:int}")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(OrderLineResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<OrderLineResponseDto>> UpdateOrderLine(int id, int lineId, [FromBody] OrderLineDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            try
+            {
+                var updated = await _poService.UpdateOrderLineAsync(id, lineId, dto);
+                return Ok(updated);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>DELETE /api/purchase-orders/{id}/lines/{lineId} — remove an order line from a Draft purchase order</summary>
+        [HttpDelete("{id:int}/lines/{lineId:int}")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> DeleteOrderLine(int id, int lineId)
+        {
+            try
+            {
+                var deleted = await _poService.DeleteOrderLineAsync(id, lineId);
+                if (!deleted) return NotFound(new { message = $"OrderLine {lineId} not found." });
+                return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         // ── Approval Workflow ─────────────────────────────────────────────────────
 
         /// <summary>POST /api/purchase-orders/{id}/submit — transition from Draft to PendingApproval</summary>
