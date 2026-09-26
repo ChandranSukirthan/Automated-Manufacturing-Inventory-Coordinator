@@ -119,6 +119,15 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     if quarantined_count > 0:
         completed.append(f"Validation: Detected {quarantined_count} quarantined inventory rolls")
 
+    # ── 10. Quality agent defect & quarantine integration ───────────────────────
+    quality_data = state.get("quality_data")
+    if quality_data:
+        defect = quality_data.get("defect") or {}
+        severity = str(defect.get("severity") or "").upper()
+        if severity in ("HIGH", "CRITICAL"):
+            quarantine_status = "QUARANTINE_REQUIRED"
+            completed.append("Quality Agent: Quarantine required for batch due to severe defect")
+
     # ── Determine overall status ───────────────────────────────────────────────
     hard_failures = [
         budget_check == "FAIL",
@@ -133,6 +142,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         pack_size_check == "WARNING",
         material_check == "WARNING",
         quarantined_count > 0,
+        quarantine_status == "QUARANTINE_REQUIRED",
     ]
 
     if any(hard_failures):
@@ -152,6 +162,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "availabilityCheck": availability_check,
         "materialCheck": material_check,
         "quarantineStatus": quarantine_status,
+        "qualitySafetyStatus": quarantine_status,
         "quarantinedRollsCount": quarantined_count,
         "estimatedTotalCost": estimated_total,
         "budgetLimit": budget_limit,
@@ -166,7 +177,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     # ── Hard failure: halt workflow ────────────────────────────────────────────
     if overall_status == "FAILED":
-        return {
+        fail_res = {
             "current_agent": "Validation/Safety",
             "status": WorkflowStatus.Failed,
             "validation_results": validation_results,
@@ -175,10 +186,13 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "errors": errors,
             "final_outcome": f"Validation failed: {'; '.join(errors)}",
         }
+        if quality_data is not None:
+            fail_res["quality_data"] = quality_data
+        return fail_res
 
     # ── Already approved by manager (resumed workflow) ─────────────────────────
     if state.get("approval_status") == ApprovalStatus.Approved:
-        return {
+        appr_res = {
             "current_agent": "Validation/Safety",
             "status": WorkflowStatus.Running,
             "validation_results": validation_results,
@@ -186,12 +200,15 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "completed_steps": completed,
             "errors": errors,
         }
+        if quality_data is not None:
+            appr_res["quality_data"] = quality_data
+        return appr_res
 
     # ── Revision requested: re-enter purchasing with revision context ──────────
     if state.get("approval_status") == ApprovalStatus.RevisionRequested:
         revision = state.get("revision_request") or "Manager requested revision"
         completed.append(f"Validation: Revision requested — {revision}")
-        return {
+        rev_res = {
             "current_agent": "Validation/Safety",
             "status": WorkflowStatus.WaitingForApproval,
             "approval_status": ApprovalStatus.Pending,
@@ -200,17 +217,23 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "completed_steps": completed,
             "errors": errors,
         }
+        if quality_data is not None:
+            rev_res["quality_data"] = quality_data
+        return rev_res
 
     # ── Route to human approval (all procurement requires manager sign-off) ────
-    return {
+    wait_res = {
         "current_agent": "Validation/Safety",
         "status": WorkflowStatus.WaitingForApproval,
         "approval_status": ApprovalStatus.Pending,
         "validation_results": validation_results,
         "requires_approval": True,
-        "completed_steps": completed + ["Waiting for Supply Chain Manager approval"],
+        "completed_steps": completed + ["Waiting for Supply Chain Manager human approval"],
         "errors": errors,
     }
+    if quality_data is not None:
+        wait_res["quality_data"] = quality_data
+    return wait_res
 
 
 def execution_node(state: AgentState) -> Dict[str, Any]:

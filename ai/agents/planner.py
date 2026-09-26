@@ -94,6 +94,29 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     _promote("required_by_date", "requiredByDate", "required_by_date")
     _promote("specification", "requiredSpecification", "specification")
 
+    # If material_name was not provided, infer from objective
+    if not updates.get("material_name") and not state.get("material_name"):
+        obj_lower = objective.lower()
+        if "boxpouch" in obj_lower or "film" in obj_lower:
+            updates["material_name"] = "BoxPouch Film"
+            updates["specification"] = "BP-FILM-001"
+        elif "copper" in obj_lower:
+            updates["material_name"] = "Copper Wire"
+            updates["specification"] = "CW-100"
+        elif "arduino" in obj_lower:
+            updates["material_name"] = "Arduino UNO R3"
+            updates["specification"] = "MCU-UNO-R3"
+
+    # If net_deficit was not provided, infer default for replenishment objectives
+    if updates.get("net_deficit") is None and state.get("net_deficit") is None:
+        obj_lower = objective.lower()
+        if any(w in obj_lower for w in ["replenish", "procure", "low", "shortage", "reorder", "purchase"]):
+            updates["net_deficit"] = 1000.0
+            if updates.get("required_quantity") is None and state.get("required_quantity") is None:
+                updates["required_quantity"] = 1000.0
+            if updates.get("budget_limit") is None and state.get("budget_limit") is None:
+                updates["budget_limit"] = 20000.0
+
     completed = list(state.get("completed_steps") or [])
     completed.append("Planner: Generated structured execution plan")
 

@@ -33,10 +33,20 @@ namespace backend.Tests
         }
 
         public Task<(string? workflowId, List<SupplierCandidateDto> candidates)> ResearchProcurementSuppliersWithWorkflowAsync(
-            string materialName, 
-            string specification, 
-            decimal requiredQuantity, 
-            string? preferredRegion)
+            string materialName,
+            string specification,
+            decimal requiredQuantity,
+            string? preferredRegion,
+            string? materialId = null,
+            decimal? currentStock = null,
+            decimal? safetyStock = null,
+            decimal? openPOQuantity = null,
+            decimal? netDeficit = null,
+            decimal? budgetLimit = null,
+            string? unit = null,
+            string? qualityRequirement = null,
+            string? requiredByDate = null,
+            int? procurementRequestId = null)
         {
             return Task.FromResult<(string?, List<SupplierCandidateDto>)>((
                 "WF-TEST-12345", 

@@ -158,7 +158,7 @@ def save_procurement_outcome(state: AgentState) -> None:
 def _after_data_extraction(state: AgentState) -> str:
     if state.get("status") == WorkflowStatus.Failed:
         return END
-    return "production_analysis"
+    return "purchasing"
 
 
 def _after_purchasing(state: AgentState) -> str:
@@ -171,8 +171,10 @@ def _after_validation(state: AgentState) -> str:
     if state.get("status") == WorkflowStatus.Failed:
         return END
     if state.get("requires_approval") or state.get("status") == WorkflowStatus.WaitingForApproval:
-        return END  # pause for human approval
-    return "execution"
+        return END  # Pause for human approval gate
+    if state.get("approval_status") == ApprovalStatus.RevisionRequested:
+        return "purchasing"  # Loop back to purchasing on revision
+    return END
 
 
 # ── Graph assembly ─────────────────────────────────────────────────────────────
@@ -180,25 +182,26 @@ def _after_validation(state: AgentState) -> str:
 def build_workflow_graph():
     """
     Assembles the LangGraph StateGraph.
-    Four agents only — no fifth agent added.
+    EXACTLY FOUR AGENTS — no fifth agent added:
+    1. planner (Planner / Coordinator)
+    2. data_extraction (Data Extraction Agent)
+    3. purchasing (Goal-Based Purchasing Agent)
+    4. validation (Validation / Safety Agent)
     """
     workflow = StateGraph(AgentState)
 
     workflow.add_node("planner", planner_node)
     workflow.add_node("data_extraction", data_extraction_node)
-    workflow.add_node("production_analysis", production_analysis_node)
     workflow.add_node("purchasing", purchasing_node)
     workflow.add_node("validation", validation_node)
-    workflow.add_node("execution", execution_node)
 
     workflow.add_edge(START, "planner")
     workflow.add_edge("planner", "data_extraction")
     workflow.add_conditional_edges(
         "data_extraction",
         _after_data_extraction,
-        {"production_analysis": "production_analysis", END: END},
+        {"purchasing": "purchasing", END: END},
     )
-    workflow.add_edge("production_analysis", "purchasing")
     workflow.add_conditional_edges(
         "purchasing",
         _after_purchasing,
@@ -207,9 +210,8 @@ def build_workflow_graph():
     workflow.add_conditional_edges(
         "validation",
         _after_validation,
-        {"execution": "execution", END: END},
+        {"purchasing": "purchasing", END: END},
     )
-    workflow.add_edge("execution", END)
 
     return workflow.compile()
 
@@ -424,31 +426,59 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
 
     return {
         "workflowId": state.get("workflow_id"),
+        "workflow_id": state.get("workflow_id"),
         "procurementRequestId": state.get("procurement_request_id"),
-        "status": output_status,
+        "procurement_request_id": state.get("procurement_request_id"),
+        "status": status_str,
+        "reviewStatus": output_status,
+        "review_status": output_status,
         "material": state.get("material_name"),
+        "materialName": state.get("material_name"),
+        "material_name": state.get("material_name"),
         "materialId": state.get("material_id"),
+        "material_id": state.get("material_id"),
         "netDeficit": state.get("net_deficit"),
+        "net_deficit": state.get("net_deficit"),
         "requiredQuantity": state.get("net_deficit"),
+        "required_quantity": state.get("net_deficit"),
         "recommendedQuantity": state.get("recommended_quantity"),
+        "recommended_quantity": state.get("recommended_quantity"),
         "recommendedSupplier": state.get("recommended_supplier"),
+        "recommended_supplier": state.get("recommended_supplier"),
         "alternativeSuppliers": state.get("alternative_suppliers") or [],
+        "alternative_suppliers": state.get("alternative_suppliers") or [],
         "estimatedUnitPrice": state.get("estimated_unit_price"),
+        "estimated_unit_price": state.get("estimated_unit_price"),
         "estimatedTotalCost": state.get("estimated_total_cost"),
+        "estimated_total_cost": state.get("estimated_total_cost"),
         "budgetLimit": state.get("budget_limit"),
+        "budget_limit": state.get("budget_limit"),
         "unit": state.get("unit"),
         "supplierCandidates": state.get("supplier_candidates") or [],
+        "supplier_candidates": state.get("supplier_candidates") or [],
         "qualityEvidence": state.get("quality_evidence") or [],
+        "quality_evidence": state.get("quality_evidence") or [],
         "supplierVerification": state.get("supplier_verification"),
+        "supplier_verification": state.get("supplier_verification"),
         "validationResults": validation,
+        "validation_results": validation,
         "approvalStatus": approval_val.value if isinstance(approval_val, ApprovalStatus) else str(approval_val or "Pending"),
+        "approval_status": approval_val.value if isinstance(approval_val, ApprovalStatus) else str(approval_val or "Pending"),
         "managerDecision": state.get("manager_decision"),
+        "manager_decision": state.get("manager_decision"),
         "revisionRequest": state.get("revision_request"),
+        "revision_request": state.get("revision_request"),
         "risks": state.get("risks") or [],
         "sources": state.get("sources") or [],
         "recommendationSummary": state.get("recommendation_summary"),
+        "recommendation_summary": state.get("recommendation_summary"),
         "completedSteps": state.get("completed_steps") or [],
+        "completed_steps": state.get("completed_steps") or [],
         "errors": state.get("errors") or [],
         "finalOutcome": state.get("final_outcome"),
+        "final_outcome": state.get("final_outcome"),
         "draftPo": state.get("draft_po"),
+        "draft_po": state.get("draft_po"),
+        "purchasing_data": state.get("purchasing_data") or {},
+        "current_agent": state.get("current_agent"),
     }
