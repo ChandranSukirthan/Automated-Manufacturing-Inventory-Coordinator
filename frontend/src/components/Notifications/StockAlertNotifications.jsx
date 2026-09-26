@@ -285,7 +285,7 @@ export default function StockAlertNotifications() {
                         <span>{formatRelativeTime(alert.createdAt || alert.timestamp)}</span>
                       </div>
 
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={(e) => handleOpenMaterialModal(alert, e)}
@@ -297,20 +297,11 @@ export default function StockAlertNotifications() {
 
                         <button
                           type="button"
-                          onClick={(e) => handleManualPurchase(alert, e)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700"
-                        >
-                          <ShoppingCart className="w-3 h-3 text-brand-400" />
-                          <span>Manual Purchase</span>
-                        </button>
-
-                        <button
-                          type="button"
                           onClick={(e) => handleAiAnalyze(alert, e)}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>AI Analysis</span>
+                          <span>AI Analyze</span>
                         </button>
                       </div>
                     </div>
