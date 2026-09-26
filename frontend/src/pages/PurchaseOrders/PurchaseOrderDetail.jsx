@@ -26,9 +26,7 @@ import {
   ChevronUp,
   Cpu,
   Layers,
-  Download,
-  Trash2,
-  Plus
+  Download
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -54,7 +52,6 @@ export default function PurchaseOrderDetail() {
   const [reviseModalOpen, setReviseModalOpen] = useState(false);
   const [approveModalOpen, setApproveModalOpen] = useState(false);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [showAiDetails, setShowAiDetails] = useState(true);
 
   // Check if current user is Supply Chain Manager (role === 1)
@@ -165,20 +162,6 @@ export default function PurchaseOrderDetail() {
     }
   };
 
-  // Cancel / Delete Draft PO
-  const handleCancelDraftConfirm = async () => {
-    setActionLoading(true);
-    try {
-      await purchaseOrderService.deletePurchaseOrder(id);
-      setCancelModalOpen(false);
-      navigate('/purchase-orders');
-    } catch (err) {
-      setError(parseErrorMessage(err, 'Failed to cancel draft purchase order.'));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <AppLayout title="Purchase Order Details">
@@ -211,18 +194,13 @@ export default function PurchaseOrderDetail() {
     );
   }
 
-  // 11-Stage Tracking Timeline (Requirement 7)
+  // Stepper calculations
   const steps = [
-    { key: 'Draft', label: 'Draft' },
+    { key: 'Draft', label: 'Draft Created' },
     { key: 'PendingApproval', label: 'Pending Approval' },
     { key: 'Approved', label: 'Approved' },
-    { key: 'PaymentPending', label: 'Payment Pending' },
-    { key: 'Paid', label: 'Paid' },
-    { key: 'SupplierNotified', label: 'Supplier Notified' },
-    { key: 'Sent', label: 'Sent' },
-    { key: 'InTransit', label: 'In Transit' },
-    { key: 'Delivered', label: 'Delivered' },
-    { key: 'Completed', label: 'Completed' }
+    { key: 'Payment', label: 'Stripe Payment' },
+    { key: 'Sent', label: 'Dispatched via Email' }
   ];
 
   const getStepIndex = (status) => {
@@ -233,21 +211,10 @@ export default function PurchaseOrderDetail() {
         return 1;
       case 'Approved':
         return 2;
-      case 'PaymentPending':
       case 'Payment':
         return 3;
-      case 'Paid':
-        return 4;
-      case 'SupplierNotified':
-        return 5;
       case 'Sent':
-        return 6;
-      case 'InTransit':
-        return 7;
-      case 'Delivered':
-        return 8;
-      case 'Completed':
-        return 9;
+        return 4;
       default:
         return 0;
     }
@@ -256,29 +223,6 @@ export default function PurchaseOrderDetail() {
   const currentStepIdx = getStepIndex(po.status);
   const isRejected = po.status === 'Rejected';
   const isRevision = po.status === 'RevisionRequested';
-  const isPaymentFailed = po.status === 'PaymentFailed' || po.stripePaymentStatus === 'Payment Failed';
-
-  // Stripe Payment Status resolution (Requirement 7)
-  const getStripeStatusDisplay = () => {
-    if (po.status === 'Paid' || po.status === 'Sent' || po.status === 'InTransit' || po.status === 'Delivered' || po.status === 'Completed' || po.stripePaymentStatus === 'Succeeded') {
-      return { text: 'Payment Successful', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dotClass: 'bg-emerald-400' };
-    }
-    if (po.status === 'PaymentFailed' || po.stripePaymentStatus === 'Failed' || po.paymentFailureReason) {
-      return { text: 'Payment Failed', badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dotClass: 'bg-rose-400' };
-    }
-    return { text: 'Payment Pending', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dotClass: 'bg-amber-400' };
-  };
-
-  // Supplier Notification resolution (Requirement 7)
-  const getEmailStatusDisplay = () => {
-    if (po.emailStatus === 'Sent' || po.status === 'SupplierNotified' || po.status === 'Sent' || po.status === 'InTransit' || po.status === 'Delivered' || po.status === 'Completed') {
-      return { text: 'SENT', badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/30', dotClass: 'bg-blue-400' };
-    }
-    if (po.emailStatus === 'Failed') {
-      return { text: 'FAILED', badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dotClass: 'bg-rose-400' };
-    }
-    return { text: 'PENDING', badgeClass: 'bg-slate-800 text-slate-400 border-slate-700', dotClass: 'bg-slate-500' };
-  };
 
   return (
     <AppLayout
@@ -288,48 +232,38 @@ export default function PurchaseOrderDetail() {
         <div className="flex items-center gap-2">
           {/* Draft Actions */}
           {po.status === 'Draft' && isManager && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCancelModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-rose-600/10 border border-rose-500/30 hover:bg-rose-600/20 text-rose-400 font-semibold rounded-xl text-xs transition-colors"
-                title="Cancel and delete this Draft PO"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Cancel PO</span>
-              </button>
-              <button
-                onClick={() => setSubmitModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-amber-600/20"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Submit for Approval</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setSubmitModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-amber-600/20"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Submit for Approval</span>
+            </button>
           )}
 
-          {/* Pending Approval Manager Actions (Requirement 7: [Approve Purchase], [Reject], [Request Revision]) */}
+          {/* Pending Approval Manager Actions */}
           {po.status === 'PendingApproval' && isManager && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setReviseModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-orange-400 font-semibold rounded-xl text-xs transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-orange-400 font-semibold rounded-xl text-xs"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Request Revision</span>
               </button>
               <button
                 onClick={() => setRejectModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-semibold rounded-xl text-xs transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-semibold rounded-xl text-xs"
               >
                 <XCircle className="w-3.5 h-3.5" />
                 <span>Reject</span>
               </button>
               <button
                 onClick={() => setApproveModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-600/20 transition-all"
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-600/20"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Approve Purchase</span>
+                <span>Approve Order</span>
               </button>
             </div>
           )}

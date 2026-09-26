@@ -28,24 +28,6 @@ export const procurementService = {
   },
 
   /**
-   * AI Procurement Analysis endpoint as specified in requirement:
-   * Calls ASP.NET Core: POST /api/procurement-requests/{id}/analyze
-   */
-  async analyzeRequest(id) {
-    const response = await api.post(`/procurement-requests/${id}/analyze`);
-    return response.data;
-  },
-
-  /**
-   * Retrieve historical procurement outcomes for future learning.
-   * Calls ASP.NET Core: GET /api/procurement/history
-   */
-  async getHistory() {
-    const response = await api.get('/procurement/history');
-    return response.data;
-  },
-
-  /**
    * Retrieve procurement request by ID.
    * Calls ASP.NET Core: GET /api/procurement/{id}
    */

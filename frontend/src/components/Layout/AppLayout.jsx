@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import purchaseOrderService from '../../services/purchaseOrderService';
-import StockAlertNotifications from '../Notifications/StockAlertNotifications';
 
 export default function AppLayout({ children, title, subtitle, actionButton }) {
   const location = useLocation();
@@ -239,15 +238,12 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Top Low Stock Alert Notification Button (Requirement 1) */}
-            <StockAlertNotifications />
-
             {pendingCount > 0 && (
               <Link
                 to="/ai-approvals"
                 className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold rounded-xl hover:bg-amber-500/20 transition-all"
               >
-                <CheckSquare className="w-3.5 h-3.5" />
+                <Bell className="w-3.5 h-3.5 animate-bounce" />
                 <span>{pendingCount} Pending Approval</span>
               </Link>
             )}
