@@ -51,6 +51,18 @@ export const purchaseOrderService = {
     return response.data;
   },
 
+  async uploadBankSlip(id, formData) {
+    const response = await api.post(`/purchase-orders/${id}/bank-slip`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  async getTracking(id) {
+    const response = await api.get(`/purchase-orders/${id}/tracking`);
+    return response.data;
+  },
+
   async deletePurchaseOrder(id) {
     const response = await api.delete(`/purchase-orders/${id}`);
     return response.data;

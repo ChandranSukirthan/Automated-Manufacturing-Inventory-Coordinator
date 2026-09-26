@@ -309,6 +309,54 @@ namespace ManufacturingCoordinator.Controllers
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
         }
 
+        /// <summary>
+        /// POST /api/purchase-orders/{id}/bank-slip — upload bank transfer slip image/PDF and verify payment
+        /// </summary>
+        [HttpPost("{id:int}/bank-slip")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [Consumes("multipart/form-data")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderResponseDto>> UploadBankSlip(
+            int id,
+            [FromForm] IFormFile bankSlipFile,
+            [FromForm] string bankReferenceNumber,
+            [FromForm] string? notes = null)
+        {
+            var userId = GetCurrentUserId();
+            if (bankSlipFile == null || bankSlipFile.Length == 0)
+                return BadRequest(new { message = "Bank slip file is required." });
+
+            if (string.IsNullOrWhiteSpace(bankReferenceNumber))
+                return BadRequest(new { message = "Bank transaction reference number is required." });
+
+            try
+            {
+                var po = await _poService.UploadBankSlipAsync(id, bankSlipFile, bankReferenceNumber, notes, userId);
+                return Ok(po);
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+            catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+        /// <summary>
+        /// GET /api/purchase-orders/{id}/tracking — 10-stage lifecycle tracking for Supply Chain Manager and Floor Workers
+        /// </summary>
+        [HttpGet("{id:int}/tracking")]
+        [ProducesResponseType(typeof(PurchaseOrderTrackingDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderTrackingDto>> GetTracking(int id)
+        {
+            try
+            {
+                var tracking = await _poService.GetTrackingAsync(id);
+                return Ok(tracking);
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+        }
+
         /// <summary>POST /api/purchase-orders/{id}/reject — transition PendingApproval → Rejected</summary>
         [HttpPost("{id:int}/reject")]
         [Authorize(Roles = "SupplyChainManager")]

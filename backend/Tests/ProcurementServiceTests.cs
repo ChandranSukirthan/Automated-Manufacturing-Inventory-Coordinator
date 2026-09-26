@@ -84,6 +84,8 @@ namespace backend.Tests
         public Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> UploadBankSlipAsync(int id, Microsoft.AspNetCore.Http.IFormFile file, string referenceNumber, string? notes = null, Guid? userId = null) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderTrackingDto> GetTrackingAsync(int id) => Task.FromResult(new PurchaseOrderTrackingDto { PurchaseOrderId = id, PoNumber = "PO-TEST" });
         public Task<byte[]> GeneratePdfAsync(int id) => Task.FromResult(Array.Empty<byte>());
         public Task<bool> DeleteAsync(int id) => Task.FromResult(true);
         public Task<IEnumerable<OrderLineResponseDto>> GetOrderLinesAsync(int poId) => Task.FromResult<IEnumerable<OrderLineResponseDto>>(new List<OrderLineResponseDto>());

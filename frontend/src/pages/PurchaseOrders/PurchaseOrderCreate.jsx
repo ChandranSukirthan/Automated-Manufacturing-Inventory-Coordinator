@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -24,6 +24,17 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // URL Query Parameters for AI / Low-Stock auto-fill
+  const paramSupplierId = searchParams.get('supplierId');
+  const paramMaterialId = searchParams.get('materialId') || searchParams.get('rawMaterialId');
+  const paramMaterialName = searchParams.get('material') || searchParams.get('materialName');
+  const paramQuantity = searchParams.get('quantity') || searchParams.get('deficit');
+  const paramUnitPrice = searchParams.get('unitPrice') || searchParams.get('price');
+  const paramCandidateId = searchParams.get('candidateId');
+  const paramProcurementId = searchParams.get('procurementId');
+  const isFromAiRecommendation = Boolean(paramCandidateId || paramProcurementId);
 
   const [suppliers, setSuppliers] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -33,12 +44,21 @@ export default function PurchaseOrderCreate() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // Form State
-  const [supplierId, setSupplierId] = useState('');
+  const [supplierId, setSupplierId] = useState(paramSupplierId || '');
   const [currency, setCurrency] = useState('USD');
-  const [budgetLimit, setBudgetLimit] = useState('10000');
-  const [notes, setNotes] = useState('');
+  const [budgetLimit, setBudgetLimit] = useState('15000');
+  const [notes, setNotes] = useState(
+    isFromAiRecommendation
+      ? `Auto-drafted from AI Procurement Candidate #${paramCandidateId || 'rec'} for ${paramMaterialName || 'raw material supplies'}.`
+      : ''
+  );
   const [lines, setLines] = useState([
-    { rawMaterialId: '', description: '', quantity: '100', unitPrice: '15.00' }
+    {
+      rawMaterialId: paramMaterialId || '',
+      description: paramMaterialName || '',
+      quantity: paramQuantity || '100',
+      unitPrice: paramUnitPrice || '15.00'
+    }
   ]);
 
   useEffect(() => {
@@ -52,20 +72,41 @@ export default function PurchaseOrderCreate() {
         ]);
         const activeSuppliers = (suppliersData || []).filter((s) => s.isActive);
         setSuppliers(activeSuppliers);
-        if (activeSuppliers.length > 0) {
+
+        // Pre-select supplier from query param or first active
+        if (paramSupplierId && activeSuppliers.some((s) => s.id.toString() === paramSupplierId)) {
+          setSupplierId(paramSupplierId);
+        } else if (activeSuppliers.length > 0 && !supplierId) {
           setSupplierId(activeSuppliers[0].id.toString());
         }
-        setMaterials(materialsData || []);
-        if ((materialsData || []).length > 0) {
-          setLines([
-            {
-              rawMaterialId: materialsData[0].id.toString(),
-              description: materialsData[0].name || '',
-              quantity: '100',
-              unitPrice: '15.00'
-            }
-          ]);
+
+        const mats = materialsData || [];
+        setMaterials(mats);
+
+        // Match material from query param by ID or name
+        let matchedMaterial = null;
+        if (paramMaterialId) {
+          matchedMaterial = mats.find((m) => m.id.toString() === paramMaterialId.toString());
         }
+        if (!matchedMaterial && paramMaterialName) {
+          matchedMaterial = mats.find(
+            (m) =>
+              m.name?.toLowerCase() === paramMaterialName.toLowerCase() ||
+              m.skuCode?.toLowerCase() === paramMaterialName.toLowerCase()
+          );
+        }
+
+        const effectiveMatId = matchedMaterial ? matchedMaterial.id.toString() : (mats.length > 0 ? mats[0].id.toString() : '');
+        const effectiveMatName = matchedMaterial ? matchedMaterial.name : (paramMaterialName || (mats.length > 0 ? mats[0].name : ''));
+
+        setLines([
+          {
+            rawMaterialId: effectiveMatId,
+            description: effectiveMatName,
+            quantity: paramQuantity ? parseFloat(paramQuantity).toString() : '100',
+            unitPrice: paramUnitPrice ? parseFloat(paramUnitPrice).toFixed(2) : '15.00'
+          }
+        ]);
       } catch (err) {
         setErrorMessage(parseErrorMessage(err, 'Failed to load suppliers or materials.'));
       } finally {
@@ -73,7 +114,7 @@ export default function PurchaseOrderCreate() {
       }
     };
     loadPrerequisites();
-  }, []);
+  }, [paramSupplierId, paramMaterialId, paramMaterialName, paramQuantity, paramUnitPrice]);
 
   const handleLineChange = (index, field, value) => {
     const updated = [...lines];
@@ -162,6 +203,8 @@ export default function PurchaseOrderCreate() {
         currency,
         budgetLimit: budgetNum,
         notes: notes.trim(),
+        procurementRequestId: paramProcurementId ? parseInt(paramProcurementId, 10) : undefined,
+        candidateId: paramCandidateId ? parseInt(paramCandidateId, 10) : undefined,
         lines: lines.map((l) => ({
           rawMaterialId: parseInt(l.rawMaterialId, 10),
           description: l.description.trim(),

@@ -28,7 +28,12 @@ import {
   Layers,
   Download,
   Trash2,
-  Plus
+  Plus,
+  UploadCloud,
+  Receipt,
+  Truck,
+  FileCheck,
+  ExternalLink
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -48,6 +53,17 @@ export default function PurchaseOrderDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [downloadLoading, setDownloadLoading] = useState(false);
+
+  // 10-Stage Tracking State
+  const [tracking, setTracking] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+
+  // Dual Payment Gateway State
+  const [paymentTab, setPaymentTab] = useState('stripe'); // 'stripe' | 'bank_slip'
+  const [bankSlipFile, setBankSlipFile] = useState(null);
+  const [bankReferenceNumber, setBankReferenceNumber] = useState('');
+  const [bankNotes, setBankNotes] = useState('');
+  const [slipSuccessMessage, setSlipSuccessMessage] = useState('');
 
   // Modals for approval actions
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -71,6 +87,18 @@ export default function PurchaseOrderDetail() {
     }
   };
 
+  const fetchTrackingDetails = async () => {
+    setTrackingLoading(true);
+    try {
+      const data = await purchaseOrderService.getTracking(id);
+      setTracking(data);
+    } catch (err) {
+      // silent fallback
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
   const fetchPoDetails = async () => {
     setLoading(true);
     setError('');
@@ -86,6 +114,7 @@ export default function PurchaseOrderDetail() {
 
   useEffect(() => {
     fetchPoDetails();
+    fetchTrackingDetails();
   }, [id]);
 
   // Submit PO
@@ -148,17 +177,60 @@ export default function PurchaseOrderDetail() {
     }
   };
 
-  // Settle Payment & Dispatch PO
+  // Settle Payment & Dispatch PO via Stripe Sandbox
   const handleProcessPayment = async () => {
     setActionLoading(true);
     setActionMessage('Connecting to Stripe Sandbox, settling payment and dispatching PO PDF...');
     setError('');
+    setSlipSuccessMessage('');
     try {
       const updated = await purchaseOrderService.processPayment(id);
       setPo(updated);
       await fetchPoDetails();
+      await fetchTrackingDetails();
     } catch (err) {
       setError(parseErrorMessage(err, 'Failed to complete payment settlement & dispatch.'));
+    } finally {
+      setActionLoading(false);
+      setActionMessage('');
+    }
+  };
+
+  // Upload Bank Transfer Slip & Verify Settlement
+  const handleBankSlipUpload = async (e) => {
+    e.preventDefault();
+    if (!bankSlipFile) {
+      setError('Please select a bank deposit slip or transfer receipt file.');
+      return;
+    }
+    if (!bankReferenceNumber.trim()) {
+      setError('Please enter the bank transaction reference number.');
+      return;
+    }
+
+    setActionLoading(true);
+    setActionMessage('Uploading bank slip receipt and verifying payment transaction...');
+    setError('');
+    setSlipSuccessMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('bankSlipFile', bankSlipFile);
+      formData.append('bankReferenceNumber', bankReferenceNumber.trim());
+      if (bankNotes.trim()) {
+        formData.append('notes', bankNotes.trim());
+      }
+
+      const updated = await purchaseOrderService.uploadBankSlip(id, formData);
+      setPo(updated);
+      setBankSlipFile(null);
+      setBankReferenceNumber('');
+      setBankNotes('');
+      setSlipSuccessMessage('Bank slip uploaded successfully! Payment verified and purchase order dispatched.');
+      await fetchPoDetails();
+      await fetchTrackingDetails();
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to upload bank slip.'));
     } finally {
       setActionLoading(false);
       setActionMessage('');
@@ -394,13 +466,23 @@ export default function PurchaseOrderDetail() {
         </div>
       )}
 
-      {/* Lifecycle Progress Stepper */}
+      {/* 10-Stage Lifecycle Tracking Stepper */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Order Status & Workflow Stepper
-          </h3>
-          <StatusBadge status={po.status} />
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-brand-400" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+              10-Stage Procurement & Delivery Tracking
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {tracking?.trackingNumber && (
+              <span className="font-mono text-xs px-2.5 py-0.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300">
+                {tracking.trackingNumber}
+              </span>
+            )}
+            <StatusBadge status={po.status} />
+          </div>
         </div>
 
         {isRejected ? (
@@ -424,43 +506,77 @@ export default function PurchaseOrderDetail() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-5 gap-2 pt-2">
-            {steps.map((step, idx) => {
-              const isCompleted = idx < currentStepIdx || po.status === 'Sent';
-              const isCurrent = idx === currentStepIdx && po.status !== 'Sent';
+          <div className="space-y-4 pt-1">
+            {/* 10-Stage Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+              {(tracking?.timeline && tracking.timeline.length > 0 ? tracking.timeline : steps.map((s, idx) => ({
+                step: idx + 1,
+                stageName: s.label,
+                status: idx < currentStepIdx || po.status === 'Sent' ? 'Completed' : (idx === currentStepIdx && po.status !== 'Sent' ? 'Active' : 'Pending'),
+                isCurrent: idx === currentStepIdx && po.status !== 'Sent',
+                notes: null,
+                completedAt: null
+              }))).map((st) => {
+                const isCompleted = st.status === 'Completed';
+                const isCurrent = st.isCurrent || st.status === 'Active';
 
-              return (
-                <div key={step.key} className="space-y-2 text-center">
-                  <div className="relative flex items-center justify-center">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                        isCompleted
-                          ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30'
-                          : isCurrent
-                          ? 'bg-brand-500 text-white ring-4 ring-brand-500/20 animate-pulse'
-                          : 'bg-slate-800 text-slate-500 border border-slate-700'
-                      }`}
-                    >
-                      {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
-                    </div>
-                  </div>
-                  <p
-                    className={`text-xs font-medium ${
-                      isCompleted ? 'text-emerald-400' : isCurrent ? 'text-brand-400 font-bold' : 'text-slate-500'
+                return (
+                  <div
+                    key={st.step}
+                    className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between ${
+                      isCompleted
+                        ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                        : isCurrent
+                        ? 'bg-brand-500/10 border-brand-500/50 text-brand-300 ring-2 ring-brand-500/20'
+                        : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
                     }`}
                   >
-                    {step.label}
-                  </p>
-                </div>
-              );
-            })}
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-1.5 transition-all ${
+                        isCompleted
+                          ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
+                          : isCurrent
+                          ? 'bg-brand-500 text-white animate-pulse'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}
+                    >
+                      {isCompleted ? <Check className="w-3.5 h-3.5" /> : st.step}
+                    </div>
+                    <p className={`text-[11px] font-semibold leading-tight line-clamp-2 ${
+                      isCompleted ? 'text-emerald-300' : isCurrent ? 'text-white font-bold' : 'text-slate-400'
+                    }`}>
+                      {st.stageName}
+                    </p>
+                    {st.notes && (
+                      <span className="text-[9px] text-slate-400 mt-1 line-clamp-1" title={st.notes}>
+                        {st.notes}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {tracking?.expectedDeliveryDate && (
+              <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
+                <span>Carrier: <strong className="text-slate-200">{tracking.carrier || 'AMIC Express Freight'}</strong></span>
+                <span>Expected Delivery: <strong className="text-emerald-400 font-mono">{new Date(tracking.expectedDeliveryDate).toLocaleDateString()}</strong></span>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Step 4: Stripe Payment Settlement Cockpit Card */}
-      {po.status === 'Payment' && (
-        <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/60 via-slate-900 to-slate-900 border border-blue-500/40 shadow-2xl space-y-4">
+      {/* Success banner for slip upload */}
+      {slipSuccessMessage && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+          <span>{slipSuccessMessage}</span>
+        </div>
+      )}
+
+      {/* DUAL PAYMENT GATEWAY COCKPIT (Requirement 8) */}
+      {(po.status === 'Payment' || po.status === 'PaymentPending') && (
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/50 via-slate-900 to-slate-900 border border-blue-500/40 shadow-2xl space-y-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
@@ -469,110 +585,286 @@ export default function PurchaseOrderDetail() {
               <div>
                 <div className="flex items-center gap-2">
                   <h4 className="text-base font-bold text-white">
-                    Step 4: Stripe Payment Authorization & Settlement
+                    Purchase Order Payment Gateway & Authorization
                   </h4>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 border border-blue-500/30">
                     Awaiting Settlement
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  The order was approved by the Supply Chain Manager. Click below to execute Stripe payment settlement and trigger automatic supplier dispatch.
+                  Select payment method: Settle instantly with Stripe Sandbox or upload a Bank Deposit Slip for verification.
                 </p>
               </div>
             </div>
 
-            {isManager && (
-              <button
-                onClick={handleProcessPayment}
-                disabled={actionLoading}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50 shrink-0"
-              >
-                {actionLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <CreditCard className="w-4 h-4" />
-                )}
-                <span>Complete Stripe Settlement & Dispatch</span>
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
-                Settlement Amount
+            {/* Total Payable Badge */}
+            <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-right shrink-0">
+              <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+                Total Amount Due
               </span>
-              <p className="text-base font-mono font-bold text-emerald-400">
+              <p className="text-lg font-mono font-bold text-emerald-400">
                 ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
               </p>
             </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
-                Stripe Gateway Status
-              </span>
-              <p className="font-mono text-white flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-                <span>{po.stripePaymentStatus || 'Ready (Sandbox Simulation)'}</span>
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-1">
-                Next Automated Action
-              </span>
-              <p className="text-slate-300">
-                Step 5: Generate iText7 PDF & Dispatch via Email to <span className="text-white font-semibold">{po.supplierName}</span>
-              </p>
-            </div>
           </div>
 
-          {po.paymentFailureReason && (
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>
-                  Notice: Previous transaction attempted live key ({po.paymentFailureReason}). Sandbox mode will automatically simulate authorization upon settlement.
-                </span>
+          {/* Payment Method Switcher Tabs */}
+          <div className="flex items-center gap-3 border-b border-slate-800">
+            <button
+              type="button"
+              onClick={() => setPaymentTab('stripe')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                paymentTab === 'stripe'
+                  ? 'border-brand-500 text-white bg-slate-800/40 rounded-t-lg'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <CreditCard className="w-4 h-4 text-brand-400" />
+              <span>Stripe Card Gateway (Sandbox)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentTab('bank_slip')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                paymentTab === 'bank_slip'
+                  ? 'border-brand-500 text-white bg-slate-800/40 rounded-t-lg'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <UploadCloud className="w-4 h-4 text-cyan-400" />
+              <span>Bank Transfer / Slip Upload</span>
+            </button>
+          </div>
+
+          {/* Tab 1: Stripe Card Gateway */}
+          {paymentTab === 'stripe' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-300">Stripe Test Card Simulation</span>
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/40 text-cyan-300">
+                    4242 Visa Sandbox
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
+                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">Card Number</span>
+                    <span className="text-white">4242 •••• •••• 4242</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
+                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">Expiration</span>
+                    <span className="text-white">12 / 28</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
+                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">CVC</span>
+                    <span className="text-white">123</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Clicking below authorizes payment through Stripe's test payment intent, generates the official PO PDF, and sends it directly to <strong className="text-white">{po.supplierName}</strong> via SendGrid / SMTP.
+                </p>
               </div>
+
+              {isManager && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleProcessPayment}
+                    disabled={actionLoading}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="w-4 h-4" />
+                    )}
+                    <span>Authorize & Settle via Stripe (${po.totalCost?.toFixed(2)})</span>
+                  </button>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Tab 2: Bank Slip Upload Form */}
+          {paymentTab === 'bank_slip' && (
+            <form onSubmit={handleBankSlipUpload} className="space-y-4">
+              <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-4">
+                <p className="text-xs text-slate-300">
+                  Upload your bank transfer deposit receipt or wire confirmation PDF/image. Once submitted, accounting verification marks the order as <strong className="text-emerald-400">Paid</strong> and dispatches the PO to the vendor.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">
+                      Bank Transaction Reference Number <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={bankReferenceNumber}
+                      onChange={(e) => setBankReferenceNumber(e.target.value)}
+                      placeholder="e.g. TXN-WIRE-9832742"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1">
+                      Deposit Notes / Remarks (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={bankNotes}
+                      onChange={(e) => setBankNotes(e.target.value)}
+                      placeholder="e.g. Standard Chartered wire transfer"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-brand-500"
+                    />
+                  </div>
+                </div>
+
+                {/* File Upload Area */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                    Upload Slip Receipt (PDF, PNG, JPG - max 10MB) <span className="text-rose-400">*</span>
+                  </label>
+                  <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl bg-slate-900/50 cursor-pointer transition-all">
+                    <UploadCloud className="w-8 h-8 text-brand-400 mb-2" />
+                    {bankSlipFile ? (
+                      <div className="text-center">
+                        <span className="text-xs font-bold text-emerald-400 block">{bankSlipFile.name}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {(bankSlipFile.size / 1024).toFixed(1)} KB — Click to change
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <span className="text-xs font-semibold text-slate-300 block">
+                          Click to browse or drop transfer slip here
+                        </span>
+                        <span className="text-[10px] text-slate-500">PDF, PNG, JPG up to 10MB</span>
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setBankSlipFile(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {isManager && (
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={actionLoading || !bankSlipFile || !bankReferenceNumber.trim()}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50"
+                  >
+                    {actionLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileCheck className="w-4 h-4" />
+                    )}
+                    <span>Submit Bank Slip & Complete Payment</span>
+                  </button>
+                </div>
+              )}
+            </form>
           )}
         </div>
       )}
 
-      {/* Step 5: Sent Success Card */}
-      {po.status === 'Sent' && (
-        <div className="p-5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg shadow-emerald-950/40">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5" />
+      {/* PAYMENT RECEIPT & SUPPLIER DISPATCH CONFIRMATION CARD (Requirement 7 & 8) */}
+      {(po.status === 'Paid' || po.status === 'SupplierNotified' || po.status === 'Sent' || po.status === 'InTransit' || po.status === 'Delivered' || po.status === 'Completed' || po.bankSlipUrl || po.stripePaymentIntentId) && (
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 shadow-xl space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-base font-bold text-white">
+                    Official Payment Receipt & Dispatch Record
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Payment Verified
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Settlement recorded. Supplier notification dispatched with official PO PDF attachment.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-white">
-                Purchase Order Lifecycle Completed — Step 5 Dispatched
-              </p>
-              <p className="text-slate-300 mt-0.5">
-                Stripe settlement completed (Intent: <span className="font-mono text-cyan-300">{po.stripePaymentIntentId || 'pi_sandbox'}</span>). Official PO document generated and dispatched to <span className="font-semibold text-white">{po.supplierName}</span>.
-              </p>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {po.bankSlipUrl && (
+                <a
+                  href={po.bankSlipUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>View Bank Slip</span>
+                </a>
+              )}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadLoading}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-700/25 transition-all disabled:opacity-50"
+              >
+                {downloadLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>Download Official PO PDF</span>
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400 bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
-              <Mail className="w-3.5 h-3.5 text-blue-400" />
-              <span>Email: {po.emailStatus || 'Sent'}</span>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-500 block mb-0.5">PO Number</span>
+              <span className="font-mono font-bold text-white">{po.poNumber}</span>
             </div>
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloadLoading}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-700/25 transition-all disabled:opacity-50"
-            >
-              {downloadLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Download className="w-3.5 h-3.5" />
-              )}
-              <span>Download Official PDF</span>
-            </button>
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-500 block mb-0.5">Paid Amount</span>
+              <span className="font-mono font-bold text-emerald-400">
+                ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-500 block mb-0.5">Payment Method</span>
+              <span className="font-semibold text-slate-200">
+                {po.bankSlipUrl ? 'Bank Slip / Wire' : 'Stripe Card Gateway'}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[10px] uppercase font-semibold text-slate-500 block mb-0.5">Reference ID</span>
+              <span className="font-mono text-cyan-300 text-[11px] truncate block" title={po.bankReferenceNumber || po.stripePaymentIntentId}>
+                {po.bankReferenceNumber || po.stripePaymentIntentId || 'TXN-PAID'}
+              </span>
+            </div>
+          </div>
+
+          {/* Supplier Email Dispatch Status */}
+          <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-blue-400 shrink-0" />
+              <span className="text-slate-300">
+                Supplier Dispatch: <strong className="text-white">{po.supplierName}</strong> • Email Status:{' '}
+                <span className="text-blue-400 font-semibold">{po.emailStatus || 'Sent'}</span>
+              </span>
+            </div>
+            <div className="text-[11px] font-mono text-slate-400">
+              Msg ID: {po.sendGridMessageId || 'sg_msg_po_dispatched'}
+            </div>
           </div>
         </div>
       )}

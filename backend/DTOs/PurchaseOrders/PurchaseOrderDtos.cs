@@ -66,6 +66,12 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         [MaxLength(1000)]
         public string? Notes { get; set; }
 
+        public int? ProcurementRequestId { get; set; }
+        public int? CandidateId { get; set; }
+
+        public decimal Tax { get; set; } = 0m;
+        public decimal Shipping { get; set; } = 0m;
+
         [Required]
         [MinLength(1, ErrorMessage = "At least one order line is required.")]
         public List<OrderLineDto> Lines { get; set; } = new();
@@ -132,6 +138,13 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public DateTime? ApprovedAt { get; set; }
         public string? StripePaymentIntentId { get; set; }
         public string? StripePaymentStatus { get; set; }
+        public string? BankSlipUrl { get; set; }
+        public string? BankReferenceNumber { get; set; }
+        public string? BankSlipStatus { get; set; }
+        public DateTime? BankSlipUploadedAt { get; set; }
+        public string TrackingStatus { get; set; } = "Draft";
+        public string? TrackingNumber { get; set; }
+        public DateTime? ExpectedDeliveryDate { get; set; }
         public string? EmailStatus { get; set; }
         public DateTime? EmailSentAt { get; set; }
         public List<OrderLineResponseDto> OrderLines { get; set; } = new();
@@ -182,5 +195,48 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string? TrackingNumber { get; set; }
         public DateTime? ActualDeliveryDate { get; set; }
         public string StatusRemarks { get; set; } = string.Empty;
+    }
+
+    public class BankSlipUploadDto
+    {
+        [Required]
+        public string BankReferenceNumber { get; set; } = string.Empty;
+
+        [MaxLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    public class TrackingTimelineStepDto
+    {
+        public string StepKey { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+        public bool IsCurrent { get; set; }
+        public DateTime? Timestamp { get; set; }
+    }
+
+    public class PurchaseOrderTrackingDto
+    {
+        public int PurchaseOrderId { get; set; }
+        public string PoNumber { get; set; } = string.Empty;
+        public int SupplierId { get; set; }
+        public string SupplierName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string TrackingStatus { get; set; } = "Draft";
+        public string? TrackingNumber { get; set; }
+        public decimal TotalCost { get; set; }
+        public string Currency { get; set; } = "USD";
+        public string? PaymentMethod { get; set; }
+        public string? PaymentStatus { get; set; }
+        public string? PaymentReference { get; set; }
+        public string? BankSlipUrl { get; set; }
+        public string? EmailStatus { get; set; }
+        public DateTime? EmailSentAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+        public List<TrackingTimelineStepDto> Timeline { get; set; } = new();
     }
 }

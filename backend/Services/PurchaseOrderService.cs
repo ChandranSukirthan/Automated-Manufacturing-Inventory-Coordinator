@@ -98,6 +98,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency.Trim().ToUpperInvariant(),
                 BudgetLimit = dto.BudgetLimit,
                 Notes = dto.Notes,
+                ProcurementRequestId = dto.ProcurementRequestId,
+                TrackingStatus = "Draft",
                 Status = PurchaseOrderStatus.Draft,
                 ApprovalThreshold = approvalThreshold,
                 CreatedById = createdById,
@@ -1012,6 +1014,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             ApprovedAt = po.ApprovedAt,
             StripePaymentIntentId = po.StripePaymentIntentId,
             StripePaymentStatus = po.StripePaymentStatus,
+            BankSlipUrl = po.BankSlipUrl,
+            BankReferenceNumber = po.BankReferenceNumber,
+            BankSlipStatus = po.BankSlipStatus,
+            BankSlipUploadedAt = po.BankSlipUploadedAt,
+            TrackingStatus = po.TrackingStatus ?? po.Status.ToString(),
+            TrackingNumber = po.TrackingNumber,
+            ExpectedDeliveryDate = po.ExpectedDeliveryDate,
             EmailStatus = po.EmailStatus,
             EmailSentAt = po.EmailSentAt,
             OrderLines = po.OrderLines.Select(ol => new OrderLineResponseDto
@@ -1047,5 +1056,126 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             CreatedAt = po.CreatedAt,
             UpdatedAt = po.UpdatedAt
         };
+
+        public async Task<PurchaseOrderResponseDto> UploadBankSlipAsync(
+            int id, Microsoft.AspNetCore.Http.IFormFile file, string referenceNumber, string? notes = null, Guid? userId = null)
+        {
+            if (file == null || file.Length == 0)
+                throw new ArgumentException("Bank slip file cannot be empty.");
+
+            if (file.Length > 10 * 1024 * 1024)
+                throw new ArgumentException("Bank slip file size cannot exceed 10 MB.");
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowedExtensions = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
+            if (!allowedExtensions.Contains(ext))
+                throw new ArgumentException("Invalid file format. Only PDF, PNG, and JPG/JPEG files are accepted.");
+
+            var po = await LoadPoAsync(id);
+
+            // Create uploads directory in wwwroot
+            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "slips");
+            Directory.CreateDirectory(uploadsDir);
+
+            var uniqueFileName = $"slip_{po.PoNumber}_{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadsDir, uniqueFileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            po.BankSlipUrl = $"/uploads/slips/{uniqueFileName}";
+            po.BankReferenceNumber = referenceNumber.Trim();
+            po.BankSlipStatus = "VERIFIED";
+            po.BankSlipUploadedAt = DateTime.UtcNow;
+            po.TrackingStatus = "Paid";
+            po.UpdatedAt = DateTime.UtcNow;
+
+            // Transition status to Paid if already Approved
+            if (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment)
+            {
+                TransitionStatus(po, PurchaseOrderStatus.Paid);
+            }
+
+            // Record transaction
+            var txRecord = new PaymentTransaction
+            {
+                PurchaseOrderId = po.Id,
+                TransactionId = $"SLIP-{referenceNumber.Trim()}",
+                Amount = po.TotalCost,
+                Currency = po.Currency.ToLowerInvariant(),
+                PaymentStatus = "succeeded (bank slip)",
+                FailureReason = null,
+                Timestamp = DateTime.UtcNow
+            };
+            _context.PaymentTransactions.Add(txRecord);
+
+            await RecordAuditAsync(po.Id, "bank slip uploaded", userId, $"Bank slip verified with ref {referenceNumber}.");
+
+            await _context.SaveChangesAsync();
+
+            // After payment settlement, auto-dispatch email with receipt to supplier
+            await SendPoEmailAsync(po, userId, forceDispatch: true);
+
+            return (await GetByIdAsync(po.Id))!;
+        }
+
+        public async Task<PurchaseOrderTrackingDto> GetTrackingAsync(int id)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.Supplier)
+                .Include(p => p.OrderLines)
+                .FirstOrDefaultAsync(p => p.Id == id)
+                ?? throw new KeyNotFoundException($"Purchase Order {id} not found.");
+
+            var trackingDto = new PurchaseOrderTrackingDto
+            {
+                PurchaseOrderId = po.Id,
+                PoNumber = po.PoNumber,
+                SupplierId = po.SupplierId,
+                SupplierName = po.Supplier?.Name ?? "Supplier",
+                Status = po.Status.ToString(),
+                TrackingStatus = po.TrackingStatus ?? po.Status.ToString(),
+                TrackingNumber = po.TrackingNumber ?? $"TRK-{po.PoNumber}",
+                TotalCost = po.TotalCost,
+                Currency = po.Currency,
+                PaymentMethod = !string.IsNullOrWhiteSpace(po.BankSlipUrl) ? "Bank Transfer (Slip)" : (!string.IsNullOrWhiteSpace(po.StripePaymentIntentId) ? "Stripe Sandbox" : "Pending"),
+                PaymentStatus = po.StripePaymentStatus ?? po.BankSlipStatus ?? (po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent ? "Paid" : "Pending"),
+                PaymentReference = po.BankReferenceNumber ?? po.StripePaymentIntentId,
+                BankSlipUrl = po.BankSlipUrl,
+                EmailStatus = po.EmailStatus,
+                EmailSentAt = po.EmailSentAt,
+                CreatedAt = po.CreatedAt,
+                ApprovedAt = po.ApprovedAt,
+                ExpectedDeliveryDate = po.ExpectedDeliveryDate ?? po.CreatedAt.AddDays(po.Supplier?.LeadTimeDays > 0 ? po.Supplier.LeadTimeDays : 7),
+                ActualDeliveryDate = po.ActualDeliveryDate
+            };
+
+            bool isPendingApproval = po.Status >= PurchaseOrderStatus.PendingApproval && po.Status != PurchaseOrderStatus.Draft;
+            bool isApproved = po.Status >= PurchaseOrderStatus.Approved && po.Status != PurchaseOrderStatus.PendingApproval && po.Status != PurchaseOrderStatus.Draft && po.Status != PurchaseOrderStatus.Rejected;
+            bool isPaid = po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed || !string.IsNullOrWhiteSpace(po.BankSlipUrl) || po.StripePaymentStatus == "succeeded";
+            bool isNotified = po.EmailStatus == "Sent" || po.EmailStatus == "Sent (Sandbox Dispatch)";
+            bool isSent = po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed;
+            bool isInTransit = (isSent || po.Status == PurchaseOrderStatus.InTransit) && po.Status != PurchaseOrderStatus.Delivered && po.Status != PurchaseOrderStatus.Completed;
+            bool isDelivered = po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed;
+            bool isCompleted = po.Status == PurchaseOrderStatus.Completed;
+
+            trackingDto.Timeline = new List<TrackingTimelineStepDto>
+            {
+                new() { StepKey = "draft", Title = "Draft Created", Description = "PO created in draft status", IsCompleted = true, IsCurrent = po.Status == PurchaseOrderStatus.Draft, Timestamp = po.CreatedAt },
+                new() { StepKey = "pending_approval", Title = "Pending Approval", Description = "Submitted for Supply Chain Manager approval", IsCompleted = isPendingApproval, IsCurrent = po.Status == PurchaseOrderStatus.PendingApproval, Timestamp = po.CreatedAt },
+                new() { StepKey = "approved", Title = "Manager Approved", Description = "Supply Chain Manager approved the purchase order", IsCompleted = isApproved, IsCurrent = po.Status == PurchaseOrderStatus.Approved, Timestamp = po.ApprovedAt },
+                new() { StepKey = "payment_pending", Title = "Payment Authorization", Description = "Stripe card settlement or bank slip submission", IsCompleted = isPaid, IsCurrent = isApproved && !isPaid, Timestamp = po.ApprovedAt },
+                new() { StepKey = "paid", Title = "Payment Settled", Description = "Payment confirmed via Stripe or verified bank slip", IsCompleted = isPaid, IsCurrent = isPaid && !isNotified, Timestamp = po.BankSlipUploadedAt ?? po.ApprovedAt },
+                new() { StepKey = "notified", Title = "Supplier Notified", Description = "PO PDF & payment confirmation dispatched to supplier", IsCompleted = isNotified, IsCurrent = isNotified && !isSent, Timestamp = po.EmailSentAt },
+                new() { StepKey = "ordered", Title = "Order Dispatched", Description = "Official order confirmed and placed with vendor", IsCompleted = isSent, IsCurrent = isSent && !isDelivered, Timestamp = po.EmailSentAt ?? po.UpdatedAt },
+                new() { StepKey = "in_transit", Title = "In Transit", Description = $"Shipment in transit via tracking {trackingDto.TrackingNumber}", IsCompleted = isDelivered || isInTransit, IsCurrent = isInTransit, Timestamp = po.ExpectedDeliveryDate },
+                new() { StepKey = "delivered", Title = "Delivered & Inspected", Description = "Raw materials received on factory floor for QA inspection", IsCompleted = isDelivered, IsCurrent = isDelivered && !isCompleted, Timestamp = po.ActualDeliveryDate },
+                new() { StepKey = "completed", Title = "Order Completed", Description = "Procurement lifecycle fulfilled and closed", IsCompleted = isCompleted, IsCurrent = isCompleted, Timestamp = po.ActualDeliveryDate }
+            };
+
+            return trackingDto;
+        }
     }
 }

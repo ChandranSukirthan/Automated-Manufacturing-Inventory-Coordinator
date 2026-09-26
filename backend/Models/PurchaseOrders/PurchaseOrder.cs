@@ -105,6 +105,18 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [MaxLength(500)]
         public string? PaymentFailureReason { get; set; }
 
+        // ── Bank Slip Payment ─────────────────────────────────────────────────
+        [MaxLength(500)]
+        public string? BankSlipUrl { get; set; }
+
+        [MaxLength(100)]
+        public string? BankReferenceNumber { get; set; }
+
+        [MaxLength(50)]
+        public string? BankSlipStatus { get; set; }
+
+        public DateTime? BankSlipUploadedAt { get; set; }
+
         // ── SendGrid Email ────────────────────────────────────────────────────
         [MaxLength(200)]
         public string? SendGridMessageId { get; set; }

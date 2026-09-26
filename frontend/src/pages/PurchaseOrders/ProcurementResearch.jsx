@@ -1261,16 +1261,35 @@ export default function ProcurementResearch() {
 
                           {/* Action */}
                           <td className="py-3 px-3 text-center">
-                            <button
-                              onClick={() => setSelectedCandidateId(cand.id)}
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
-                                isSelected
-                                  ? 'bg-purple-600 text-white shadow-md'
-                                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                              }`}
-                            >
-                              {isSelected ? 'Selected' : 'Select'}
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => setSelectedCandidateId(cand.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
+                                  isSelected
+                                    ? 'bg-purple-600 text-white shadow-md'
+                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                {isSelected ? 'Selected' : 'Select'}
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const supId = cand.supplierId || '';
+                                  const matId = currentRequest?.rawMaterialId || '';
+                                  const matName = encodeURIComponent(currentRequest?.materialName || cand.materialName || '');
+                                  const qty = cand.recommendedOrderQuantity || cand.minimumOrderQuantity || '';
+                                  const price = cand.unitPrice || '';
+                                  navigate(`/purchase-orders/create?supplierId=${supId}&materialId=${matId}&material=${matName}&quantity=${qty}&unitPrice=${price}&candidateId=${cand.id}&procurementId=${currentRequest?.id || ''}`);
+                                }}
+                                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50 transition-all flex items-center gap-1"
+                                title="Auto-fill Place Order form with this candidate"
+                              >
+                                <ShoppingCart className="w-3 h-3" />
+                                <span>Order</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1446,23 +1465,40 @@ export default function ProcurementResearch() {
                       </Link>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => handleGenerateDraftPo(activeCandidate.id)}
-                      disabled={actionLoading || !validationChecks.allPassed}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-600/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      {actionLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Generating PO in ERP...</span>
-                        </>
-                      ) : (
-                        <>
-                          <FileText className="w-4 h-4" />
-                          <span>Generate Draft Purchase Order</span>
-                        </>
-                      )}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleGenerateDraftPo(activeCandidate.id)}
+                        disabled={actionLoading || !validationChecks.allPassed}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-600/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Generating PO in ERP...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4" />
+                            <span>Generate Draft Purchase Order</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const supId = activeCandidate.supplierId || '';
+                          const matId = currentRequest?.rawMaterialId || '';
+                          const matName = encodeURIComponent(currentRequest?.materialName || activeCandidate.materialName || '');
+                          const qty = activeCandidate.recommendedOrderQuantity || activeCandidate.minimumOrderQuantity || '';
+                          const price = activeCandidate.unitPrice || '';
+                          navigate(`/purchase-orders/create?supplierId=${supId}&materialId=${matId}&material=${matName}&quantity=${qty}&unitPrice=${price}&candidateId=${activeCandidate.id}&procurementId=${currentRequest?.id || ''}`);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs border border-slate-700 transition-all"
+                      >
+                        <ShoppingCart className="w-3.5 h-3.5 text-purple-400" />
+                        <span>Customise in PO Form</span>
+                      </button>
+                    </>
                   )}
 
                   {!validationChecks.allPassed && !currentRequest.generatedPurchaseOrderId && (

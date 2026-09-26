@@ -17,6 +17,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason);
         Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason);
         Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false);
+        Task<PurchaseOrderResponseDto> UploadBankSlipAsync(int id, Microsoft.AspNetCore.Http.IFormFile file, string referenceNumber, string? notes = null, Guid? userId = null);
+        Task<PurchaseOrderTrackingDto> GetTrackingAsync(int id);
         Task<byte[]> GeneratePdfAsync(int id);
         Task<bool> DeleteAsync(int id);
 
