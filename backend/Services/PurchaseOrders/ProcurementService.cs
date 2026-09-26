@@ -209,14 +209,20 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 RequiredByDate = dto.RequiredByDate,
                 QualityRequirement = dto.QualityRequirement ?? string.Empty,
                 PreferredRegion = dto.PreferredRegion,
-                Status = netQty <= 0 ? ProcurementRequestStatus.Completed : ProcurementRequestStatus.Requested,
-                FailureReason = netQty <= 0
-                    ? "Current stock and open POs sufficiently meet requirements. No purchase required."
-                    : null,
+                Status = ProcurementRequestStatus.Requested,
+                FailureReason = null,
                 CreatedById = createdById,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
+
+            // If calculated net quantity is 0 or less, ensure research benchmark quantity is positive
+            if (request.CalculatedNetQuantity <= 0)
+            {
+                request.CalculatedNetQuantity = request.ProductionRequirement > 0
+                    ? request.ProductionRequirement
+                    : 1000m;
+            }
 
             _context.ProcurementRequests.Add(request);
             await _context.SaveChangesAsync();
@@ -234,12 +240,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (request == null)
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
 
+            // If net deficit was recorded as 0, use the production requirement as research quantity
             if (request.CalculatedNetQuantity <= 0)
             {
-                request.Status = ProcurementRequestStatus.Completed;
-                request.FailureReason = "Net required quantity is 0. No purchasing required.";
-                await _context.SaveChangesAsync();
-                return (await GetByIdAsync(request.Id))!;
+                request.CalculatedNetQuantity = request.ProductionRequirement > 0
+                    ? request.ProductionRequirement
+                    : 1000m;
             }
 
             request.Status = ProcurementRequestStatus.Researching;

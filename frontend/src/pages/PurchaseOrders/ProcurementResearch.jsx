@@ -260,7 +260,12 @@ export default function ProcurementResearch() {
 
       setAgentStep('done');
       setShowNewForm(false);
-      setSuccessMessage('AI Multi-Agent research completed successfully! Evaluated supplier candidates are shown below.');
+      const count = completedRequest?.candidates?.length || 0;
+      setSuccessMessage(
+        count > 0
+          ? `AI Multi-Agent research completed successfully! Evaluated ${count} supplier candidates shown below.`
+          : 'AI Multi-Agent research completed! Check evaluated candidates in the comparison matrix below.'
+      );
     } catch (err) {
       setErrorMessage(parseErrorMessage(err, 'Failed to complete AI procurement research.'));
       setAgentStep('idle');
@@ -278,11 +283,16 @@ export default function ProcurementResearch() {
     setAgentStep('purchasing');
 
     try {
-      await procurementService.analyzeRequest(selectedRequestId);
+      const refreshed = await procurementService.analyzeRequest(selectedRequestId);
       setAgentStep('validation');
       await loadRequestDetails(selectedRequestId);
       setAgentStep('done');
-      setSuccessMessage('Procurement research refreshed with latest supplier market grounding.');
+      const count = refreshed?.candidates?.length || 0;
+      setSuccessMessage(
+        count > 0
+          ? `Procurement research refreshed! Found ${count} evaluated supplier candidates.`
+          : 'Procurement research refreshed with latest supplier market grounding.'
+      );
     } catch (err) {
       setErrorMessage(parseErrorMessage(err, 'Failed to re-run research.'));
       setAgentStep('idle');
@@ -928,7 +938,7 @@ export default function ProcurementResearch() {
                 <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800">
                   <span className="text-slate-400 block text-[10px] uppercase">Net Deficit</span>
                   <span className="text-sm font-bold text-white">
-                    {(currentRequest.calculatedNetQuantity || currentRequest.netDeficit || 0).toLocaleString()}
+                    {(currentRequest.calculatedNetQuantity || currentRequest.netDeficit || currentRequest.productionRequirement || 0).toLocaleString()}
                   </span>
                 </div>
                 <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800">
@@ -1145,8 +1155,25 @@ export default function ProcurementResearch() {
                 <tbody className="divide-y divide-slate-800/60">
                   {candidatesList.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-8 text-center text-slate-500">
-                        No supplier candidates evaluated yet. Click "Start AI Procurement Research" to run grounding.
+                      <td colSpan={11} className="py-12 text-center text-slate-400">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                          <Bot className="w-8 h-8 text-purple-400 animate-pulse" />
+                          <p className="text-sm font-semibold text-slate-300">
+                            No supplier candidates evaluated yet for this request.
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Click &quot;Run AI Research&quot; below to trigger the 4-agent LangGraph workflow with Gemini Search Grounding &amp; ERP supplier matching.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleReRunResearch}
+                            disabled={isResearching}
+                            className="mt-2 flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>{isResearching ? 'Evaluating Suppliers with Multi-Agent AI...' : 'Run AI Procurement Research Now'}</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
