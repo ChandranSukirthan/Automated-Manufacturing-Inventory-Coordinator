@@ -48,7 +48,13 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final user = widget.appState.session!.user;
     if (user.role == 'ITAdmin' || user.role == '3' || user.role == 'Admin') {
-      return ItAdminMainScreen(apiClient: widget.qualityService.api, showAppBar: true);
+      return ItAdminMainScreen(
+        apiClient: widget.qualityService.api,
+        showAppBar: true,
+        onSignOut: widget.appState.logout,
+        userName: user.fullName,
+        userEmail: user.email,
+      );
     }
     final isQualityInspector = user.isQualityInspector;
     final screens = isQualityInspector
