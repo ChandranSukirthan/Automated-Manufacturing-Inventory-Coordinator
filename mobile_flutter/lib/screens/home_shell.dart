@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../app_colors.dart';
 import '../services/quality_service.dart';
+import 'package:mobile_flutter/screens/admin/it_admin_main_screen.dart';
 import 'dashboard_screen.dart';
 import 'defects_screen.dart';
 import 'defect_form_screen.dart';
@@ -46,6 +47,9 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final user = widget.appState.session!.user;
+    if (user.role == 'ITAdmin' || user.role == '3' || user.role == 'Admin') {
+      return ItAdminMainScreen(apiClient: widget.qualityService.api, showAppBar: true);
+    }
     final isQualityInspector = user.isQualityInspector;
     final screens = isQualityInspector
         ? [
