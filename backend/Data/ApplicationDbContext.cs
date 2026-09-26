@@ -432,6 +432,25 @@ namespace ManufacturingCoordinator.Data
                 entity.Property(po => po.EmailFailureReason)
                     .HasMaxLength(500);
 
+                entity.Property(po => po.TrackingStatus)
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Draft");
+
+                entity.Property(po => po.TrackingNumber)
+                    .HasMaxLength(200);
+
+                entity.Property(po => po.DeliveryRemarks)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.BankSlipUrl)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.BankReferenceNumber)
+                    .HasMaxLength(100);
+
+                entity.Property(po => po.BankSlipStatus)
+                    .HasMaxLength(50);
+
                 entity.Property(po => po.CreatedAt)
                     .HasDefaultValueSql("timezone('utc', now())");
 

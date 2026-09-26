@@ -343,6 +343,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (!string.IsNullOrWhiteSpace(workflowId))
                 request.WorkflowId = workflowId;
 
+
+
             // 3. Run deterministic 6-point validation on all candidates
             SupplierCandidate? bestCandidate = null;
             decimal lowestCost = decimal.MaxValue;

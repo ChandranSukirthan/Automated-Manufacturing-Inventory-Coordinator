@@ -24,6 +24,8 @@ namespace ManufacturingCoordinator.Data
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
 
+            await EnsureProcurementTablesAsync(db);
+
             // 1. Seed Users for all roles
             var seedUsers = new[]
             {
@@ -117,57 +119,17 @@ namespace ManufacturingCoordinator.Data
                 await db.SaveChangesAsync();
             }
 
-            // 3. Seed Suppliers
-            if (!await db.Suppliers.AnyAsync())
+            // 3. Clear existing Suppliers and Candidates to remove old mock data
+            if (await db.SupplierCandidates.AnyAsync())
             {
-                var suppliers = new List<Supplier>
-                {
-                    new()
-                    {
-                        SupplierCode = "SUP-001",
-                        Name = "Apex Industrial Metals",
-                        ContactEmail = "orders@apeximetals.com",
-                        ContactPhone = "+1-555-0192",
-                        Address = "100 Industrial Parkway, Chicago, IL",
-                        PaymentTerms = "Net 30",
-                        LeadTimeDays = 7,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow.AddDays(-60),
-                        UpdatedAt = DateTime.UtcNow.AddDays(-60)
-                    },
-                    new()
-                    {
-                        SupplierCode = "SUP-002",
-                        Name = "Global Precision Fasteners",
-                        ContactEmail = "procurement@globalfasteners.com",
-                        ContactPhone = "+1-555-0283",
-                        Address = "450 Logistics Way, Detroit, MI",
-                        PaymentTerms = "Net 60",
-                        LeadTimeDays = 14,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow.AddDays(-45),
-                        UpdatedAt = DateTime.UtcNow.AddDays(-45)
-                    },
-                    new()
-                    {
-                        SupplierCode = "SUP-003",
-                        Name = "Polymer & Composites Direct",
-                        ContactEmail = "sales@polymerdirect.com",
-                        ContactPhone = "+1-555-0374",
-                        Address = "78 Polymer Row, Akron, OH",
-                        PaymentTerms = "Net 30",
-                        LeadTimeDays = 10,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow.AddDays(-30),
-                        UpdatedAt = DateTime.UtcNow.AddDays(-30)
-                    }
-                };
-
-                db.Suppliers.AddRange(suppliers);
+                db.SupplierCandidates.RemoveRange(db.SupplierCandidates);
                 await db.SaveChangesAsync();
             }
-
-            // 4. Seed Purchase Orders with Order Lines if none exist
+            if (await db.Suppliers.AnyAsync())
+            {
+                db.Suppliers.RemoveRange(db.Suppliers);
+                await db.SaveChangesAsync();
+            }
             if (!await db.PurchaseOrders.AnyAsync())
             {
                 var supplier1 = await db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-001");
@@ -653,6 +615,18 @@ namespace ManufacturingCoordinator.Data
                     ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""MaterialName"" character varying(200);
                     ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""Priority"" character varying(50) DEFAULT 'Normal';
                     ALTER TABLE ""SupplierCandidates"" ADD COLUMN IF NOT EXISTS ""Availability"" character varying(100) DEFAULT 'In Stock';
+
+                    -- Ensure PurchaseOrders tracking and delivery columns exist
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ProcurementRequestId"" integer;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingStatus"" character varying(50) DEFAULT 'Draft';
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ExpectedDeliveryDate"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ActualDeliveryDate"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingNumber"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""DeliveryRemarks"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUrl"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankReferenceNumber"" character varying(100);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUploadedAt"" timestamp with time zone;
 
                     CREATE TABLE IF NOT EXISTS ""ProcurementOutcomes"" (
                         ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,

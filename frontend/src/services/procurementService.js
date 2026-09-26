@@ -30,10 +30,21 @@ export const procurementService = {
   /**
    * AI Procurement Analysis endpoint as specified in requirement:
    * Calls ASP.NET Core: POST /api/procurement-requests/{id}/analyze
+   * with fallbacks to /api/procurement/{id}/research and /api/procurement/{id}/start
    */
   async analyzeRequest(id) {
-    const response = await api.post(`/procurement-requests/${id}/analyze`);
-    return response.data;
+    try {
+      const response = await api.post(`/procurement-requests/${id}/analyze`);
+      return response.data;
+    } catch (err) {
+      try {
+        const response = await api.post(`/procurement/${id}/research`);
+        return response.data;
+      } catch (err2) {
+        const response = await api.post(`/procurement/${id}/start`);
+        return response.data;
+      }
+    }
   },
 
   /**
