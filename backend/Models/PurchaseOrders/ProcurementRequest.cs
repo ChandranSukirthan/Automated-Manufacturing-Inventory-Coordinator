@@ -95,6 +95,9 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        [MaxLength(50)]
+        public string Priority { get; set; } = "Normal";
+
         // ── Convenience Aliases for Flexible API Mapping ──────────────────────────
 
         /// <summary>Alias for RawMaterialId.</summary>
@@ -113,6 +116,14 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
             set => RequiredSpecification = value;
         }
 
+        /// <summary>Alias for ProductionRequirement.</summary>
+        [NotMapped]
+        public decimal RequiredQuantity
+        {
+            get => ProductionRequirement;
+            set => ProductionRequirement = value;
+        }
+
         /// <summary>Alias for CalculatedNetQuantity — the authoritative deficit.</summary>
         [NotMapped]
         public decimal NetDeficit
@@ -127,6 +138,22 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         {
             get => ExistingOpenPoQuantity;
             set => ExistingOpenPoQuantity = value;
+        }
+
+        /// <summary>Alias for ExistingOpenPoQuantity.</summary>
+        [NotMapped]
+        public decimal OpenPurchaseQuantity
+        {
+            get => ExistingOpenPoQuantity;
+            set => ExistingOpenPoQuantity = value;
+        }
+
+        /// <summary>Alias for MaximumBudget.</summary>
+        [NotMapped]
+        public decimal BudgetLimit
+        {
+            get => MaximumBudget;
+            set => MaximumBudget = value;
         }
 
         /// <summary>Alias for RequiredByDate.</summary>

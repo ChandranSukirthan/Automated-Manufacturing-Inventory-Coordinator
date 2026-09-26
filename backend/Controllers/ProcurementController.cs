@@ -23,10 +23,12 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// POST /api/procurement/request — Initialize AI-assisted raw-material procurement request.
+        /// POST /api/procurement/request or /api/procurement-requests — Initialize AI-assisted raw-material procurement request.
         /// Deterministically calculates net required quantity.
         /// </summary>
         [HttpPost("request")]
+        [HttpPost("/api/procurement-requests")]
+        [HttpPost("/api/procurement-requests/request")]
         [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(ProcurementResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -53,10 +55,14 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// POST /api/procurement/{id}/research — Trigger AI agent market research & candidate validation.
+        /// POST /api/procurement/{id}/research or /analyze — Trigger AI agent market research & candidate validation.
         /// Validates candidates, computes deterministic MOQ/cost, and auto-drafts PO for approved suppliers.
         /// </summary>
         [HttpPost("{id:int}/research")]
+        [HttpPost("{id:int}/analyze")]
+        [HttpPost("/api/procurement-requests/{id:int}/analyze")]
+        [HttpPost("/api/procurement-requests/{id:int}/research")]
+        [HttpPost("/api/procurement-requests/{id:int}/start")]
         [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(ProcurementResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -79,9 +85,10 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// GET /api/procurement/{id} — Retrieve procurement request with evaluated supplier candidates.
+        /// GET /api/procurement/{id} or /api/procurement-requests/{id} — Retrieve procurement request with evaluated supplier candidates.
         /// </summary>
         [HttpGet("{id:int}", Name = "GetProcurementById")]
+        [HttpGet("/api/procurement-requests/{id:int}")]
         [ProducesResponseType(typeof(ProcurementResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProcurementResponseDto>> GetById(int id)
@@ -92,9 +99,10 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
-        /// GET /api/procurement — List all procurement requests.
+        /// GET /api/procurement or /api/procurement-requests — List all procurement requests.
         /// </summary>
         [HttpGet]
+        [HttpGet("/api/procurement-requests")]
         [ProducesResponseType(typeof(IEnumerable<ProcurementResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<ProcurementResponseDto>>> GetAll()
         {

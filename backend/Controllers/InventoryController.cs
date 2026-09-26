@@ -36,7 +36,6 @@ namespace backend.Controllers
 
         // POST: api/inventory/alerts
         [HttpPost("alerts")]
-        [HttpPost("/api/stock-alerts")]
         public async Task<ActionResult<StockAlertResponseDto>> CreateAlert([FromBody] CreateStockAlertDto alertDto)
         {
             if (!ModelState.IsValid)

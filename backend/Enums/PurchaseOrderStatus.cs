@@ -10,7 +10,14 @@ namespace ManufacturingCoordinator.Enums
         Rejected,
         RevisionRequested,
         Payment,
-        Sent
+        Sent,
+        PaymentPending,
+        Paid,
+        SupplierNotified,
+        InTransit,
+        Delivered,
+        Completed,
+        PaymentFailed
     }
 
     public static class PurchaseOrderStatusTransitions
@@ -37,15 +44,55 @@ namespace ManufacturingCoordinator.Enums
                 },
                 [PurchaseOrderStatus.Approved] = new HashSet<PurchaseOrderStatus>
                 {
-                    PurchaseOrderStatus.Payment
+                    PurchaseOrderStatus.Payment,
+                    PurchaseOrderStatus.PaymentPending,
+                    PurchaseOrderStatus.Paid
                 },
                 [PurchaseOrderStatus.Payment] = new HashSet<PurchaseOrderStatus>
                 {
+                    PurchaseOrderStatus.Paid,
+                    PurchaseOrderStatus.Sent,
+                    PurchaseOrderStatus.PaymentFailed
+                },
+                [PurchaseOrderStatus.PaymentPending] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.Paid,
+                    PurchaseOrderStatus.PaymentFailed
+                },
+                [PurchaseOrderStatus.Paid] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.SupplierNotified,
                     PurchaseOrderStatus.Sent
                 },
-                // Terminal states — no further transitions
+                [PurchaseOrderStatus.SupplierNotified] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.Sent,
+                    PurchaseOrderStatus.InTransit
+                },
+                [PurchaseOrderStatus.Sent] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.InTransit,
+                    PurchaseOrderStatus.Delivered,
+                    PurchaseOrderStatus.Completed
+                },
+                [PurchaseOrderStatus.InTransit] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.Delivered,
+                    PurchaseOrderStatus.Completed
+                },
+                [PurchaseOrderStatus.Delivered] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.Completed
+                },
+                [PurchaseOrderStatus.PaymentFailed] = new HashSet<PurchaseOrderStatus>
+                {
+                    PurchaseOrderStatus.Payment,
+                    PurchaseOrderStatus.PaymentPending,
+                    PurchaseOrderStatus.Draft
+                },
+                // Terminal states
                 [PurchaseOrderStatus.Rejected] = new HashSet<PurchaseOrderStatus>(),
-                [PurchaseOrderStatus.Sent] = new HashSet<PurchaseOrderStatus>()
+                [PurchaseOrderStatus.Completed] = new HashSet<PurchaseOrderStatus>()
             };
 
         public static bool IsTransitionAllowed(PurchaseOrderStatus from, PurchaseOrderStatus to)

@@ -37,35 +37,91 @@ namespace backend.Services
 
         public async Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync()
         {
-            return await _context.StockAlerts
+            var alerts = await _context.StockAlerts
                 .OrderByDescending(alert => alert.Timestamp)
-                .Select(alert => new StockAlertResponseDto
-                {
-                    Id = alert.Id,
-                    Sku = alert.Sku,
-                    PackagingType = alert.PackagingType,
-                    QuantityRequested = alert.QuantityRequested,
-                    Status = alert.Status,
-                    Timestamp = alert.Timestamp,
-                    WorkerId = alert.WorkerId
-                })
                 .ToListAsync();
+
+            return alerts.Select(MapToStockAlertResponseDto);
+        }
+
+        public async Task<StockAlertResponseDto?> GetStockAlertByIdAsync(int id)
+        {
+            var alert = await _context.StockAlerts.FindAsync(id);
+            return alert == null ? null : MapToStockAlertResponseDto(alert);
+        }
+
+        public async Task<IEnumerable<StockAlertResponseDto>> GetUnreadStockAlertsAsync()
+        {
+            var alerts = await _context.StockAlerts
+                .Where(alert => !alert.IsRead)
+                .OrderByDescending(alert => alert.Timestamp)
+                .ToListAsync();
+
+            return alerts.Select(MapToStockAlertResponseDto);
+        }
+
+        public async Task<bool> MarkStockAlertAsReadAsync(int id)
+        {
+            var alert = await _context.StockAlerts.FindAsync(id);
+            if (alert == null) return false;
+
+            alert.IsRead = true;
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<StockAlertResponseDto> CreateStockAlertAsync(CreateStockAlertDto alertDto)
         {
+            // Deterministic calculation:
+            // NetDeficit = (RequiredQuantity + SafetyStock) - (CurrentStock + OpenPurchaseQuantity)
+            // Never allow the LLM to calculate the authoritative deficit.
+            var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku == alertDto.Sku);
+
+            var currentStock = alertDto.CurrentStock ?? (item != null ? (decimal)item.StockLevel : 0m);
+            var safetyStock = alertDto.SafetyStock ?? (item != null ? (decimal)item.ReorderThreshold : 0m);
+            var requiredQty = alertDto.RequiredQuantity ?? (decimal)alertDto.QuantityRequested;
+            var openPoQty = alertDto.OpenPurchaseQuantity ?? 0m;
+            var netDeficit = Math.Max(0m, (requiredQty + safetyStock) - (currentStock + openPoQty));
+
+            var materialName = !string.IsNullOrWhiteSpace(alertDto.MaterialName)
+                ? alertDto.MaterialName
+                : (item?.Name ?? alertDto.Sku);
+
+            var severity = !string.IsNullOrWhiteSpace(alertDto.Severity)
+                ? alertDto.Severity
+                : (netDeficit > 500 ? "Critical" : netDeficit > 100 ? "High" : "Medium");
+
             var alert = new StockAlert
             {
                 Sku = alertDto.Sku,
                 PackagingType = alertDto.PackagingType,
-                QuantityRequested = alertDto.QuantityRequested,
+                QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested : (int)requiredQty,
                 WorkerId = alertDto.WorkerId,
                 Status = "Pending",
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                MaterialId = alertDto.MaterialId ?? item?.Id,
+                MaterialName = materialName,
+                CurrentStock = currentStock,
+                RequiredQuantity = requiredQty,
+                SafetyStock = safetyStock,
+                OpenPurchaseQuantity = openPoQty,
+                NetDeficit = netDeficit,
+                Severity = severity,
+                IsRead = false
             };
 
             _context.StockAlerts.Add(alert);
             await _context.SaveChangesAsync();
+
+            return MapToStockAlertResponseDto(alert);
+        }
+
+        private static StockAlertResponseDto MapToStockAlertResponseDto(StockAlert alert)
+        {
+            var reqQty = alert.RequiredQuantity > 0 ? alert.RequiredQuantity : alert.QuantityRequested;
+            var deficit = alert.NetDeficit > 0
+                ? alert.NetDeficit
+                : Math.Max(0m, (reqQty + alert.SafetyStock) - (alert.CurrentStock + alert.OpenPurchaseQuantity));
 
             return new StockAlertResponseDto
             {
@@ -75,7 +131,16 @@ namespace backend.Services
                 QuantityRequested = alert.QuantityRequested,
                 Status = alert.Status,
                 Timestamp = alert.Timestamp,
-                WorkerId = alert.WorkerId
+                WorkerId = alert.WorkerId,
+                MaterialId = alert.MaterialId,
+                MaterialName = alert.MaterialName ?? alert.Sku,
+                CurrentStock = alert.CurrentStock,
+                RequiredQuantity = reqQty,
+                SafetyStock = alert.SafetyStock,
+                OpenPurchaseQuantity = alert.OpenPurchaseQuantity,
+                NetDeficit = deficit,
+                Severity = string.IsNullOrWhiteSpace(alert.Severity) ? "Medium" : alert.Severity,
+                IsRead = alert.IsRead
             };
         }
 

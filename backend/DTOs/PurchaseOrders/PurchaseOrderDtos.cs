@@ -46,6 +46,9 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public decimal Subtotal => TotalPrice;
     }
 
+    public class CreateOrderLineDto : OrderLineDto { }
+    public class UpdateOrderLineDto : OrderLineDto { }
+
     // ── Purchase Order ──────────────────────────────────────────────────────────
 
     public class CreatePurchaseOrderDto
