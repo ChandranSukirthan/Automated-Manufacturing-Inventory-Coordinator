@@ -56,7 +56,8 @@ namespace backend.Services
             string materialName, string specification, decimal requiredQuantity, string? preferredRegion)
         {
             var (_, candidates) = await ResearchProcurementSuppliersWithWorkflowAsync(
-                materialName, specification, requiredQuantity, preferredRegion);
+                materialName, specification, requiredQuantity, preferredRegion,
+                netDeficit: requiredQuantity);
             return candidates;
         }
 
@@ -70,7 +71,11 @@ namespace backend.Services
         ///   React and Flutter NEVER call FastAPI directly.
         /// </summary>
         public async Task<(string? workflowId, List<SupplierCandidateDto> candidates)> ResearchProcurementSuppliersWithWorkflowAsync(
-            string materialName, string specification, decimal requiredQuantity, string? preferredRegion)
+            string materialName, string specification, decimal requiredQuantity, string? preferredRegion,
+            string? materialId = null, decimal? currentStock = null, decimal? safetyStock = null,
+            decimal? openPOQuantity = null, decimal? netDeficit = null, decimal? budgetLimit = null,
+            string? unit = null, string? qualityRequirement = null, string? requiredByDate = null,
+            int? procurementRequestId = null)
         {
             string workflowId = "wf-" + Guid.NewGuid().ToString("N")[..12];
 
@@ -78,12 +83,22 @@ namespace backend.Services
             {
                 var payload = new
                 {
-                    objective = $"Procure raw material '{materialName}' ({specification}) quantity {requiredQuantity} region '{preferredRegion ?? "Global"}'",
+                    objective = $"Procure raw material '{materialName}' ({specification}) — net deficit {netDeficit ?? requiredQuantity} {unit ?? "units"} — budget ${budgetLimit ?? 0:F2}",
                     workflowId,
+                    procurementRequestId,
+                    materialId,
                     materialName,
                     specification,
+                    currentStock,
                     requiredQuantity,
-                    preferredRegion
+                    safetyStock,
+                    openPOQuantity,
+                    netDeficit = netDeficit ?? requiredQuantity,   // authoritative deficit
+                    budgetLimit,
+                    unit,
+                    qualityRequirement,
+                    preferredRegion,
+                    requiredByDate
                 };
 
                 var response = await _httpClient.PostAsJsonAsync("/api/workflows/run", payload);

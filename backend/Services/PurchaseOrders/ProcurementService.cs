@@ -288,10 +288,20 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             try
             {
                 var (wfId, aiCandidates) = await _agentService.ResearchProcurementSuppliersWithWorkflowAsync(
-                    request.RawMaterial?.Name ?? "Raw Material",
-                    request.RequiredSpecification,
-                    request.CalculatedNetQuantity,
-                    request.PreferredRegion);
+                    materialName: request.MaterialName ?? request.RawMaterial?.Name ?? "Raw Material",
+                    specification: request.RequiredSpecification,
+                    requiredQuantity: request.ProductionRequirement,
+                    preferredRegion: request.PreferredRegion,
+                    materialId: request.RawMaterialId.ToString(),
+                    currentStock: request.CurrentStock,
+                    safetyStock: request.SafetyStock,
+                    openPOQuantity: request.ExistingOpenPoQuantity,
+                    netDeficit: request.CalculatedNetQuantity,
+                    budgetLimit: request.MaximumBudget,
+                    unit: "units",
+                    qualityRequirement: request.QualityRequirement,
+                    requiredByDate: request.RequiredByDate.ToString("yyyy-MM-dd"),
+                    procurementRequestId: request.Id);
 
                 workflowId = wfId;
 
