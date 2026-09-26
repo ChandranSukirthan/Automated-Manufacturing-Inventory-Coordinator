@@ -21,7 +21,6 @@ import ProcurementResearch from './pages/PurchaseOrders/ProcurementResearch';
 import AiApprovals from './pages/PurchaseOrders/AiApprovals';
 import SupplierAnalytics from './pages/PurchaseOrders/SupplierAnalytics';
 import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
-import StockAlertsPage from './pages/StockAlerts/StockAlertsPage';
 
 // Student 3: Quality & Defect Pages
 import QualityDashboard from './pages/Dashboard/QualityDashboard';
@@ -154,34 +153,10 @@ function App() {
             }
           />
           <Route
-            path="/purchase-orders/tracking"
-            element={
-              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin']}>
-                <AiApprovals defaultTab="tracking" />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/order-tracking"
-            element={
-              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin']}>
-                <AiApprovals defaultTab="tracking" />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/ai-approvals"
             element={
               <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin']}>
                 <AiApprovals />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/stock-alerts"
-            element={
-              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin', 3]}>
-                <StockAlertsPage />
               </ProtectedRoute>
             }
           />

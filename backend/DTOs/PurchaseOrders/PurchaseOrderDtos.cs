@@ -56,8 +56,6 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         [Required]
         public int SupplierId { get; set; }
 
-        public int? ProcurementRequestId { get; set; }
-
         [MaxLength(10)]
         public string Currency { get; set; } = "USD";
 
@@ -77,8 +75,6 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
     {
         [Required]
         public int SupplierId { get; set; }
-
-        public int? ProcurementRequestId { get; set; }
 
         [MaxLength(10)]
         public string Currency { get; set; } = "USD";
@@ -111,8 +107,6 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
         public bool RequiresApproval { get; set; }
-        public int? ProcurementRequestId { get; set; }
-        public string? TrackingStatus { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -136,11 +130,6 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string? CreatedByName { get; set; }
         public string? ApprovedByName { get; set; }
         public DateTime? ApprovedAt { get; set; }
-        public int? ProcurementRequestId { get; set; }
-        public string? TrackingStatus { get; set; }
-        public DateTime? ExpectedDeliveryDate { get; set; }
-        public string? TrackingNumber { get; set; }
-        public string? DeliveryRemarks { get; set; }
         public string? StripePaymentIntentId { get; set; }
         public string? StripePaymentStatus { get; set; }
         public string? EmailStatus { get; set; }

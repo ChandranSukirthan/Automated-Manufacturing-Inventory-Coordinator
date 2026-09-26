@@ -1463,18 +1463,6 @@ export default function ProcurementResearch() {
                         </>
                       )}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate(
-                          `/purchase-orders/create?supplierId=${activeCandidate.supplierId || ''}&supplierName=${encodeURIComponent(activeCandidate.supplierName || '')}&materialId=${currentRequest.rawMaterialId || ''}&materialName=${encodeURIComponent(activeCandidate.materialName || currentRequest.materialName || '')}&quantity=${activeCandidate.recommendedOrderQuantity || currentRequest.netDeficit || ''}&unitPrice=${activeCandidate.unitPrice || ''}&procurementRequestId=${currentRequest.id || ''}&aiRecommendation=${encodeURIComponent(recommendation?.rationale || 'AI Recommended Supplier')}`
-                        );
-                      }}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-500/40 font-bold rounded-xl text-xs transition-all shadow-md"
-                    >
-                      <ShoppingCart className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Use This Supplier</span>
-                    </button>
                   )}
 
                   {!validationChecks.allPassed && !currentRequest.generatedPurchaseOrderId && (
@@ -1676,17 +1664,18 @@ export default function ProcurementResearch() {
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-400 uppercase font-semibold text-[10px] bg-slate-950/60">
                         <th className="py-2.5 px-3">Material</th>
-                        <th className="py-2.5 px-3">Supplier</th>
-                        <th className="py-2.5 px-3 text-right">Quantity</th>
-                        <th className="py-2.5 px-3 text-right">Price</th>
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                        <th className="py-2.5 px-3 text-center">Delivery</th>
-                        <th className="py-2.5 px-3">Quality</th>
+                        <th className="py-2.5 px-3">Supplier Selected</th>
+                        <th className="py-2.5 px-3 text-right">Qty (Req / Final)</th>
+                        <th className="py-2.5 px-3 text-right">Price (Est / Final)</th>
+                        <th className="py-2.5 px-3 text-center">Lead Time</th>
+                        <th className="py-2.5 px-3">Quality Standard</th>
+                        <th className="py-2.5 px-3 text-center">Verification</th>
+                        <th className="py-2.5 px-3 text-center">Manager Decision</th>
                         <th className="py-2.5 px-3 text-right">Date</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
-                      {procurementHistory.slice(0, 10).map((record) => (
+                      {procurementHistory.slice(0, 8).map((record) => (
                         <tr key={record.id} className="hover:bg-slate-800/30 transition-colors">
                           <td className="py-3 px-3 font-semibold text-white">
                             <span>{record.material}</span>
@@ -1695,37 +1684,40 @@ export default function ProcurementResearch() {
                             <span>{record.selectedSupplier || record.recommendedSupplier}</span>
                           </td>
                           <td className="py-3 px-3 text-right font-mono text-slate-200">
-                            {(record.finalOrderedQuantity || record.recommendedQuantity || record.requestedQuantity || 0).toLocaleString()} units
+                            {record.requestedQuantity} / {record.finalOrderedQuantity || record.recommendedQuantity}
                           </td>
-                          <td className="py-3 px-3 text-right font-mono text-emerald-400 font-bold">
-                            ${(record.finalPrice || record.estimatedPrice || 0).toFixed(2)}
+                          <td className="py-3 px-3 text-right font-mono text-emerald-400">
+                            ${(record.estimatedPrice || 0).toFixed(2)} / ${(record.finalPrice || record.estimatedPrice || 0).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-3 text-center text-slate-300 font-mono">
+                            {record.actualLeadTime > 0 ? `${record.actualLeadTime}d` : `${record.estimatedLeadTime}d est`}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30 truncate max-w-[120px] inline-block" title={record.qualityEvidence}>
+                              {record.qualityEvidence || 'ISO 9001'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              record.supplierVerification === 'VERIFIED'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              {record.supplierVerification || 'VERIFIED'}
+                            </span>
                           </td>
                           <td className="py-3 px-3 text-center">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               record.managerDecision === 'Approved'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                ? 'bg-emerald-500/10 text-emerald-400'
                                 : record.managerDecision === 'Rejected'
-                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                : 'bg-orange-500/10 text-orange-400 border border-orange-500/30'
+                                ? 'bg-rose-500/10 text-rose-400'
+                                : 'bg-orange-500/10 text-orange-400'
                             }`}>
                               {record.managerDecision || 'Approved'}
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                              record.deliverySuccess || record.deliveryStatus === 'Delivered'
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : 'bg-blue-500/10 text-blue-400'
-                            }`}>
-                              {record.deliverySuccess ? 'Delivered' : (record.deliveryStatus || 'In Transit')}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30 truncate max-w-[120px] inline-block" title={record.qualityEvidence}>
-                              {record.qualityEvidence || 'ISO 9001 Certified'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 text-right text-slate-400 font-mono text-[11px]">
+                          <td className="py-3 px-3 text-right text-slate-500 font-mono">
                             {new Date(record.createdAt).toLocaleDateString()}
                           </td>
                         </tr>
