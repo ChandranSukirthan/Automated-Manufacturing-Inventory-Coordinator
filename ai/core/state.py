@@ -67,6 +67,7 @@ class AgentState(TypedDict, total=False):
     recommendation_summary: str | None
     risks: list[str]
     sources: list[str]
+    search_status: str | None               # SUCCESS | SEARCH_UNAVAILABLE | AI_ANALYSIS_FAILED
     draft_po: dict[str, Any] | None
 
     # ── Validation output ──────────────────────────────────────────────────────
