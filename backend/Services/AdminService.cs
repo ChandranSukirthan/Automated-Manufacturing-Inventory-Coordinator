@@ -198,7 +198,7 @@ namespace ManufacturingCoordinator.Api.Services
                 // Fallback to direct DB update if microservice offline
             }
 
-            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId || x.Id.ToString() == workflowId);
+            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId);
             if (w == null)
                 throw new AuthException($"Workflow '{workflowId}' not found.", HttpStatusCode.NotFound);
 
@@ -405,7 +405,7 @@ namespace ManufacturingCoordinator.Api.Services
             {
             }
 
-            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId || x.Id.ToString() == workflowId);
+            var w = await _db.AgentWorkflows.FirstOrDefaultAsync(x => x.WorkflowId == workflowId);
             if (w == null)
                 throw new AuthException($"Workflow '{workflowId}' not found.", HttpStatusCode.NotFound);
 

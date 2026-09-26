@@ -195,7 +195,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Final Outcome / Result',
+                    'Execution Output / Result',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
