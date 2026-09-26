@@ -198,30 +198,29 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            StatusChip(status: wf.status),
-                            if (wf.isWaitingForApproval)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF78350F).withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFFF59E0B)),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.touch_app, size: 12, color: Color(0xFFF59E0B)),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'AWAITING APPROVAL',
-                                      style: TextStyle(
-                                        color: Color(0xFFFDE68A),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.4)),
+                              ),
+                              child: Text(
+                                wf.workflowId,
+                                style: const TextStyle(
+                                  color: Color(0xFF06B6D4),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
                                 ),
                               ),
+                            ),
+                            Row(
+                              children: [
+                                StatusChip(status: wf.status),
+                                const SizedBox(width: 6),
+                                StatusChip(status: wf.approvalStatus, showDot: false),
+                              ],
+                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -237,9 +236,15 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Step ${wf.currentStep} of ${wf.totalSteps}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                            Row(
+                              children: [
+                                const Icon(Icons.smart_toy_outlined, color: Color(0xFF94A3B8), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Current Agent: ${wf.currentAgent}',
+                                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
+                                ),
+                              ],
                             ),
                             Text(
                               wf.createdAt.toLocal().toString().split('.')[0],
@@ -247,6 +252,27 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                             ),
                           ],
                         ),
+                        if (wf.finalOutcome != null && wf.finalOutcome!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Outcome: ${wf.finalOutcome!}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

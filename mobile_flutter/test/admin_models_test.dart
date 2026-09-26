@@ -101,6 +101,8 @@ void main() {
       final wf = WorkflowModel.fromJson(json);
       expect(wf.id, 'wf-99');
       expect(wf.isWaitingForApproval, true);
+      expect(wf.currentAgent, 'Planner');
+      expect(wf.approvalStatus, 'Waiting For Approval');
       expect(wf.steps.length, 3);
       expect(wf.steps[0].agentName, 'Planner Agent');
       expect(wf.steps[0].status, 'Completed');
