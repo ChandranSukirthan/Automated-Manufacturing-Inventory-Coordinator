@@ -26,7 +26,9 @@ import {
   Layers,
   Calendar,
   Filter,
-  CheckSquare
+  CheckSquare,
+  TrendingUp,
+  History
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';

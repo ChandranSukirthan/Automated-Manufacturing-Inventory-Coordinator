@@ -73,6 +73,28 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         public DateTime? ApprovedAt { get; set; }
 
+        // ── AI Procurement Link ───────────────────────────────────────────────
+        /// <summary>Links this PO back to the AI ProcurementRequest that generated it.</summary>
+        public int? ProcurementRequestId { get; set; }
+
+        // ── Delivery / Tracking ───────────────────────────────────────────────
+        /// <summary>
+        /// Granular tracking status beyond PO workflow status.
+        /// Values: Draft, PendingApproval, Approved, PaymentPending, Paid,
+        ///         SupplierNotified, Ordered, InTransit, Delivered, Completed
+        /// </summary>
+        [MaxLength(50)]
+        public string TrackingStatus { get; set; } = "Draft";
+
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+
+        [MaxLength(200)]
+        public string? TrackingNumber { get; set; }
+
+        [MaxLength(500)]
+        public string? DeliveryRemarks { get; set; }
+
         // ── Stripe Payment ────────────────────────────────────────────────────
         [MaxLength(200)]
         public string? StripePaymentIntentId { get; set; }
