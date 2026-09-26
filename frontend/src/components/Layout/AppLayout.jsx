@@ -56,6 +56,12 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
       active: location.pathname === '/dashboard/admin' || location.pathname === '/dashboard/manager'
     },
     {
+      label: 'Low Stock Alerts',
+      path: '/stock-alerts',
+      icon: <Bell className="w-5 h-5" />,
+      active: location.pathname === '/stock-alerts'
+    },
+    {
       label: 'Suppliers',
       path: '/suppliers',
       icon: <Building2 className="w-5 h-5" />,
@@ -70,6 +76,7 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
           location.pathname === '/purchase-orders/create' ||
           (location.pathname.startsWith('/purchase-orders/') &&
             !location.pathname.includes('/approvals') &&
+            !location.pathname.includes('/tracking') &&
             !location.pathname.includes('/analytics') &&
             !location.pathname.includes('/procurement')))
     },
@@ -82,11 +89,15 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
         location.pathname === '/procurement-research'
     },
     {
-      label: 'AI Approvals',
-      path: '/purchase-orders/approvals',
+      label: 'Order Tracking',
+      path: '/purchase-orders/tracking',
       icon: <CheckSquare className="w-5 h-5" />,
       badge: pendingCount > 0 ? pendingCount : null,
-      active: location.pathname === '/purchase-orders/approvals' || location.pathname === '/ai-approvals'
+      active:
+        location.pathname === '/purchase-orders/tracking' ||
+        location.pathname === '/order-tracking' ||
+        location.pathname === '/purchase-orders/approvals' ||
+        location.pathname === '/ai-approvals'
     },
     {
       label: 'Analytics',

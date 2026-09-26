@@ -140,7 +140,6 @@ export default function StockAlertNotifications() {
     );
   };
 
-  // Trigger Manual Purchase Order
   const handleManualPurchase = (alert, e) => {
     if (e) e.stopPropagation();
     setIsOpen(false);
@@ -148,11 +147,12 @@ export default function StockAlertNotifications() {
 
     const matId = alert.materialId || (materialInfo ? materialInfo.id : 1);
     const deficit = alert.netDeficit || alert.shortage || alert.quantityRequested || 100;
+    const matName = alert.materialName || alert.sku || (materialInfo ? materialInfo.name : '');
 
     navigate(
       `/purchase-orders/create?materialId=${matId}&quantity=${deficit}&sku=${encodeURIComponent(
         alert.sku || ''
-      )}`
+      )}&materialName=${encodeURIComponent(matName)}`
     );
   };
 
@@ -285,11 +285,12 @@ export default function StockAlertNotifications() {
                         <span>{formatRelativeTime(alert.createdAt || alert.timestamp)}</span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={(e) => handleOpenMaterialModal(alert, e)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-all border border-slate-700"
+                          title="View Material Details"
                         >
                           <Eye className="w-3 h-3 text-slate-400" />
                           <span>View</span>
@@ -297,11 +298,22 @@ export default function StockAlertNotifications() {
 
                         <button
                           type="button"
+                          onClick={(e) => handleManualPurchase(alert, e)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-brand-700 text-brand-300 text-xs font-semibold transition-all border border-brand-700/40"
+                          title="Create Manual Purchase Order"
+                        >
+                          <ShoppingCart className="w-3 h-3" />
+                          <span>Manual</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={(e) => handleAiAnalyze(alert, e)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
+                          title="Run AI Analysis"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>AI Analyze</span>
+                          <span>AI</span>
                         </button>
                       </div>
                     </div>

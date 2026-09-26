@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -14,7 +14,9 @@ import {
   Send,
   Info,
   Package,
-  Sparkles
+  Sparkles,
+  Bell,
+  Cpu
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import purchaseOrderService from '../../services/purchaseOrderService';
@@ -24,6 +26,18 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Query parameters from Low Stock Alert or AI Procurement Research
+  const prefillSupplierId = searchParams.get('supplierId');
+  const prefillSupplierName = searchParams.get('supplierName') || '';
+  const prefillMaterialId = searchParams.get('materialId');
+  const prefillMaterialName = searchParams.get('materialName') || searchParams.get('material') || '';
+  const prefillSku = searchParams.get('sku') || '';
+  const prefillQuantity = searchParams.get('quantity');
+  const prefillUnitPrice = searchParams.get('unitPrice');
+  const prefillProcurementRequestId = searchParams.get('procurementRequestId');
+  const prefillAiRecommendation = searchParams.get('aiRecommendation') || '';
 
   const [suppliers, setSuppliers] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -35,10 +49,21 @@ export default function PurchaseOrderCreate() {
   // Form State
   const [supplierId, setSupplierId] = useState('');
   const [currency, setCurrency] = useState('USD');
-  const [budgetLimit, setBudgetLimit] = useState('10000');
-  const [notes, setNotes] = useState('');
+  const [budgetLimit, setBudgetLimit] = useState('15000');
+  const [notes, setNotes] = useState(
+    prefillAiRecommendation
+      ? `AI Procurement Recommendation: ${prefillAiRecommendation}`
+      : prefillProcurementRequestId
+      ? `Procurement Request #${prefillProcurementRequestId}`
+      : ''
+  );
   const [lines, setLines] = useState([
-    { rawMaterialId: '', description: '', quantity: '100', unitPrice: '15.00' }
+    {
+      rawMaterialId: prefillMaterialId || '',
+      description: prefillMaterialName || prefillSku || '',
+      quantity: prefillQuantity || '100',
+      unitPrice: prefillUnitPrice || '15.00'
+    }
   ]);
 
   useEffect(() => {
@@ -52,17 +77,48 @@ export default function PurchaseOrderCreate() {
         ]);
         const activeSuppliers = (suppliersData || []).filter((s) => s.isActive);
         setSuppliers(activeSuppliers);
-        if (activeSuppliers.length > 0) {
+
+        // Preselect supplier
+        if (prefillSupplierId) {
+          const found = activeSuppliers.find((s) => s.id.toString() === prefillSupplierId.toString());
+          if (found) {
+            setSupplierId(found.id.toString());
+          } else if (activeSuppliers.length > 0) {
+            setSupplierId(activeSuppliers[0].id.toString());
+          }
+        } else if (prefillSupplierName) {
+          const found = activeSuppliers.find(
+            (s) => s.name?.toLowerCase() === prefillSupplierName.toLowerCase()
+          );
+          if (found) {
+            setSupplierId(found.id.toString());
+          } else if (activeSuppliers.length > 0) {
+            setSupplierId(activeSuppliers[0].id.toString());
+          }
+        } else if (activeSuppliers.length > 0) {
           setSupplierId(activeSuppliers[0].id.toString());
         }
+
         setMaterials(materialsData || []);
-        if ((materialsData || []).length > 0) {
+
+        // Preselect material and order line
+        if (prefillMaterialId) {
+          const matched = (materialsData || []).find((m) => m.id.toString() === prefillMaterialId.toString());
+          setLines([
+            {
+              rawMaterialId: prefillMaterialId.toString(),
+              description: matched?.name || prefillMaterialName || prefillSku || 'Raw Material',
+              quantity: prefillQuantity || '100',
+              unitPrice: prefillUnitPrice || '15.00'
+            }
+          ]);
+        } else if ((materialsData || []).length > 0) {
           setLines([
             {
               rawMaterialId: materialsData[0].id.toString(),
               description: materialsData[0].name || '',
-              quantity: '100',
-              unitPrice: '15.00'
+              quantity: prefillQuantity || '100',
+              unitPrice: prefillUnitPrice || '15.00'
             }
           ]);
         }
@@ -103,18 +159,23 @@ export default function PurchaseOrderCreate() {
     setLines(lines.filter((_, i) => i !== index));
   };
 
-  // Calculations
-  const calculatedTotal = lines.reduce((sum, line) => {
+  // Authoritative Calculations (Subtotal, Tax, Total)
+  const subtotal = lines.reduce((sum, line) => {
     const q = parseFloat(line.quantity) || 0;
     const p = parseFloat(line.unitPrice) || 0;
     return sum + q * p;
   }, 0);
+
+  const taxRate = 0.05; // 5% Standard material surcharge/tax
+  const taxAmount = Math.round(subtotal * taxRate * 100) / 100;
+  const calculatedTotal = subtotal + taxAmount;
 
   const budgetNum = parseFloat(budgetLimit) || 0;
   const exceedsBudget = calculatedTotal > budgetNum && budgetNum > 0;
   const requiresApproval = calculatedTotal > 5000;
 
   const selectedSupplier = suppliers.find((s) => s.id.toString() === supplierId);
+
 
   const handleSubmit = async (e, shouldSubmitForApproval = false) => {
     e.preventDefault();
@@ -159,6 +220,7 @@ export default function PurchaseOrderCreate() {
     try {
       const payload = {
         supplierId: parseInt(supplierId, 10),
+        procurementRequestId: prefillProcurementRequestId ? parseInt(prefillProcurementRequestId, 10) : null,
         currency,
         budgetLimit: budgetNum,
         notes: notes.trim(),
@@ -233,6 +295,76 @@ export default function PurchaseOrderCreate() {
             <span>Launch AI Procurement</span>
           </Link>
         </div>
+
+        {/* AI Recommendation Grounded Banner (Requirement 8) */}
+        {(prefillAiRecommendation || prefillProcurementRequestId) && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/80 via-slate-900 to-slate-900 border border-purple-600/40 shadow-xl space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  AI Procurement Recommendation Pre-filled
+                </h4>
+              </div>
+              {prefillProcurementRequestId && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Request #{prefillProcurementRequestId}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1 border-t border-slate-800/80">
+              <div>
+                <span className="text-slate-500 block">Supplier:</span>
+                <span className="font-semibold text-white truncate block">{prefillSupplierName || selectedSupplier?.name || 'Pre-selected'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Material:</span>
+                <span className="font-semibold text-white truncate block">{prefillMaterialName || prefillSku || 'Raw Material'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Recommended Qty:</span>
+                <span className="font-bold text-white font-mono">{prefillQuantity || '—'} units</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Unit Price:</span>
+                <span className="font-bold text-emerald-400 font-mono">${prefillUnitPrice || '—'}</span>
+              </div>
+            </div>
+            {prefillAiRecommendation && (
+              <p className="text-[11px] text-slate-300 italic pt-1 border-t border-slate-800/60">
+                "{prefillAiRecommendation}"
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Low Stock Alert Context Banner (when not from AI) */}
+        {!prefillAiRecommendation && !prefillProcurementRequestId && prefillMaterialId && (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/60 via-slate-900 to-slate-900 border border-rose-700/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">Creating PO from Low Stock Alert</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Material: <span className="text-white font-semibold">{prefillMaterialName || prefillSku || `Material #${prefillMaterialId}`}</span>
+                  {prefillQuantity && (
+                    <> · Net Shortage: <span className="text-rose-400 font-bold font-mono">{prefillQuantity} units</span></>
+                  )}
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/stock-alerts"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-all border border-slate-700 shrink-0"
+            >
+              <Bell className="w-3.5 h-3.5 text-rose-400" />
+              <span>View All Alerts</span>
+            </Link>
+          </div>
+        )}
+
 
         {/* Error Alert */}
         {errorMessage && (
@@ -446,10 +578,14 @@ export default function PurchaseOrderCreate() {
               </div>
             </div>
 
-            {/* Calculations & Business Rules Summary Panel */}
+            {/* Calculations & Business Rules Summary Panel (Requirement 8) */}
             <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-brand-950/40 border border-slate-800 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
+                  <div className="flex items-center gap-4 text-xs text-slate-400 mb-1">
+                    <span>Subtotal: <strong className="text-white font-mono">${subtotal.toFixed(2)}</strong></span>
+                    <span>Tax / Surcharge (5%): <strong className="text-white font-mono">${taxAmount.toFixed(2)}</strong></span>
+                  </div>
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                     Computed Purchase Order Total
                   </span>
