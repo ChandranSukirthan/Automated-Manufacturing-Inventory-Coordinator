@@ -188,7 +188,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
             ),
           ),
 
-          if (_currentWorkflow.result != null && _currentWorkflow.result!.isNotEmpty) ...[
+          if (_currentWorkflow.finalOutcome != null && _currentWorkflow.finalOutcome!.isNotEmpty) ...[
             const SizedBox(height: 16),
             AdminCard(
               child: Column(
@@ -212,7 +212,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                       border: Border.all(color: const Color(0xFF334155)),
                     ),
                     child: Text(
-                      _currentWorkflow.result!,
+                      _currentWorkflow.finalOutcome!,
                       style: const TextStyle(
                         color: Color(0xFFCBD5E1),
                         fontSize: 12,
