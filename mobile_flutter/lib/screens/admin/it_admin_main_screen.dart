@@ -14,16 +14,10 @@ import 'package:mobile_flutter/screens/admin/tabs/system_health_tab.dart';
 class ItAdminMainScreen extends StatefulWidget {
   final ApiClient apiClient;
   final bool showAppBar;
-  final VoidCallback? onSignOut;
-  final String? userName;
-  final String? userEmail;
 
   const ItAdminMainScreen({
     required this.apiClient,
     this.showAppBar = true,
-    this.onSignOut,
-    this.userName,
-    this.userEmail,
     super.key,
   });
 
@@ -80,79 +74,6 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
         });
       }
     }
-  }
-
-  void _showProfileDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF06B6D4).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.person, color: Color(0xFF06B6D4), size: 24),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.userName ?? 'System Administrator',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    widget.userEmail ?? 'admin@amic.com',
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.verified_user, color: Color(0xFF10B981), size: 18),
-              SizedBox(width: 8),
-              Text(
-                'Role: ITAdmin (Full Access)',
-                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(color: Color(0xFF94A3B8))),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onSignOut?.call();
-            },
-            icon: const Icon(Icons.logout, size: 16),
-            label: const Text('Sign Out'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -239,12 +160,6 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                   tooltip: 'Refresh Telemetry',
                   onPressed: _loadAllData,
                 ),
-                if (widget.onSignOut != null)
-                  IconButton(
-                    icon: const Icon(Icons.account_circle_outlined, color: Color(0xFF06B6D4)),
-                    tooltip: 'Account Profile',
-                    onPressed: _showProfileDialog,
-                  ),
               ],
             )
           : null,

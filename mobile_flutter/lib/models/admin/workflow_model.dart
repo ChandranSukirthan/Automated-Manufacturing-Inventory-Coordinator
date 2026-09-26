@@ -1,29 +1,23 @@
 class WorkflowModel {
   final String id;
-  final String workflowId;
   final String objective;
-  final String currentAgent;
   final String status;
-  final String approvalStatus;
-  final String? finalOutcome;
   final int currentStep;
   final int totalSteps;
   final List<WorkflowStepModel> steps;
+  final String? result;
   final bool isWaitingForApproval;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   WorkflowModel({
     required this.id,
-    required this.workflowId,
     required this.objective,
-    required this.currentAgent,
     required this.status,
-    required this.approvalStatus,
-    this.finalOutcome,
     required this.currentStep,
     required this.totalSteps,
     required this.steps,
+    this.result,
     required this.isWaitingForApproval,
     required this.createdAt,
     required this.updatedAt,
@@ -37,46 +31,32 @@ class WorkflowModel {
           .toList();
     }
 
-    final idStr = json['id']?.toString() ?? '';
-    final wfId = json['workflowId']?.toString() ?? (idStr.length > 8 ? 'WF-${idStr.substring(0, 6).toUpperCase()}' : 'WF-1001');
-    final statusStr = json['status']?.toString() ?? 'Pending';
-    final approvalStr = json['approvalStatus']?.toString() ?? 
-        (json['isWaitingForApproval'] == true ? 'Waiting For Approval' : 'Pending');
-    final waiting = json['isWaitingForApproval'] as bool? ??
-        (approvalStr.toLowerCase().contains('waiting') || statusStr.toLowerCase().contains('waiting'));
-
     return WorkflowModel(
-      id: idStr,
-      workflowId: wfId,
+      id: json['id']?.toString() ?? '',
       objective: json['objective']?.toString() ?? 'Agent Workflow Task',
-      currentAgent: json['currentAgent']?.toString() ?? 'Planner',
-      status: statusStr,
-      approvalStatus: approvalStr,
-      finalOutcome: json['finalOutcome']?.toString() ?? json['result']?.toString(),
+      status: json['status']?.toString() ?? 'Pending',
       currentStep: (json['currentStep'] as num?)?.toInt() ?? 0,
       totalSteps: (json['totalSteps'] as num?)?.toInt() ?? (stepList.isNotEmpty ? stepList.length : 5),
       steps: stepList,
-      isWaitingForApproval: waiting,
-      createdAt: json['startedAt'] != null
-          ? DateTime.tryParse(json['startedAt'].toString()) ?? DateTime.now()
-          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now() : DateTime.now()),
-      updatedAt: json['completedAt'] != null
-          ? DateTime.tryParse(json['completedAt'].toString()) ?? DateTime.now()
-          : (json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'].toString()) ?? DateTime.now() : DateTime.now()),
+      result: json['result']?.toString(),
+      isWaitingForApproval: json['isWaitingForApproval'] as bool? ?? false,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'workflowId': workflowId,
         'objective': objective,
-        'currentAgent': currentAgent,
         'status': status,
-        'approvalStatus': approvalStatus,
-        'finalOutcome': finalOutcome,
         'currentStep': currentStep,
         'totalSteps': totalSteps,
         'steps': steps.map((s) => s.toJson()).toList(),
+        'result': result,
         'isWaitingForApproval': isWaitingForApproval,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
