@@ -33,9 +33,9 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
     setState(() => _submitting = true);
     try {
       if (approve) {
-        await widget.service.approveWorkflow(_currentWorkflow.workflowId);
+        await widget.service.approveWorkflow(_currentWorkflow.id);
       } else {
-        await widget.service.rejectWorkflow(_currentWorkflow.workflowId);
+        await widget.service.rejectWorkflow(_currentWorkflow.id);
       }
 
       if (mounted) {
@@ -83,49 +83,22 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFF06B6D4)),
-                      ),
-                      child: Text(
-                        _currentWorkflow.workflowId,
-                        style: const TextStyle(
-                          color: Color(0xFF06B6D4),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                      ),
+                    const Text(
+                      'Planner Agent Workflow',
+                      style: TextStyle(color: Color(0xFF06B6D4), fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    Row(
-                      children: [
-                        StatusChip(status: _currentWorkflow.status),
-                        const SizedBox(width: 6),
-                        StatusChip(status: _currentWorkflow.approvalStatus, showDot: false),
-                      ],
-                    ),
+                    StatusChip(status: _currentWorkflow.status),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 Text(
                   _currentWorkflow.objective,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Current Agent: ${_currentWorkflow.currentAgent}',
-                      style: const TextStyle(color: Color(0xFF06B6D4), fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      'Started: ${_currentWorkflow.createdAt.toLocal().toString().split('.')[0]}',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                    ),
-                  ],
+                Text(
+                  'Created: ${_currentWorkflow.createdAt.toLocal().toString().split('.')[0]}',
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
               ],
             ),
@@ -215,7 +188,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
             ),
           ),
 
-          if (_currentWorkflow.finalOutcome != null && _currentWorkflow.finalOutcome!.isNotEmpty) ...[
+          if (_currentWorkflow.result != null && _currentWorkflow.result!.isNotEmpty) ...[
             const SizedBox(height: 16),
             AdminCard(
               child: Column(
@@ -239,7 +212,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                       border: Border.all(color: const Color(0xFF334155)),
                     ),
                     child: Text(
-                      _currentWorkflow.finalOutcome!,
+                      _currentWorkflow.result!,
                       style: const TextStyle(
                         color: Color(0xFFCBD5E1),
                         fontSize: 12,

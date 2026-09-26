@@ -13,6 +13,8 @@ class WorkflowModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  String? get result => finalOutcome;
+
   WorkflowModel({
     required this.id,
     required this.workflowId,
