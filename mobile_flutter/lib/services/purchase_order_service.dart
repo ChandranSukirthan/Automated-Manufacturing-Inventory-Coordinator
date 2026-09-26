@@ -51,23 +51,6 @@ class PurchaseOrderService {
     throw const ApiException('Failed to retrieve delivery status.');
   }
 
-  /// PUT /api/purchase-orders/{id}/delivery-status — update delivery status by floor worker
-  Future<IncomingSupplyItem> updateDeliveryStatus(
-    int id,
-    String deliveryStatus, {
-    String? remarks,
-  }) async {
-    final body = {
-      'deliveryStatus': deliveryStatus,
-      if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
-    };
-    final response = await _api.put('/purchase-orders/$id/delivery-status', body);
-    if (response is Map<String, dynamic>) {
-      return IncomingSupplyItem.fromJson(response);
-    }
-    throw const ApiException('Failed to update delivery status.');
-  }
-
   /// GET /api/procurement — list all procurement requests
   Future<List<ProcurementItem>> getProcurements() async {
     try {
@@ -129,58 +112,18 @@ class PurchaseOrderService {
     required String packagingType,
     required int quantityRequested,
     String? workerId,
-    String? materialName,
-    double? currentStock,
-    double? requiredQuantity,
-    double? safetyStock,
-    double? openPurchaseQuantity,
-    String? severity,
-    String? reason,
   }) async {
-    final body = <String, dynamic>{
+    final body = {
       'sku': sku,
       'packagingType': packagingType,
       'quantityRequested': quantityRequested,
       'workerId': workerId ?? 'floor_worker_1',
-      if (materialName != null && materialName.isNotEmpty) 'materialName': materialName,
-      if (currentStock != null) 'currentStock': currentStock,
-      if (requiredQuantity != null) 'requiredQuantity': requiredQuantity,
-      if (safetyStock != null) 'safetyStock': safetyStock,
-      if (openPurchaseQuantity != null) 'openPurchaseQuantity': openPurchaseQuantity,
-      if (severity != null) 'severity': severity,
-      if (reason != null && reason.isNotEmpty) 'reason': reason,
     };
     final response = await _api.post('/stock-alerts', body);
     if (response is Map<String, dynamic>) {
       return response;
     }
     return {'status': 'Submitted', 'sku': sku};
-  }
-
-  /// GET /api/stock-alerts — list all low stock alerts with deterministic net deficit
-  Future<List<Map<String, dynamic>>> getStockAlerts() async {
-    try {
-      final response = await _api.get('/stock-alerts');
-      if (response is List) {
-        return response.cast<Map<String, dynamic>>();
-      }
-      return [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// GET /api/stock-alerts/unread — list unread stock alerts
-  Future<List<Map<String, dynamic>>> getUnreadStockAlerts() async {
-    try {
-      final response = await _api.get('/stock-alerts/unread');
-      if (response is List) {
-        return response.cast<Map<String, dynamic>>();
-      }
-      return [];
-    } catch (_) {
-      return [];
-    }
   }
 
   /// GET /api/agentworkflow/workflows — get multi-agent workflow statuses

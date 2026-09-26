@@ -30,6 +30,7 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
   late final TextEditingController _minStockController;
   int _selectedNavIndex = 0;
 
+  // Updated to match your exact C# Database Enums!
   final List<String> _packagingOptions = [
     'BoxPouch',
     'BiscuitPackaging',
@@ -37,22 +38,6 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
     'Bag',
     'Can',
     'Bottle',
-  ];
-
-  final List<String> _unitOptions = [
-    'units',
-    'kg',
-    'meters',
-    'rolls',
-    'liters',
-    'boxes',
-  ];
-
-  final List<String> _reasonOptions = [
-    'Routine Safety Stock Breach',
-    'Urgent Production Run',
-    'Defective Batch Replacement',
-    'Machine Starvation',
   ];
 
   @override
@@ -401,90 +386,9 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
 
                       const SizedBox(height: 16),
 
-                      // Unit & Reason Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'UNIT',
-                                  style: TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _unitOptions.contains(widget.controller.unit)
-                                      ? widget.controller.unit
-                                      : _unitOptions.first,
-                                  dropdownColor: const Color(0xFF2A2A2A),
-                                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: const Color(0xFF262626),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white12)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: yellowAccent)),
-                                  ),
-                                  items: _unitOptions.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) widget.controller.setUnit(val);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'REPORT REASON',
-                                  style: TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                DropdownButtonFormField<String>(
-                                  value: _reasonOptions.contains(widget.controller.reason)
-                                      ? widget.controller.reason
-                                      : _reasonOptions.first,
-                                  dropdownColor: const Color(0xFF2A2A2A),
-                                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: const Color(0xFF262626),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white12)),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: yellowAccent)),
-                                  ),
-                                  items: _reasonOptions.map((r) => DropdownMenuItem(value: r, child: Text(r, overflow: TextOverflow.ellipsis))).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) widget.controller.setReason(val);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Shortage Metric Banner with Deterministic Net Deficit
+                      // Shortage Metric Banner
                       Container(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: widget.controller.shortage > 0
                               ? const Color(0x28EF4444)
@@ -496,90 +400,41 @@ class _FactoryAssistantViewState extends State<FactoryAssistantView> {
                                 : const Color(0xFF10B981),
                           ),
                         ),
-                        child: Column(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      widget.controller.shortage > 0
-                                          ? Icons.warning_amber_rounded
-                                          : Icons.check_circle_outline,
-                                      size: 20,
-                                      color: widget.controller.shortage > 0
-                                          ? const Color(0xFFEF4444)
-                                          : const Color(0xFF10B981),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      widget.controller.shortage > 0 ? 'CRITICAL SHORTAGE DETECTED' : 'STOCK LEVEL OPTIMAL',
-                                      style: TextStyle(
-                                        color: widget.controller.shortage > 0
-                                            ? const Color(0xFFEF4444)
-                                            : const Color(0xFF10B981),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.6,
-                                      ),
-                                    ),
-                                  ],
+                                Icon(
+                                  widget.controller.shortage > 0
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.check_circle_outline,
+                                  size: 18,
+                                  color: widget.controller.shortage > 0
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFF10B981),
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: widget.controller.shortage > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    widget.controller.shortage > 0 ? 'HIGH' : 'NORMAL',
-                                    style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'SHORTAGE DEFICIT',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.6,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            const Divider(color: Colors.white12, height: 1),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                Column(
-                                  children: [
-                                    const Text('Current', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${widget.controller.currentStock.toStringAsFixed(0)} ${widget.controller.unit}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                                Column(
-                                  children: [
-                                    const Text('Required', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${widget.controller.minimumStock.toStringAsFixed(0)} ${widget.controller.unit}',
-                                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                                Column(
-                                  children: [
-                                    const Text('Net Deficit', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${widget.controller.calculatedNetDeficit.toStringAsFixed(0)} ${widget.controller.unit}',
-                                      style: TextStyle(
-                                        color: widget.controller.calculatedNetDeficit > 0 ? const Color(0xFFFFD700) : const Color(0xFF10B981),
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                            Text(
+                              '${widget.controller.shortage.toStringAsFixed(0)} units',
+                              style: TextStyle(
+                                color: widget.controller.shortage > 0
+                                    ? const Color(0xFFEF4444)
+                                    : const Color(0xFF10B981),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),

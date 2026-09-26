@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import '../services/inventory_api_service.dart';
 
@@ -56,15 +58,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
 
     try {
-      // Trigger evaluation via ASP.NET Core API
-      final result = await _apiService.triggerDataExtractionAgent('BoxPouch');
+      // Trigger an asynchronous HTTP POST request to our local Python FastAPI LangGraph agent server
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/api/agent/extract-data'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'batchName': 'BoxPouch'}),
+      );
 
       // Close loading dialog
       if (context.mounted) Navigator.pop(context);
 
-      if (result != null) {
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
         final requiresApproval = result['requiresApproval'] == true;
-        final agentMessage = result['agentMessage'] ?? result['message'] ?? 'Analysis complete.';
+        final agentMessage = result['agentMessage'] ?? 'Analysis complete.';
         final status = result['status'] ?? 'Success';
 
         if (context.mounted) {
@@ -110,7 +117,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to complete evaluation from server'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Server Error: ${response.statusCode}'), backgroundColor: Colors.red),
           );
         }
       }

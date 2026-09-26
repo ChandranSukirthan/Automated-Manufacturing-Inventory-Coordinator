@@ -27,6 +27,11 @@ class ApiClient {
                   ))
               .replaceAll(RegExp(r'/$'), '');
 
+  final String aiBaseUrl = const String.fromEnvironment(
+    'AI_API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  ).replaceAll(RegExp(r'/$'), '');
+
   final SessionStorage storage;
   final String baseUrl;
   Future<void> Function()? onSessionExpired;
@@ -34,6 +39,8 @@ class ApiClient {
   Future<dynamic> get(String path) => _request('GET', path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
+    Future<dynamic> postAi(String path, [Map<String, dynamic>? body]) =>
+      _request('POST', path, body, true, aiBaseUrl);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
       _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);

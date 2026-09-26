@@ -28,21 +28,12 @@ class InventoryController extends ChangeNotifier {
   String? _currentStatus;
   int? _activeProcurementId;
 
-  String _unit = 'units';
-  String _reason = 'Routine Safety Stock Breach';
-  double _openPurchaseQuantity = 0.0;
-  double _safetyStock = 200.0;
-
   // Getters
   String get materialName => _materialName;
   String get packagingType => _packagingType;
   String get sku => _sku;
-  String get unit => _unit;
-  String get reason => _reason;
   double get currentStock => _currentStock;
   double get minimumStock => _minimumStock;
-  double get safetyStock => _safetyStock;
-  double get openPurchaseQuantity => _openPurchaseQuantity;
   double get productionRequirement => _productionRequirement;
   int get quantityRequested => _quantityRequested;
   bool get isLoading => _isLoading;
@@ -60,9 +51,9 @@ class InventoryController extends ChangeNotifier {
     return diff > 0 ? diff : 0.0;
   }
 
-  /// Calculated Net Deficit = (Production Req + Safety Stock) - (Current Stock + Open PO Quantity)
+  /// Calculated Net Deficit = (Production Req + Minimum Stock) - Current Stock
   double get calculatedNetDeficit {
-    final diff = (_productionRequirement + _minimumStock) - (_currentStock + _openPurchaseQuantity);
+    final diff = (_productionRequirement + _minimumStock) - _currentStock;
     return diff > 0 ? diff : 0.0;
   }
 
@@ -82,16 +73,6 @@ class InventoryController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setUnit(String value) {
-    _unit = value;
-    notifyListeners();
-  }
-
-  void setReason(String value) {
-    _reason = value;
-    notifyListeners();
-  }
-
   void setCurrentStock(double value) {
     _currentStock = value < 0 ? 0 : value;
     notifyListeners();
@@ -99,16 +80,6 @@ class InventoryController extends ChangeNotifier {
 
   void setMinimumStock(double value) {
     _minimumStock = value < 0 ? 0 : value;
-    notifyListeners();
-  }
-
-  void setSafetyStock(double value) {
-    _safetyStock = value < 0 ? 0 : value;
-    notifyListeners();
-  }
-
-  void setOpenPurchaseQuantity(double value) {
-    _openPurchaseQuantity = value < 0 ? 0 : value;
     notifyListeners();
   }
 
@@ -157,13 +128,6 @@ class InventoryController extends ChangeNotifier {
           packagingType: _packagingType,
           quantityRequested: _quantityRequested,
           workerId: 'floor_worker_1',
-          materialName: _materialName,
-          currentStock: _currentStock,
-          requiredQuantity: _productionRequirement,
-          safetyStock: _minimumStock,
-          openPurchaseQuantity: _openPurchaseQuantity,
-          severity: shortage > 0 ? 'High' : 'Normal',
-          reason: _reason,
         );
 
         final id = alertResult['id'] as int? ?? 101;
