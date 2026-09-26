@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
+using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Services.PurchaseOrders;
 
 namespace ManufacturingCoordinator.Controllers
@@ -275,6 +276,19 @@ namespace ManufacturingCoordinator.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// GET /api/procurement/history — Structured historical outcomes for future learning dataset (Requirement 12).
+        /// </summary>
+        [HttpGet("history")]
+        [HttpGet("/api/procurement-history")]
+        [HttpGet("/api/procurement-outcomes")]
+        [ProducesResponseType(typeof(IEnumerable<ProcurementOutcome>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<IEnumerable<ProcurementOutcome>>> GetProcurementHistory()
+        {
+            var history = await _procurementService.GetOutcomesAsync();
+            return Ok(history);
         }
     }
 }

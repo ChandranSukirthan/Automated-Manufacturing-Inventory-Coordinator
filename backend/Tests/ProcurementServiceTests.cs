@@ -75,6 +75,11 @@ namespace backend.Tests
         public Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<byte[]> GeneratePdfAsync(int id) => Task.FromResult(Array.Empty<byte>());
+        public Task<bool> DeleteAsync(int id) => Task.FromResult(true);
+        public Task<IEnumerable<OrderLineResponseDto>> GetOrderLinesAsync(int poId) => Task.FromResult<IEnumerable<OrderLineResponseDto>>(new List<OrderLineResponseDto>());
+        public Task<OrderLineResponseDto> AddOrderLineAsync(int poId, OrderLineDto dto) => Task.FromResult(new OrderLineResponseDto());
+        public Task<OrderLineResponseDto> UpdateOrderLineAsync(int poId, int lineId, OrderLineDto dto) => Task.FromResult(new OrderLineResponseDto());
+        public Task<bool> DeleteOrderLineAsync(int poId, int lineId) => Task.FromResult(true);
         public decimal CalculateTotalCost(PurchaseOrder po) => po.TotalCost;
         public void ValidateBudget(PurchaseOrder po) {}
         public Task<Supplier> ValidateSupplierAsync(int supplierId) => Task.FromResult(new Supplier { Id = supplierId, Name = "Test" });
@@ -523,6 +528,89 @@ namespace backend.Tests
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 service.CreateDraftPoFromCandidateAsync(request.Id, unverifiedCandidate.Id));
+        }
+
+        [Fact]
+        public void CalculateNetRequiredQuantity_ComputesDeterministicFormulaAccurately()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            // Formula: Net Deficit = (RequiredQuantity + SafetyStock) - (CurrentStock + OpenPurchaseQuantity)
+            // Case 1: Requirement = 1000, Safety = 200, Current = 300, OpenPO = 100 -> Deficit = (1200) - (400) = 800
+            var deficit1 = service.CalculateNetRequiredQuantity(1000m, 200m, 300m, 100m);
+            Assert.Equal(800m, deficit1);
+
+            // Case 2: Stock exceeds requirements -> Deficit = 0 (no negative orders)
+            var deficit2 = service.CalculateNetRequiredQuantity(500m, 100m, 700m, 200m);
+            Assert.Equal(0m, deficit2);
+        }
+
+        [Fact]
+        public async Task ProcurementOutcome_CapturesFullTelemetryForFutureLearning()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var outcome = new ProcurementOutcome
+            {
+                Material = "Polyethylene Film",
+                RequestedQuantity = 5000m,
+                RecommendedQuantity = 5500m,
+                FinalOrderedQuantity = 5500m,
+                RecommendedSupplier = "Apex Polymers",
+                SelectedSupplier = "Apex Polymers",
+                EstimatedPrice = 1.25m,
+                FinalPrice = 1.25m,
+                EstimatedLeadTime = 7,
+                ActualLeadTime = 7,
+                QualityEvidence = "ISO 9001:2015, ASTM D882",
+                SupplierVerification = "VERIFIED",
+                ManagerDecision = "Approved",
+                ProcurementSuccess = true,
+                PaymentSuccess = true,
+                DeliverySuccess = true,
+                QualityOutcome = "Passed 100% Quality Inspection"
+            };
+
+            db.ProcurementOutcomes.Add(outcome);
+            await db.SaveChangesAsync();
+
+            var outcomes = await service.GetOutcomesAsync();
+            var saved = Assert.Single(outcomes);
+
+            Assert.Equal("Polyethylene Film", saved.Material);
+            Assert.Equal(5500m, saved.FinalOrderedQuantity);
+            Assert.Equal("Apex Polymers", saved.RecommendedSupplier);
+            Assert.True(saved.ProcurementSuccess);
+            Assert.True(saved.PaymentSuccess);
+            Assert.Equal("VERIFIED", saved.SupplierVerification);
+        }
+
+        [Fact]
+        public void PurchaseOrderStatusTransitions_ValidatesAppropriateStateLifecycle()
+        {
+            // Draft -> PendingApproval
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.Draft, PurchaseOrderStatus.PendingApproval));
+            Assert.False(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.Draft, PurchaseOrderStatus.Paid));
+
+            // PendingApproval -> Approved / Rejected / RevisionRequested
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.PendingApproval, PurchaseOrderStatus.Approved));
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.PendingApproval, PurchaseOrderStatus.Rejected));
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.PendingApproval, PurchaseOrderStatus.RevisionRequested));
+
+            // RevisionRequested -> Draft
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.RevisionRequested, PurchaseOrderStatus.Draft));
+
+            // Approved -> Payment / Paid
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.Approved, PurchaseOrderStatus.Paid));
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.Approved, PurchaseOrderStatus.Payment));
+
+            // Paid -> Sent
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.Paid, PurchaseOrderStatus.Sent));
+
+            // PaymentFailed -> Draft
+            Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.PaymentFailed, PurchaseOrderStatus.Draft));
         }
     }
 }

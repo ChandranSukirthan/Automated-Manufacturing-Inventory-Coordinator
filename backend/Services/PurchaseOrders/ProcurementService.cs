@@ -730,7 +730,51 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
             };
 
-            return await _poService.CreateAsync(poDto, userId ?? request.CreatedById);
+            var createdPo = await _poService.CreateAsync(poDto, userId ?? request.CreatedById);
+
+            // Record structured outcome telemetry for future learning dataset (Requirement 12)
+            try
+            {
+                var outcome = new ProcurementOutcome
+                {
+                    Material = request.MaterialName ?? request.RawMaterial?.Name ?? "Raw Material",
+                    RequestedQuantity = request.ProductionRequirement > 0 ? request.ProductionRequirement : request.CalculatedNetQuantity,
+                    RecommendedQuantity = candidate.RecommendedOrderQuantity,
+                    FinalOrderedQuantity = candidate.RecommendedOrderQuantity,
+                    RecommendedSupplier = candidate.SupplierName,
+                    SelectedSupplier = candidate.SupplierName,
+                    EstimatedPrice = candidate.UnitPrice,
+                    FinalPrice = candidate.UnitPrice,
+                    EstimatedLeadTime = candidate.LeadTimeDays,
+                    ActualLeadTime = candidate.LeadTimeDays,
+                    QualityEvidence = candidate.QualityEvidence ?? string.Empty,
+                    SupplierVerification = candidate.SupplierStatus ?? "VERIFIED",
+                    ManagerDecision = "Draft Created",
+                    ManagerRevision = null,
+                    ProcurementSuccess = true,
+                    PaymentSuccess = true,
+                    DeliverySuccess = false,
+                    QualityOutcome = "Pending Delivery Inspection",
+                    CreatedAt = DateTime.UtcNow,
+                    PurchaseOrderId = createdPo.Id,
+                    ProcurementRequestId = request.Id
+                };
+                _context.ProcurementOutcomes.Add(outcome);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to record procurement outcome telemetry.");
+            }
+
+            return createdPo;
+        }
+
+        public async Task<IEnumerable<ProcurementOutcome>> GetOutcomesAsync()
+        {
+            return await _context.ProcurementOutcomes
+                .OrderByDescending(o => o.CreatedAt)
+                .ToListAsync();
         }
     }
 }

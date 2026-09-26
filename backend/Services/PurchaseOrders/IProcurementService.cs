@@ -27,6 +27,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         // ── Flutter Status Tracking ───────────────────────────────────────────────
         Task<ProcurementStatusTrackingDto?> GetStatusTrackingAsync(int procurementRequestId);
 
+        // ── Future Learning Outcomes Dataset (Requirement 12) ────────────────────
+        Task<IEnumerable<ProcurementOutcome>> GetOutcomesAsync();
+
         // ── Deterministic Mathematical Operations (used by validation engine) ─────
         decimal CalculateNetRequiredQuantity(decimal prodRequirement, decimal safetyStock, decimal currentStock, decimal openPoQuantity);
         (decimal finalQuantity, decimal totalCost) CalculateOrderQuantityAndCost(decimal netQuantity, decimal moq, decimal packSize, decimal unitPrice);
