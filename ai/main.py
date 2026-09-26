@@ -75,31 +75,6 @@ async def autonomous_equipment_telemetry_scanner():
         await asyncio.sleep(15)
 
 
-from typing import Optional, List, Union
-from pydantic import BaseModel, ConfigDict
-
-
-class PredictInventoryItem(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: Optional[int] = None
-    sku: str = ""
-    name: Optional[str] = ""
-    category: Optional[str] = ""
-    stockLevel: int = 0
-    reorderThreshold: int = 0
-
-
-class PredictionItem(BaseModel):
-    sku: str
-    riskScore: float
-    recommendedAction: str
-
-
-class PredictResponse(BaseModel):
-    status: str = "Success"
-    predictions: List[PredictionItem]
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scanner_task = asyncio.create_task(autonomous_equipment_telemetry_scanner())
@@ -119,8 +94,8 @@ app.add_middleware(
         "http://127.0.0.1:5174",
     ],
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(quality_router)
 app.include_router(workflow_router)
@@ -130,23 +105,3 @@ app.include_router(tools_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ONLINE"}
-
-
-@app.post("/api/predict", response_model=PredictResponse)
-@app.post("/predict", response_model=PredictResponse)
-def predict_stock_risk(items: Union[List[PredictInventoryItem], PredictInventoryItem]) -> PredictResponse:
-    item_list = [items] if isinstance(items, PredictInventoryItem) else items
-    predictions = []
-    for item in item_list:
-        stock = item.stockLevel
-        threshold = item.reorderThreshold
-        if stock <= threshold:
-            deficit = max(0, threshold - stock)
-            risk = round(min(1.0, 0.6 + (deficit / (threshold + 1)) * 0.4), 2)
-            action = "Reorder"
-        else:
-            surplus = stock - threshold
-            risk = round(max(0.05, 0.3 - (surplus / (threshold + 1)) * 0.25), 2)
-            action = "Maintain"
-        predictions.append(PredictionItem(sku=item.sku, riskScore=risk, recommendedAction=action))
-    return PredictResponse(status="Success", predictions=predictions)
