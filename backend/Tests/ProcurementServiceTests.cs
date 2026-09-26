@@ -84,6 +84,7 @@ namespace backend.Tests
         public void ValidateBudget(PurchaseOrder po) {}
         public Task<Supplier> ValidateSupplierAsync(int supplierId) => Task.FromResult(new Supplier { Id = supplierId, Name = "Test" });
         public Task ValidatePurchaseOrderAsync(PurchaseOrder po) => Task.CompletedTask;
+        public Task<PurchaseOrderResponseDto?> UpdateDeliveryStatusAsync(int id, string deliveryStatus, string? remarks = null) => Task.FromResult<PurchaseOrderResponseDto?>(null);
     }
 
     public class ProcurementServiceTests

@@ -1048,4 +1048,37 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             UpdatedAt = po.UpdatedAt
         };
     }
+
+    public async Task<PurchaseOrderResponseDto?> UpdateDeliveryStatusAsync(int id, string deliveryStatus, string? remarks = null)
+    {
+        var po = await _context.PurchaseOrders
+            .Include(p => p.OrderLines)
+                .ThenInclude(ol => ol.RawMaterial)
+            .Include(p => p.Supplier)
+            .Include(p => p.Approvals)
+            .Include(p => p.Transactions)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (po == null) return null;
+
+        var normalized = deliveryStatus.Trim().ToUpperInvariant();
+        var targetStatus = normalized switch
+        {
+            "IN_TRANSIT" or "INTRANSIT" or "SHIPPED" => PurchaseOrderStatus.InTransit,
+            "DELIVERED" or "RECEIVED" => PurchaseOrderStatus.Delivered,
+            "COMPLETED" => PurchaseOrderStatus.Completed,
+            _ => PurchaseOrderStatus.InTransit
+        };
+
+        po.Status = targetStatus;
+        if (!string.IsNullOrWhiteSpace(remarks))
+        {
+            po.Notes = string.IsNullOrWhiteSpace(po.Notes) ? remarks : $"{po.Notes} | Delivery: {remarks}";
+        }
+        po.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return MapToResponseDto(po);
+    }
+}
 }

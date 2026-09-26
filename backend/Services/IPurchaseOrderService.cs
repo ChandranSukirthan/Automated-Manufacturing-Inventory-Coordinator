@@ -31,5 +31,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         void ValidateBudget(PurchaseOrder po);
         Task<Supplier> ValidateSupplierAsync(int supplierId);
         Task ValidatePurchaseOrderAsync(PurchaseOrder po);
+        Task<PurchaseOrderResponseDto?> UpdateDeliveryStatusAsync(int id, string deliveryStatus, string? remarks = null);
     }
 }

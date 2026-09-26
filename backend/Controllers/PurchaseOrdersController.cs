@@ -469,5 +469,36 @@ namespace ManufacturingCoordinator.Controllers
             }
             return Ok(list);
         }
+
+        /// <summary>
+        /// PUT /api/purchase-orders/{id}/delivery-status — Update delivery tracking status from mobile (Floor Worker / Logistics).
+        /// </summary>
+        [HttpPut("{id:int}/delivery-status")]
+        [ProducesResponseType(typeof(PurchaseOrderDeliveryStatusDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<PurchaseOrderDeliveryStatusDto>> UpdateDeliveryStatus(int id, [FromBody] UpdateDeliveryStatusDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var updated = await _poService.UpdateDeliveryStatusAsync(id, dto.DeliveryStatus, dto.Remarks);
+            if (updated == null) return NotFound(new { message = $"Purchase order {id} not found." });
+
+            var primaryLine = updated.OrderLines.Count > 0 ? updated.OrderLines[0] : null;
+            var normalizedStatus = dto.DeliveryStatus.Trim().ToUpperInvariant();
+
+            return Ok(new PurchaseOrderDeliveryStatusDto
+            {
+                PurchaseOrderId = id,
+                PoNumber = updated.PoNumber,
+                SupplierName = updated.SupplierName,
+                MaterialName = primaryLine?.RawMaterialName ?? "Raw Material Supplies",
+                Quantity = primaryLine?.Quantity ?? 1000,
+                ExpectedDelivery = updated.CreatedAt.AddDays(7),
+                DeliveryStatus = normalizedStatus,
+                TrackingNumber = $"TRK-{updated.PoNumber}",
+                StatusRemarks = dto.Remarks ?? $"Status updated to {normalizedStatus}."
+            });
+        }
     }
 }
