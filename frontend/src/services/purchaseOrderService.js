@@ -51,6 +51,31 @@ export const purchaseOrderService = {
     return response.data;
   },
 
+  async deletePurchaseOrder(id) {
+    const response = await api.delete(`/purchase-orders/${id}`);
+    return response.data;
+  },
+
+  async getOrderLines(id) {
+    const response = await api.get(`/purchase-orders/${id}/lines`);
+    return response.data;
+  },
+
+  async addOrderLine(id, lineData) {
+    const response = await api.post(`/purchase-orders/${id}/lines`, lineData);
+    return response.data;
+  },
+
+  async updateOrderLine(id, lineId, lineData) {
+    const response = await api.put(`/purchase-orders/${id}/lines/${lineId}`, lineData);
+    return response.data;
+  },
+
+  async deleteOrderLine(id, lineId) {
+    const response = await api.delete(`/purchase-orders/${id}/lines/${lineId}`);
+    return response.data;
+  },
+
   async downloadPdf(id, poNumber) {
     const response = await api.get(`/purchase-orders/${id}/pdf`, {
       responseType: 'blob'
