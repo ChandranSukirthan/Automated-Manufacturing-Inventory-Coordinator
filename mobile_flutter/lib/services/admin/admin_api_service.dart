@@ -41,6 +41,45 @@ class AdminApiService {
     return [];
   }
 
+  Future<MachineModel> createMachine({
+    required String name,
+    required int status,
+    required double uptimeHours,
+    required double maintenanceIntervalHours,
+    required String location,
+  }) async {
+    final response = await apiClient.post('/machines', {
+      'name': name,
+      'status': status,
+      'uptimeHours': uptimeHours,
+      'maintenanceIntervalHours': maintenanceIntervalHours,
+      'location': location,
+    });
+    return MachineModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<MachineModel> updateMachine(
+    String id, {
+    required String name,
+    required int status,
+    required double uptimeHours,
+    required double maintenanceIntervalHours,
+    required String location,
+  }) async {
+    final response = await apiClient.put('/machines/$id', {
+      'name': name,
+      'status': status,
+      'uptimeHours': uptimeHours,
+      'maintenanceIntervalHours': maintenanceIntervalHours,
+      'location': location,
+    });
+    return MachineModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<void> deleteMachine(String id) async {
+    await apiClient.delete('/machines/$id');
+  }
+
   // ========== Shifts ==========
 
   Future<List<ShiftModel>> getShifts() async {

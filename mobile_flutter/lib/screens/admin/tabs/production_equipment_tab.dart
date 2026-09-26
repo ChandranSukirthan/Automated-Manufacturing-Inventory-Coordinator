@@ -7,6 +7,7 @@ import '../../../widgets/admin/status_chip.dart';
 import '../../../widgets/admin/metric_gauge.dart';
 import '../subscreens/machine_detail_screen.dart';
 import '../subscreens/shift_detail_screen.dart';
+import '../../../widgets/admin/machine_form_dialog.dart';
 
 class ProductionEquipmentTab extends StatefulWidget {
   final List<MachineModel> machines;
@@ -105,36 +106,93 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
     );
   }
 
+  Future<void> _openAddMachineDialog() async {
+    final created = await showDialog<MachineModel>(
+      context: context,
+      builder: (_) => MachineFormDialog(service: widget.service),
+    );
+    if (created != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${created.name} registered to fleet!'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+      await widget.onRefresh();
+    }
+  }
+
   List<Widget> _buildMachinesList() {
-    if (widget.machines.isEmpty) {
-      return [
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Equipment Registry',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  '${widget.machines.length} active machines registered',
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                ),
+              ],
+            ),
+            ElevatedButton.icon(
+              onPressed: _openAddMachineDialog,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text(
+                'Add Machine',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF06B6D4),
+                foregroundColor: const Color(0xFF0B0F19),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (widget.machines.isEmpty)
         const Center(
           child: Padding(
             padding: EdgeInsets.all(32),
             child: Text(
-              'No plant machinery found.',
+              'No plant machinery found. Tap "Add Machine" above to register equipment.',
               style: TextStyle(color: Color(0xFF64748B)),
+              textAlign: TextAlign.center,
             ),
           ),
-        ),
-      ];
-    }
-
-    return widget.machines.map((machine) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: AdminCard(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MachineDetailScreen(
-                  machine: machine,
-                  service: widget.service,
-                ),
-              ),
-            );
-          },
+        )
+      else
+        ...widget.machines.map((machine) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AdminCard(
+              onTap: () async {
+                final changed = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MachineDetailScreen(
+                      machine: machine,
+                      service: widget.service,
+                    ),
+                  ),
+                );
+                if (changed == true && mounted) {
+                  widget.onRefresh();
+                }
+              },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -227,8 +285,9 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
           ),
         ),
       );
-    }).toList();
-  }
+    }),
+  ];
+}
 
   List<Widget> _buildShiftsList() {
     final activeShift = widget.shifts.firstWhere(

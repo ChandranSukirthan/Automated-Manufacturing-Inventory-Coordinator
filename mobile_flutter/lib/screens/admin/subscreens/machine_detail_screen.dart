@@ -4,6 +4,7 @@ import '../../../services/admin/admin_api_service.dart';
 import '../../../widgets/admin/admin_card.dart';
 import '../../../widgets/admin/status_chip.dart';
 import '../../../widgets/admin/metric_gauge.dart';
+import '../../../widgets/admin/machine_form_dialog.dart';
 import 'maintenance_list_screen.dart';
 
 class MachineDetailScreen extends StatefulWidget {
@@ -64,6 +65,80 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
     }
   }
 
+  Future<void> _editMachine() async {
+    final updated = await showDialog<MachineModel>(
+      context: context,
+      builder: (_) => MachineFormDialog(
+        machine: _currentMachine,
+        service: widget.service,
+      ),
+    );
+
+    if (updated != null && mounted) {
+      setState(() {
+        _currentMachine = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${updated.name} updated successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteMachine() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Delete Equipment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Are you sure you want to delete "${_currentMachine.name}"? This action cannot be undone.',
+          style: const TextStyle(color: Color(0xFFCBD5E1)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await widget.service.deleteMachine(_currentMachine.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${_currentMachine.name} deleted successfully!'),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
+          Navigator.of(context).pop(true);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete machine: $e'),
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,6 +164,16 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: Colors.white70),
+            tooltip: 'Edit Equipment',
+            onPressed: _editMachine,
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444)),
+            tooltip: 'Delete Equipment',
+            onPressed: _deleteMachine,
           ),
         ],
       ),
