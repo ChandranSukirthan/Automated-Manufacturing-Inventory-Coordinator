@@ -32,14 +32,20 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
   Future<void> _handleDecision(bool approve) async {
     setState(() => _submitting = true);
     try {
-      if (approve) {
-        await widget.service.approveWorkflow(_currentWorkflow.id);
-      } else {
-        await widget.service.rejectWorkflow(_currentWorkflow.id);
-      }
+      final targetId = _currentWorkflow.workflowId.isNotEmpty
+          ? _currentWorkflow.workflowId
+          : _currentWorkflow.id;
+      final res = approve
+          ? await widget.service.approveWorkflow(targetId)
+          : await widget.service.rejectWorkflow(targetId);
 
       if (mounted) {
-        final updated = await widget.service.getWorkflowById(_currentWorkflow.id);
+        WorkflowModel updated;
+        if (res is Map<String, dynamic>) {
+          updated = WorkflowModel.fromJson(res);
+        } else {
+          updated = await widget.service.getWorkflowById(_currentWorkflow.id);
+        }
         if (!mounted) return;
         setState(() {
           _currentWorkflow = updated;
