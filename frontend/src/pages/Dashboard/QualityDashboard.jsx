@@ -88,6 +88,17 @@ export default function QualityDashboard() {
   const [aiValidation, setAiValidation] = useState(null);
   const [aiValidationLoading, setAiValidationLoading] = useState(true);
   const [aiValidationError, setAiValidationError] = useState('');
+  const [aiValidationHistory, setAiValidationHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [expandedReasons, setExpandedReasons] = useState({});
+
+  const toggleExpand = (id) => {
+    setExpandedReasons((prev) => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   const loadSummary = async () => {
     setLoading(true);
@@ -134,9 +145,24 @@ export default function QualityDashboard() {
     }
   };
 
+  const loadAiValidationHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const historyData = await dashboardService.getAiValidationHistory();
+      setAiValidationHistory(Array.isArray(historyData) ? historyData : []);
+    } catch (err) {
+      setAiValidationHistory([]);
+      setHistoryError(parseErrorMessage(err, 'Unable to load Validation/Safety assessment history.'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadSummary();
     loadAiValidation();
+    loadAiValidationHistory();
   }, []);
 
   const cardStyles = {
@@ -401,6 +427,222 @@ export default function QualityDashboard() {
                   </p>
                 </div>
               </div>
+            )}
+          </section>
+
+          {/* Validation/Safety Assessment History */}
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-tight">Validation/Safety Assessment History</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Persisted audit trail of quality safety assessments</p>
+              </div>
+              <History className="w-5 h-5 text-purple-400" aria-hidden="true" />
+            </div>
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center gap-3 py-8 text-slate-400" role="status" aria-live="polite">
+                <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+                <span className="text-sm">Loading Validation/Safety assessment history...</span>
+              </div>
+            ) : historyError ? (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                  <span className="text-sm font-medium">{historyError}</span>
+                </div>
+                <button
+                  onClick={loadAiValidationHistory}
+                  className="text-xs font-semibold underline hover:text-rose-100 sm:shrink-0"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : aiValidationHistory.length === 0 ? (
+              <EmptyState
+                icon={ShieldAlert}
+                title="No assessment history available"
+                description="No persistent quality validation assessment records were found in PostgreSQL."
+                actionLabel="Retry"
+                onAction={loadAiValidationHistory}
+              />
+            ) : (
+              <>
+                {/* Desktop Table View (Hidden on mobile) */}
+                <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider">
+                        <th className="py-3 px-4">Workflow</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Safety</th>
+                        <th className="py-3 px-4">Quarantined Rolls</th>
+                        <th className="py-3 px-4">High Impact</th>
+                        <th className="py-3 px-4">Impact Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                      {aiValidationHistory.map((item, idx) => {
+                        const itemKey = item.workflowId || `item-${idx}`;
+                        const isExpanded = !!expandedReasons[itemKey];
+                        const reason = item.impactReason;
+                        const isLong = reason && reason.length > 80;
+
+                        return (
+                          <tr key={itemKey} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="py-3.5 px-4 font-mono font-semibold text-white whitespace-nowrap">
+                              {displayValidationValue(item.workflowId)}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${
+                                item.status === 'Completed' || item.status === 'Approved'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                  : item.status === 'WaitingForApproval'
+                                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                                  : item.status === 'Failed' || item.status === 'Rejected'
+                                  ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
+                                  : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}>
+                                {displayValidationValue(item.status)}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap font-semibold">
+                              <span className={
+                                item.qualitySafetyStatus === 'CLEAR'
+                                  ? 'text-emerald-400'
+                                  : item.qualitySafetyStatus === 'QUARANTINE_REQUIRED'
+                                  ? 'text-rose-400'
+                                  : 'text-cyan-300'
+                              }>
+                                {displayValidationValue(item.qualitySafetyStatus)}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap font-medium text-slate-300">
+                              {displayValidationValue(item.quarantinedRollsCount)}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold ${
+                                item.isHighImpact === true
+                                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                                  : item.isHighImpact === false
+                                  ? 'border-slate-700 bg-slate-800/60 text-slate-300'
+                                  : 'border-slate-800 text-slate-500'
+                              }`}>
+                                {item.isHighImpact === true ? 'Yes' : item.isHighImpact === false ? 'No' : displayValidationValue(item.isHighImpact)}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 max-w-xs leading-relaxed">
+                              {!reason ? (
+                                <span className="text-slate-500">Unavailable</span>
+                              ) : isLong ? (
+                                <div>
+                                  <span className="text-slate-300">
+                                    {isExpanded ? reason : `${reason.slice(0, 80)}...`}
+                                  </span>{' '}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpand(itemKey)}
+                                    className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 underline ml-1 focus:outline-none"
+                                  >
+                                    {isExpanded ? 'View less' : 'View more'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300">{reason}</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View (Hidden on desktop) */}
+                <div className="grid gap-3 md:hidden">
+                  {aiValidationHistory.map((item, idx) => {
+                    const itemKey = item.workflowId || `item-m-${idx}`;
+                    const isExpanded = !!expandedReasons[itemKey];
+                    const reason = item.impactReason;
+                    const isLong = reason && reason.length > 80;
+
+                    return (
+                      <div key={itemKey} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2 border-b border-slate-800/60 pb-2.5">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Workflow</p>
+                            <p className="text-sm font-mono font-bold text-white break-all">{displayValidationValue(item.workflowId)}</p>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold shrink-0 ${
+                            item.status === 'Completed' || item.status === 'Approved'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                              : item.status === 'WaitingForApproval'
+                              ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                              : item.status === 'Failed' || item.status === 'Rejected'
+                              ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
+                              : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          }`}>
+                            {displayValidationValue(item.status)}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60">
+                            <p className="text-slate-500 font-medium">Safety Status</p>
+                            <p className={`font-bold mt-1 ${
+                              item.qualitySafetyStatus === 'CLEAR'
+                                ? 'text-emerald-400'
+                                : item.qualitySafetyStatus === 'QUARANTINE_REQUIRED'
+                                ? 'text-rose-400'
+                                : 'text-cyan-300'
+                            }`}>
+                              {displayValidationValue(item.qualitySafetyStatus)}
+                            </p>
+                          </div>
+                          <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60">
+                            <p className="text-slate-500 font-medium">Quarantined Rolls</p>
+                            <p className="font-bold text-white mt-1">{displayValidationValue(item.quarantinedRollsCount)}</p>
+                          </div>
+                          <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60 col-span-2 flex items-center justify-between">
+                            <span className="text-slate-500 font-medium">High Impact</span>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold text-xs ${
+                              item.isHighImpact === true
+                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                                : item.isHighImpact === false
+                                ? 'border-slate-700 bg-slate-800/60 text-slate-300'
+                                : 'border-slate-800 text-slate-500'
+                            }`}>
+                              {item.isHighImpact === true ? 'Yes' : item.isHighImpact === false ? 'No' : displayValidationValue(item.isHighImpact)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60 text-xs">
+                          <p className="text-slate-500 font-medium mb-1">Impact Reason</p>
+                          {!reason ? (
+                            <span className="text-slate-500">Unavailable</span>
+                          ) : isLong ? (
+                            <div>
+                              <span className="text-slate-300">
+                                {isExpanded ? reason : `${reason.slice(0, 80)}...`}
+                              </span>{' '}
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(itemKey)}
+                                className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 underline ml-1 focus:outline-none"
+                              >
+                                {isExpanded ? 'View less' : 'View more'}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300">{reason}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </section>
 

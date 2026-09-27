@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
@@ -29,6 +30,23 @@ def sync_to_database(state: AgentState) -> None:
     final_outcome = state.get("final_outcome")
     completed_at = datetime.now(timezone.utc) if status in [WorkflowStatus.Completed.value, WorkflowStatus.Failed.value] else None
 
+    # Extract QA validation metadata if present
+    validation_results_json = None
+    val_res = state.get("validation_results")
+    if isinstance(val_res, dict) and val_res:
+        if (
+            val_res.get("qualitySafetyStatus") is not None
+            or val_res.get("quarantinedRollsCount") is not None
+            or val_res.get("isHighImpact") is not None
+            or val_res.get("impactReason") is not None
+        ):
+            validation_results_json = json.dumps({
+                "qualitySafetyStatus": val_res.get("qualitySafetyStatus"),
+                "quarantinedRollsCount": val_res.get("quarantinedRollsCount", 0),
+                "isHighImpact": val_res.get("isHighImpact", False),
+                "impactReason": val_res.get("impactReason")
+            })
+
     try:
         with psycopg.connect(
             host=settings.DB_HOST,
@@ -40,15 +58,16 @@ def sync_to_database(state: AgentState) -> None:
         ) as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO "AgentWorkflows" ("Id", "WorkflowId", "Objective", "CurrentAgent", "Status", "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO "AgentWorkflows" ("Id", "WorkflowId", "Objective", "CurrentAgent", "Status", "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome", "ValidationResults")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT ("WorkflowId") DO UPDATE
                     SET "Objective" = EXCLUDED."Objective",
                         "CurrentAgent" = EXCLUDED."CurrentAgent",
                         "Status" = EXCLUDED."Status",
                         "ApprovalStatus" = EXCLUDED."ApprovalStatus",
                         "CompletedAt" = COALESCE(EXCLUDED."CompletedAt", "AgentWorkflows"."CompletedAt"),
-                        "FinalOutcome" = EXCLUDED."FinalOutcome";
+                        "FinalOutcome" = EXCLUDED."FinalOutcome",
+                        "ValidationResults" = COALESCE(EXCLUDED."ValidationResults", "AgentWorkflows"."ValidationResults");
                 """, (
                     str(uuid.uuid4()),
                     workflow_id,
@@ -58,7 +77,8 @@ def sync_to_database(state: AgentState) -> None:
                     approval_status,
                     datetime.now(timezone.utc),
                     completed_at,
-                    final_outcome
+                    final_outcome,
+                    validation_results_json
                 ))
             conn.commit()
     except Exception as ex:

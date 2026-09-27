@@ -667,6 +667,8 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(w => w.FinalOutcome)
                     .HasMaxLength(1000);
+
+                entity.Property(w => w.ValidationResults);
             });
         }
     }

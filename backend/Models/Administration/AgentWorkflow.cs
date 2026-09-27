@@ -14,6 +14,7 @@ namespace ManufacturingCoordinator.Models.Administration
         public DateTime StartedAt { get; set; } = DateTime.UtcNow;
         public DateTime? CompletedAt { get; set; }
         public string? FinalOutcome { get; set; }
+        public string? ValidationResults { get; set; }
     }
 }
 

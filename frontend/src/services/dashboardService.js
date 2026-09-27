@@ -9,6 +9,11 @@ const dashboardService = {
   getAiValidation: async () => {
     const response = await api.get('/quality/ai-validation');
     return response.data;
+  },
+
+  getAiValidationHistory: async () => {
+    const response = await api.get('/quality/ai-validation/history');
+    return response.data;
   }
 };
 
