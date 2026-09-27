@@ -87,7 +87,7 @@ export default function ProfilePage() {
   if (loading) {
     const loadingView = (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
         <p className="text-sm font-medium">Loading profile credentials...</p>
       </div>
     );
@@ -143,7 +143,7 @@ export default function ProfilePage() {
       <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-8 shadow-sm">
         {/* User Identity Header */}
         <div className="flex items-center gap-5 border-b border-slate-800/80 pb-6">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-purple-500/25 shrink-0">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-blue-600/25 shrink-0">
             {fullName ? fullName.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
           </div>
           <div className="min-w-0">
@@ -152,8 +152,8 @@ export default function ProfilePage() {
             </h2>
             <p className="text-sm text-slate-400 font-mono truncate">{profile?.email || '—'}</p>
             <div className="mt-2 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30 uppercase tracking-wide">
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 uppercase tracking-wide">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
                 <span>{roleLabel}</span>
               </span>
             </div>
@@ -173,7 +173,7 @@ export default function ProfilePage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Quality Inspector Name"
-                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
               />
             </div>
 
@@ -215,7 +215,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-sm font-bold shadow-lg shadow-purple-600/25 flex items-center gap-2 disabled:opacity-50 transition-all"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-600/25 flex items-center gap-2 disabled:opacity-50 transition-all"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               <span>Save Profile Changes</span>
@@ -231,7 +231,7 @@ export default function ProfilePage() {
       {profileContent}
     </QALayout>
   ) : (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-500 selection:text-white">
       {profileContent}
     </div>
   );

@@ -62,12 +62,6 @@ export default function QALayout({ children, title, subtitle }) {
         { label: 'Quarantine Management', path: '/quality/quarantine', icon: ShieldAlert },
         { label: 'Quarantine History', path: '/quality/quarantine/history', icon: History }
       ]
-    },
-    {
-      title: 'Account',
-      items: [
-        { label: 'Profile', path: '/profile', icon: UserIcon }
-      ]
     }
   ];
 
@@ -155,48 +149,46 @@ export default function QALayout({ children, title, subtitle }) {
                     </Link>
                   );
                 })}
-
-                {/* Place Logout in ACCOUNT section */}
-                {section.title === 'Account' && (
-                  <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all group text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <LogOut className="w-4 h-4 text-slate-400 group-hover:text-rose-400" />
-                      <span>Logout</span>
-                    </div>
-                  </button>
-                )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* User Profile Bar */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/60">
-          <div className="flex items-center justify-between">
+        {/* Clean User Profile & Sign Out Bar */}
+        <div className="p-4 border-t border-slate-800/80 bg-slate-950/80 space-y-2.5">
+          <Link
+            to="/profile"
+            onClick={() => setMobileMenuOpen(false)}
+            title="View Account Profile"
+            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all group ${
+              isRouteActive('/profile')
+                ? 'bg-blue-600/15 border-blue-500/40 shadow-sm'
+                : 'bg-slate-900/60 border-slate-800/90 hover:border-blue-500/40 hover:bg-slate-900'
+            }`}
+          >
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400 font-semibold shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-blue-600/20 shrink-0">
                 {user?.fullName ? user.fullName.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
               </div>
               <div className="truncate">
-                <p className="text-sm font-semibold text-white truncate">
+                <p className="text-xs font-bold text-white truncate group-hover:text-blue-300 transition-colors">
                   {user?.fullName || 'Quality Inspector'}
                 </p>
-                <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                <span className="inline-block px-1.5 py-0.2 text-[10px] font-medium rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">
                   Quality Inspector
                 </span>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all shrink-0"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+            <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors shrink-0" />
+          </Link>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
 
@@ -222,9 +214,29 @@ export default function QALayout({ children, title, subtitle }) {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span className="font-mono text-blue-400 font-medium">System Online</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-mono text-emerald-400 font-medium">System Online</span>
             </div>
+
+            <Link
+              to="/profile"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+                isRouteActive('/profile')
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:text-white hover:border-blue-500/40 hover:bg-slate-800'
+              }`}
+            >
+              <UserIcon className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Profile</span>
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 

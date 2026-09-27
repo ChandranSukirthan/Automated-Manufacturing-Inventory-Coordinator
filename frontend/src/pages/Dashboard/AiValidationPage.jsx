@@ -20,7 +20,8 @@ import {
   Zap,
   Check,
   X,
-  Eye
+  Eye,
+  Info
 } from 'lucide-react';
 import dashboardService from '../../services/dashboardService';
 import { parseErrorMessage } from '../../utils/errorHandler';
@@ -38,38 +39,158 @@ const extractPoNumber = (item) => {
   return 'Not available';
 };
 
-// Helper for formatting timestamps
+// Helper for formatting timestamps strictly from real data
 const formatTimestamp = (dateStr) => {
-  if (!dateStr) return null;
+  if (!dateStr) return 'Not available';
   try {
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return null;
+    if (isNaN(date.getTime())) return 'Not available';
     return date.toLocaleString('en-US', {
-      day: '2-digit',
       month: 'short',
+      day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
   } catch {
-    return null;
+    return 'Not available';
   }
 };
 
-// Helper for check status mapping
+// Helper for individual check mapping (DO NOT INFER MISSING VALUES AS PASSED)
 const mapCheckStatus = (val) => {
-  if (!val) return { label: 'NOT AVAILABLE', style: 'bg-slate-800 text-slate-400 border-slate-700', icon: '—' };
+  if (val === null || val === undefined || val === '') {
+    return { label: 'Not available', style: 'bg-slate-900 text-slate-500 border-slate-800', isAvailable: false };
+  }
   const s = String(val).toUpperCase().trim();
   if (s === 'PASSED' || s === 'CLEAR' || s === 'VALID' || s === 'TRUE') {
-    return { label: '✓ PASSED', style: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35', icon: '✓' };
+    return { label: 'PASSED', style: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35 font-mono', isAvailable: true };
   }
   if (s === 'FAILED' || s === 'INVALID' || s === 'BLOCKED' || s === 'FALSE') {
-    return { label: '✕ FAILED', style: 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-bold', icon: '✕' };
+    return { label: 'FAILED', style: 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-bold font-mono', isAvailable: true };
   }
-  if (s.includes('QUARANTINE')) {
-    return { label: '✕ QUARANTINE', style: 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-bold', icon: '✕' };
+  if (s === 'EXCEEDS_BUDGET_THRESHOLD') {
+    return { label: 'EXCEEDS THRESHOLD', style: 'bg-amber-500/15 text-amber-300 border-amber-500/35 font-mono', isAvailable: true };
   }
-  return { label: '⚠ REVIEW', style: 'bg-amber-500/15 text-amber-300 border-amber-500/35', icon: '⚠' };
+  return { label: s, style: 'bg-slate-800 text-slate-300 border-slate-700 font-mono', isAvailable: true };
+};
+
+// Helper for aggregate automated checks (ONLY SHOW 4/4 PASSED IF ALL 4 ARE PRESENT & PASSED)
+const formatAutomatedChecks = (item) => {
+  if (!item) return { summary: 'Not available', allPassed: false, isAvailable: false, details: [] };
+
+  const checks = [
+    { name: 'Supplier Check', key: 'supplier', val: item.supplierValidation || item.supplierCheck },
+    { name: 'Budget Check', key: 'budget', val: item.budgetCheck },
+    { name: 'PO Math Check', key: 'poMath', val: item.poMathematicalCheck || item.poMathCheck },
+    { name: 'Material Check', key: 'material', val: item.materialValidation || item.materialCheck }
+  ];
+
+  const presentChecks = checks.filter(c => c.val !== null && c.val !== undefined && c.val !== '');
+  if (presentChecks.length === 0) {
+    return { summary: 'Not available', allPassed: false, isAvailable: false, details: checks };
+  }
+
+  const passedChecks = checks.filter(c => {
+    if (!c.val) return false;
+    const s = String(c.val).toUpperCase().trim();
+    return s === 'PASSED' || s === 'CLEAR' || s === 'VALID' || s === 'TRUE';
+  });
+
+  if (presentChecks.length === 4 && passedChecks.length === 4) {
+    return { summary: '4 / 4 PASSED', allPassed: true, isAvailable: true, details: checks };
+  }
+
+  if (presentChecks.length === 4) {
+    return { summary: `${passedChecks.length} / 4 PASSED`, allPassed: false, isAvailable: true, details: checks };
+  }
+
+  return { summary: `${passedChecks.length} / ${presentChecks.length} PASSED`, allPassed: false, isAvailable: true, details: checks };
+};
+
+// Helper to extract unified Original AI vs Current QA state from a SINGLE workflow record
+const getWorkflowState = (item) => {
+  if (!item) {
+    return {
+      origAiOutcome: 'Not available',
+      origSafetyStatus: 'Not available',
+      quarantinedRollsDisplay: 'Not available',
+      highImpactDisplay: 'Not available',
+      currentManualResolution: 'Not available',
+      currentQuarantineDisposition: 'Not available',
+      safetyGateState: 'Not available',
+      isSafetyBlocked: false,
+      isResolved: false,
+      needsReview: false
+    };
+  }
+
+  const hasExplicitValid = item.isValid !== null && item.isValid !== undefined;
+  const safety = item.qualitySafetyStatus ? String(item.qualitySafetyStatus).toUpperCase().trim() : null;
+  const manual = item.manualResolutionStatus ? String(item.manualResolutionStatus).toUpperCase().trim() : null;
+  const quarantinedCount = item.quarantinedRollsCount !== null && item.quarantinedRollsCount !== undefined ? item.quarantinedRollsCount : null;
+
+  // 1. Original AI Assessment (Strictly Preserved)
+  let origAiOutcome = 'Not available';
+  if (hasExplicitValid) {
+    origAiOutcome = item.isValid ? 'VALID' : 'INVALID';
+  } else if (safety) {
+    origAiOutcome = (safety === 'CLEAR' || safety === 'PASSED') ? 'VALID' : 'INVALID';
+  }
+
+  const origSafetyStatus = safety || (quarantinedCount !== null ? (quarantinedCount > 0 ? 'QUARANTINE_ACTIVE' : 'CLEAR') : 'Not available');
+  const quarantinedRollsDisplay = quarantinedCount !== null ? `${quarantinedCount} roll(s)` : 'Not available';
+  const highImpactDisplay = item.isHighImpact !== null && item.isHighImpact !== undefined ? (item.isHighImpact ? 'YES' : 'NO') : 'Not available';
+
+  // 2. Current QA & Quarantine State (Based on same workflow)
+  const isResolved = manual === 'RESOLVED';
+  const hasQuarantineTrigger = safety?.includes('QUARANTINE') || safety === 'BLOCKED' || (quarantinedCount !== null && quarantinedCount > 0) || item.isValid === false;
+
+  let currentManualResolution = 'Not available';
+  let currentQuarantineDisposition = 'Not available';
+  let isSafetyBlocked = false;
+  let needsReview = false;
+
+  if (isResolved) {
+    currentManualResolution = 'RESOLVED';
+    currentQuarantineDisposition = 'RELEASED';
+  } else if (manual === 'NOT_REQUIRED' || (safety === 'CLEAR' && (quarantinedCount === 0 || quarantinedCount === null) && item.isValid !== false)) {
+    currentManualResolution = 'NOT REQUIRED';
+    currentQuarantineDisposition = 'NONE';
+  } else if (hasQuarantineTrigger) {
+    currentManualResolution = 'PENDING REVIEW';
+    currentQuarantineDisposition = 'ACTIVE';
+    isSafetyBlocked = true;
+    needsReview = true;
+  } else if (safety) {
+    currentManualResolution = 'NOT REQUIRED';
+    currentQuarantineDisposition = 'NONE';
+  }
+
+  // 3. Safety Gate Status
+  let safetyGateState = 'Not available';
+  if (safety || hasExplicitValid || quarantinedCount !== null) {
+    if (isResolved) {
+      safetyGateState = 'RESOLVED';
+    } else if (isSafetyBlocked) {
+      safetyGateState = 'BLOCKED';
+    } else {
+      safetyGateState = 'CLEAR';
+    }
+  }
+
+  return {
+    origAiOutcome,
+    origSafetyStatus,
+    quarantinedRollsDisplay,
+    highImpactDisplay,
+    currentManualResolution,
+    currentQuarantineDisposition,
+    safetyGateState,
+    isSafetyBlocked,
+    isResolved,
+    needsReview
+  };
 };
 
 const agentSteps = [
@@ -220,48 +341,36 @@ export default function AiValidationPage() {
   // Metrics from real history
   const historyStats = useMemo(() => {
     let clearCount = 0;
-    let reviewCount = 0;
     let blockedCount = 0;
+    let highImpactCount = 0;
 
     aiValidationHistory.forEach((item) => {
-      const safety = String(item.qualitySafetyStatus || '').toUpperCase();
-      const valid = item.isValid;
-      if (safety === 'CLEAR' && (valid === true || valid === null || valid === undefined)) {
+      const state = getWorkflowState(item);
+      if (state.safetyGateState === 'CLEAR') {
         clearCount++;
-      } else if (safety.includes('QUARANTINE') || safety === 'BLOCKED' || valid === false) {
+      } else if (state.safetyGateState === 'BLOCKED' || state.safetyGateState === 'RESOLVED') {
         blockedCount++;
-      } else {
-        reviewCount++;
+      }
+      if (item.isHighImpact === true) {
+        highImpactCount++;
       }
     });
 
     return {
       total: aiValidationHistory.length,
       clear: clearCount,
-      review: reviewCount,
-      blocked: blockedCount
+      blocked: blockedCount,
+      highImpact: highImpactCount
     };
   }, [aiValidationHistory]);
 
-  // Assessment mapped fields
-  const latestWfId = aiValidation?.workflowId || 'Not available';
+  // Derived state for the latest workflow (ensuring BOTH sections refer to the SAME workflow record)
+  const latestState = useMemo(() => getWorkflowState(aiValidation), [aiValidation]);
+  const latestAutomated = useMemo(() => formatAutomatedChecks(aiValidation), [aiValidation]);
   const latestPoNumber = extractPoNumber(aiValidation);
-  const latestStatus = aiValidation?.status || aiValidation?.workflowStatus || 'Running';
-  const latestSafety = aiValidation?.qualitySafetyStatus || (aiValidation?.isValid === false ? 'INVALID' : 'CLEAR');
-  const latestValidation =
-    aiValidation?.isValid !== undefined && aiValidation?.isValid !== null
-      ? aiValidation.isValid ? 'VALID' : 'INVALID'
-      : (latestSafety === 'CLEAR' ? 'VALID' : 'REVIEW_REQUIRED');
-  const latestQuarantined = aiValidation?.quarantinedRollsCount ?? 0;
-  const isHighImpact = Boolean(aiValidation?.isHighImpact ?? aiValidation?.highImpact);
-  const latestImpactReason = aiValidation?.impactReason || aiValidation?.rejectionReason || null;
   const latestAssessed = formatTimestamp(
     aiValidation?.resolvedAt || aiValidation?.assessmentTimestamp || aiValidation?.startedAt || aiValidation?.createdAt
   );
-
-  const isQuarantineHoldActive =
-    (latestSafety === 'QUARANTINE_REQUIRED' || latestSafety === 'QUARANTINE_ACTIVE') &&
-    aiValidation?.manualResolutionStatus !== 'RESOLVED';
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -290,7 +399,7 @@ export default function AiValidationPage() {
             AI Validation &amp; Safety
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Safety &amp; compliance monitoring powered by the Validation/Safety Agent
+            Authoritative quality assurance ledger: Multi-agent validation rules and physical quarantine safety gates
           </p>
         </div>
 
@@ -374,15 +483,15 @@ export default function AiValidationPage() {
         </div>
       )}
 
-      {/* 2. LATEST VALIDATION/SAFETY AGENT ASSESSMENT */}
+      {/* 2. LATEST VALIDATION & SAFETY AGENT ASSESSMENT */}
       <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-sm space-y-8 shadow-sm">
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4 gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-blue-400 font-mono text-xs font-bold uppercase tracking-wider">Authoritative Audit Ledger</span>
+              <span className="text-blue-400 font-mono text-xs font-bold uppercase tracking-wider">Authoritative Record</span>
               <span className="text-slate-600">•</span>
-              <span className="text-xs text-slate-400 font-mono">PO: <strong className="text-white">{latestPoNumber}</strong></span>
+              <span className="text-xs text-slate-400 font-mono">PO Reference: <strong className="text-white">{latestPoNumber}</strong></span>
             </div>
             <h2 className="text-xl font-extrabold text-white tracking-tight">
               Latest Validation &amp; Safety Assessment
@@ -392,12 +501,10 @@ export default function AiValidationPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {latestAssessed && (
-              <span className="text-xs text-slate-400 font-mono bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                Assessed: <span className="text-slate-200">{latestAssessed}</span>
-              </span>
-            )}
-            {isQuarantineHoldActive && (
+            <span className="text-xs text-slate-400 font-mono bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+              Assessed: <span className="text-slate-200">{latestAssessed}</span>
+            </span>
+            {latestState.needsReview && (
               <button
                 onClick={() => openResolveModal(aiValidation)}
                 className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 shrink-0 transition-all"
@@ -434,7 +541,35 @@ export default function AiValidationPage() {
           />
         ) : (
           <div className="space-y-8">
-            {/* SECTION A: AUTOMATED VERIFICATION */}
+            {/* Top Workflow Summary Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Workflow ID</span>
+                <span className="text-sm font-bold font-mono text-blue-300 truncate block mt-0.5">
+                  {aiValidation.workflowId || 'Not available'}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">PO Number</span>
+                <span className="text-sm font-bold font-mono text-slate-200 truncate block mt-0.5">
+                  {latestPoNumber}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Workflow Status</span>
+                <span className="text-sm font-semibold text-slate-200 block mt-0.5">
+                  {aiValidation.status || 'Running'}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Assessed Timestamp</span>
+                <span className="text-sm font-medium text-slate-300 block mt-0.5">
+                  {latestAssessed}
+                </span>
+              </div>
+            </div>
+
+            {/* SECTION A: AUTOMATED VERIFICATION (NO FAKE 4/4) */}
             <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div className="flex items-center gap-2.5">
@@ -446,115 +581,82 @@ export default function AiValidationPage() {
                     <p className="text-[11px] text-slate-400">Rule-based multi-agent mathematical &amp; policy validation</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 flex items-center gap-1.5 font-mono">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>4 / 4 automated checks passed</span>
+                <div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 font-mono ${
+                    latestAutomated.allPassed
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                      : latestAutomated.isAvailable
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/35'
+                      : 'bg-slate-900 text-slate-400 border-slate-800'
+                  }`}>
+                    {latestAutomated.allPassed && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                    <span>{latestAutomated.summary}</span>
                   </span>
                 </div>
               </div>
 
               {/* 4 Checks Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Supplier Check */}
-                {(() => {
-                  const supplierVal = aiValidation.supplierValidation || aiValidation.supplierCheck || 'PASSED';
-                  const check = mapCheckStatus(supplierVal);
+                {latestAutomated.details.map((checkItem) => {
+                  const check = mapCheckStatus(checkItem.val);
                   return (
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-2">
+                    <div key={checkItem.key} className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">Supplier Check</span>
+                        <span className="text-xs font-bold text-slate-300">{checkItem.name}</span>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
                           {check.label}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400">Vendor catalog &amp; contract SLA verified</p>
+                      <p className="text-[11px] text-slate-400 font-mono truncate">
+                        {checkItem.val ? String(checkItem.val) : 'Not available'}
+                      </p>
                     </div>
                   );
-                })()}
-
-                {/* Budget Check */}
-                {(() => {
-                  const budgetVal = aiValidation.budgetCheck || 'PASSED';
-                  const check = mapCheckStatus(budgetVal);
-                  return (
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">Budget Check</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
-                          {check.label}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Committed spend within budget cap</p>
-                    </div>
-                  );
-                })()}
-
-                {/* PO Math Check */}
-                {(() => {
-                  const mathVal = aiValidation.poMathematicalCheck || aiValidation.poMathCheck || 'PASSED';
-                  const check = mapCheckStatus(mathVal);
-                  return (
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">PO Math Check</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
-                          {check.label}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Line item quantities &amp; totals verified</p>
-                    </div>
-                  );
-                })()}
-
-                {/* Material Check */}
-                {(() => {
-                  const matVal = aiValidation.materialValidation || aiValidation.materialCheck || 'PASSED';
-                  const check = mapCheckStatus(matVal);
-                  return (
-                    <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-300">Material Check</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
-                          {check.label}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">Material SKU &amp; inventory match verified</p>
-                    </div>
-                  );
-                })()}
+                })}
               </div>
             </div>
 
             {/* SECTION B: SAFETY GATE */}
             <div className={`rounded-2xl border p-5 space-y-3 ${
-              isQuarantineHoldActive
+              latestState.isSafetyBlocked
                 ? 'border-rose-500/40 bg-rose-950/20'
-                : 'border-emerald-500/30 bg-emerald-950/15'
+                : latestState.safetyGateState === 'RESOLVED'
+                ? 'border-emerald-500/30 bg-emerald-950/20'
+                : latestState.safetyGateState === 'CLEAR'
+                ? 'border-emerald-500/30 bg-emerald-950/15'
+                : 'border-slate-800 bg-slate-950/70'
             }`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-2.5">
                   <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs border ${
-                    isQuarantineHoldActive
+                    latestState.isSafetyBlocked
                       ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : latestState.safetyGateState === 'RESOLVED' || latestState.safetyGateState === 'CLEAR'
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
                   }`}>
                     2
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">Safety Gate</h3>
-                    <p className="text-[11px] text-slate-400">Quarantine containment &amp; physical defect gatekeeper</p>
+                    <p className="text-[11px] text-slate-400">Physical quarantine containment &amp; fabric roll defect gate</p>
                   </div>
                 </div>
 
                 <div>
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                    isQuarantineHoldActive
+                    latestState.isSafetyBlocked
                       ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-sm'
-                      : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : latestState.safetyGateState === 'RESOLVED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono'
+                      : latestState.safetyGateState === 'CLEAR'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                      : 'bg-slate-900 text-slate-400 border-slate-800'
                   }`}>
-                    <span className={`w-2 h-2 rounded-full ${isQuarantineHoldActive ? 'bg-rose-400 animate-ping' : 'bg-emerald-400'}`} />
-                    {isQuarantineHoldActive ? 'BLOCKED' : 'CLEAR / PASSED'}
+                    {latestState.isSafetyBlocked && <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />}
+                    {latestState.safetyGateState === 'RESOLVED' && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                    {latestState.safetyGateState === 'CLEAR' && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                    {latestState.safetyGateState}
                   </span>
                 </div>
               </div>
@@ -564,18 +666,22 @@ export default function AiValidationPage() {
                   Safety Gate Diagnostic Reason:
                 </span>
                 <p className={`p-3 rounded-xl border leading-relaxed ${
-                  isQuarantineHoldActive
+                  latestState.isSafetyBlocked
                     ? 'bg-rose-950/40 border-rose-500/30 text-rose-200'
                     : 'bg-slate-950/60 border-slate-800 text-slate-300'
                 }`}>
-                  {latestImpactReason || (isQuarantineHoldActive
-                    ? 'Active fabric roll quarantine holds detected. Workflow approval is BLOCKED until Quality Inspector manual review and resolution.'
-                    : 'No active quarantine holds or defect alerts on fabric inventory. Safety gate is CLEAR.')}
+                  {aiValidation.impactReason || (latestState.isSafetyBlocked
+                    ? 'Active fabric roll quarantine holds detected. Order approval is BLOCKED until Quality Inspector manual review and resolution.'
+                    : latestState.safetyGateState === 'RESOLVED'
+                    ? 'Safety hold was reviewed and released by Quality Inspector.'
+                    : latestState.safetyGateState === 'CLEAR'
+                    ? 'No active quarantine holds or defect alerts on fabric inventory. Safety gate is CLEAR.'
+                    : 'Not available')}
                 </p>
               </div>
             </div>
 
-            {/* SECTION C & D: TWO-COLUMN SPLIT FOR ORIGINAL AI ASSESSMENT VS CURRENT QA RESOLUTION */}
+            {/* SECTION C & D: TWO-COLUMN SPLIT FOR ORIGINAL AI ASSESSMENT VS CURRENT QA RESOLUTION (SAME WORKFLOW SOURCE OF TRUTH) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* SECTION C: ORIGINAL AI ASSESSMENT (Preserved History) */}
               <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 space-y-4">
@@ -598,51 +704,63 @@ export default function AiValidationPage() {
                   {/* Validation Outcome */}
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-slate-400 block">Validation Outcome</span>
-                    <span className={`text-base font-black block font-mono ${latestValidation === 'VALID' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {latestValidation}
+                    <span className={`text-base font-black block font-mono ${
+                      latestState.origAiOutcome === 'VALID' ? 'text-emerald-400' : latestState.origAiOutcome === 'INVALID' ? 'text-rose-400' : 'text-slate-400'
+                    }`}>
+                      {latestState.origAiOutcome}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Initial AI agent decision</span>
+                    <span className="text-[10px] text-slate-500 block">Initial AI agent finding</span>
                   </div>
 
                   {/* Quality Safety Status */}
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-slate-400 block">Quality Safety Status</span>
-                    <span className={`text-xs font-bold uppercase block truncate ${
-                      latestSafety === 'CLEAR' ? 'text-emerald-300' : 'text-rose-300 font-mono font-bold'
+                    <span className={`text-xs font-bold uppercase block truncate font-mono ${
+                      latestState.origSafetyStatus === 'CLEAR' ? 'text-emerald-300' : latestState.origSafetyStatus.includes('QUARANTINE') ? 'text-rose-300 font-bold' : 'text-slate-400'
                     }`}>
-                      {latestSafety}
+                      {latestState.origSafetyStatus}
                     </span>
-                    <span className="text-[10px] text-slate-500 block">Safety gate trigger</span>
+                    <span className="text-[10px] text-slate-500 block">Original safety flag</span>
                   </div>
 
                   {/* Quarantined Rolls */}
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
                     <span className="text-[10px] font-bold uppercase text-slate-400 block">Quarantined Rolls</span>
-                    <span className={`text-base font-black font-mono block ${latestQuarantined > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
-                      {latestQuarantined} roll(s)
+                    <span className={`text-base font-black font-mono block ${
+                      aiValidation.quarantinedRollsCount > 0 ? 'text-rose-400' : 'text-slate-300'
+                    }`}>
+                      {latestState.quarantinedRollsDisplay}
                     </span>
                     <span className="text-[10px] text-slate-500 block">Flagged for inspection</span>
                   </div>
 
-                  {/* Impact Reason / Severity */}
+                  {/* High Impact (Distinct Separate Metric - NOT QA Failure) */}
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Impact Classification</span>
-                    <span className={`text-xs font-bold uppercase block ${isHighImpact ? 'text-amber-400' : 'text-slate-300'}`}>
-                      {isHighImpact ? 'High Impact' : 'Standard'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block">Production criticality</span>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">High Impact</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase font-mono ${
+                        aiValidation.isHighImpact === true
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/35'
+                          : aiValidation.isHighImpact === false
+                          ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                          : 'bg-slate-900 text-slate-500'
+                      }`}>
+                        {latestState.highImpactDisplay}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 block">Production priority flag</span>
                   </div>
                 </div>
 
-                {latestImpactReason && (
+                {aiValidation.impactReason && (
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/90 text-xs">
                     <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1">Original Diagnostic Finding:</span>
-                    <p className="text-slate-300 leading-relaxed italic">{latestImpactReason}</p>
+                    <p className="text-slate-300 leading-relaxed italic">{aiValidation.impactReason}</p>
                   </div>
                 )}
               </div>
 
-              {/* SECTION D: CURRENT QA RESOLUTION STATE */}
+              {/* SECTION D: CURRENT QA RESOLUTION STATE (Accurately Derived from the Same Record) */}
               <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <div className="flex items-center gap-2.5">
@@ -655,15 +773,19 @@ export default function AiValidationPage() {
                     </div>
                   </div>
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                    aiValidation.manualResolutionStatus === 'RESOLVED'
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    latestState.currentManualResolution === 'RESOLVED'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 font-mono'
+                      : latestState.currentManualResolution === 'NOT REQUIRED'
+                      ? 'bg-slate-800 text-slate-300 border-slate-700 font-mono'
+                      : latestState.currentManualResolution === 'PENDING REVIEW'
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 font-mono'
+                      : 'bg-slate-900 text-slate-500 border-slate-800'
                   }`}>
-                    {aiValidation.manualResolutionStatus === 'RESOLVED' ? 'RESOLVED' : 'PENDING REVIEW'}
+                    {latestState.currentManualResolution}
                   </span>
                 </div>
 
-                {aiValidation.manualResolutionStatus === 'RESOLVED' ? (
+                {latestState.currentManualResolution === 'RESOLVED' ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
@@ -687,9 +809,9 @@ export default function AiValidationPage() {
                       </div>
 
                       <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Resolution Timestamp</span>
-                        <span className="text-slate-200 block truncate">
-                          {formatTimestamp(aiValidation.resolvedAt) || 'Recorded'}
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Resolved At</span>
+                        <span className="text-slate-200 block truncate font-mono">
+                          {formatTimestamp(aiValidation.resolvedAt)}
                         </span>
                         <span className="text-[10px] text-slate-500 block">Time of sign-off</span>
                       </div>
@@ -697,19 +819,39 @@ export default function AiValidationPage() {
 
                     {aiValidation.manualResolutionNote && (
                       <div className="p-3.5 rounded-xl bg-blue-950/30 border border-blue-500/20 text-xs">
-                        <span className="text-blue-300 font-bold uppercase text-[10px] block mb-1">Inspector Audit Notes:</span>
+                        <span className="text-blue-300 font-bold uppercase text-[10px] block mb-1">Inspector Resolution Note:</span>
                         <p className="text-slate-200 leading-relaxed italic bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
                           "{aiValidation.manualResolutionNote}"
                         </p>
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : latestState.currentManualResolution === 'NOT REQUIRED' ? (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Manual Resolution</span>
+                        <span className="text-slate-200 font-bold font-mono text-sm block">NOT REQUIRED</span>
+                        <span className="text-[10px] text-slate-500 block">Safety gate clear</span>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Quarantine Disposition</span>
+                        <span className="text-slate-200 font-bold font-mono text-sm block">NONE</span>
+                        <span className="text-[10px] text-slate-500 block">No quarantined rolls</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 leading-relaxed">
+                      No active quarantine holds or defect containment on this order. Manual Quality Inspector review is not required for approval.
+                    </div>
+                  </div>
+                ) : latestState.currentManualResolution === 'PENDING REVIEW' ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 space-y-1">
                         <span className="text-[10px] font-bold uppercase text-slate-400 block">Manual Resolution</span>
-                        <span className="text-amber-400 font-bold font-mono text-sm block">PENDING REVIEW</span>
+                        <span className="text-rose-400 font-bold font-mono text-sm block">PENDING REVIEW</span>
                         <span className="text-[10px] text-slate-500 block">Awaiting QA action</span>
                       </div>
 
@@ -720,9 +862,9 @@ export default function AiValidationPage() {
                       </div>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 space-y-2">
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-200/90 space-y-2">
                       <p className="leading-relaxed">
-                        Physical inspection or lab certificate is required to clear active quarantine hold. Click below to record inspector notes and authorize workflow release.
+                        Physical inspection or lab certification is required to clear active quarantine hold. Click below to record inspector notes and authorize workflow release.
                       </p>
                       <button
                         onClick={() => openResolveModal(aiValidation)}
@@ -733,6 +875,10 @@ export default function AiValidationPage() {
                       </button>
                     </div>
                   </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                    Manual resolution data is not available for this record.
+                  </div>
                 )}
               </div>
             </div>
@@ -740,7 +886,7 @@ export default function AiValidationPage() {
         )}
       </section>
 
-      {/* 4. HISTORY MONITORING SUMMARY */}
+      {/* 3. HISTORY MONITORING SUMMARY */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">Persisted Runs</span>
@@ -749,25 +895,25 @@ export default function AiValidationPage() {
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Clear Runs</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Clear Safety Runs</span>
           <p className="text-2xl font-black text-emerald-400 mt-2 font-mono">{historyStats.clear}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">Passed safety compliance</span>
+          <span className="text-[11px] text-slate-400 mt-1 block">No quarantine holds</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-400 block">Review Required</span>
-          <p className="text-2xl font-black text-amber-300 mt-2 font-mono">{historyStats.review}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">Warnings / high impact</span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-rose-400 block">Blocked / Quarantine</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-rose-400 block">Quarantine Audits</span>
           <p className="text-2xl font-black text-rose-400 mt-2 font-mono">{historyStats.blocked}</p>
-          <span className="text-[11px] text-slate-400 mt-1 block">Active defects held</span>
+          <span className="text-[11px] text-slate-400 mt-1 block">Triggered / Resolved holds</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-400 block">High Impact</span>
+          <p className="text-2xl font-black text-amber-300 mt-2 font-mono">{historyStats.highImpact}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Production critical items</span>
         </div>
       </div>
 
-      {/* 5. ASSESSMENT HISTORY TABLE */}
+      {/* 4. ASSESSMENT HISTORY TABLE */}
       <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-sm space-y-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4 gap-2">
           <div>
@@ -822,16 +968,12 @@ export default function AiValidationPage() {
                 <tbody className="divide-y divide-slate-800/80">
                   {aiValidationHistory.map((item) => {
                     const poNum = extractPoNumber(item);
-                    const safety = String(item.qualitySafetyStatus || (item.isValid === false ? 'QUARANTINE_ACTIVE' : 'CLEAR')).toUpperCase();
-                    const isBlocked = safety.includes('QUARANTINE') || safety === 'BLOCKED' || item.isValid === false;
-                    const isResolved = item.manualResolutionStatus === 'RESOLVED';
-                    const origAiOutcome = item.isValid === false || isBlocked ? 'INVALID' : 'VALID';
+                    const state = getWorkflowState(item);
+                    const automated = formatAutomatedChecks(item);
 
                     const assessedDate = formatTimestamp(
                       item.resolvedAt || item.assessmentTimestamp || item.startedAt || item.createdAt
-                    ) || 'N/A';
-
-                    const needsResolve = isBlocked && !isResolved;
+                    );
 
                     return (
                       <tr key={item.workflowId} className="hover:bg-slate-900/50 transition-colors">
@@ -842,46 +984,62 @@ export default function AiValidationPage() {
                           {poNum}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
-                            4/4 PASSED
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono border ${
+                            automated.allPassed
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                              : automated.isAvailable
+                              ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                              : 'bg-slate-900 text-slate-500 border-slate-800'
+                          }`}>
+                            {automated.summary}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                              !isBlocked || isResolved
+                              state.safetyGateState === 'CLEAR'
                                 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
-                                : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : state.safetyGateState === 'RESOLVED'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35 font-mono'
+                                : state.safetyGateState === 'BLOCKED'
+                                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                                : 'bg-slate-900 text-slate-500 border-slate-800'
                             }`}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${!isBlocked || isResolved ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
-                            {isBlocked && !isResolved ? 'BLOCKED' : 'CLEAR'}
+                            {state.safetyGateState === 'CLEAR' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                            {state.safetyGateState === 'BLOCKED' && <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />}
+                            {state.safetyGateState === 'RESOLVED' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                            {state.safetyGateState}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`font-mono font-bold text-xs ${origAiOutcome === 'VALID' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {origAiOutcome}
+                          <span className={`font-mono font-bold text-xs ${
+                            state.origAiOutcome === 'VALID' ? 'text-emerald-400' : state.origAiOutcome === 'INVALID' ? 'text-rose-400' : 'text-slate-500'
+                          }`}>
+                            {state.origAiOutcome}
                           </span>
                         </td>
                         <td className="px-4 py-3">
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                              isResolved
+                              state.currentManualResolution === 'RESOLVED'
                                 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 font-mono'
-                                : needsResolve
+                                : state.currentManualResolution === 'NOT REQUIRED'
+                                ? 'bg-slate-800 text-slate-400 border-slate-700 font-mono'
+                                : state.currentManualResolution === 'PENDING REVIEW'
                                 ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                                : 'bg-slate-900 text-slate-500 border-slate-800'
                             }`}
                           >
-                            {isResolved ? 'RESOLVED' : needsResolve ? 'PENDING REVIEW' : 'CLEAR'}
+                            {state.currentManualResolution}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-400">
+                        <td className="px-4 py-3 text-slate-400 font-mono">
                           {assessedDate}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {needsResolve && (
+                            {state.needsReview && (
                               <button
                                 onClick={() => openResolveModal(item)}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[11px] font-bold transition-all"
@@ -909,40 +1067,42 @@ export default function AiValidationPage() {
             <div className="grid lg:hidden gap-3">
               {aiValidationHistory.map((item) => {
                 const poNum = extractPoNumber(item);
-                const safety = String(item.qualitySafetyStatus || (item.isValid === false ? 'QUARANTINE_ACTIVE' : 'CLEAR')).toUpperCase();
-                const isBlocked = safety.includes('QUARANTINE') || safety === 'BLOCKED' || item.isValid === false;
-                const isResolved = item.manualResolutionStatus === 'RESOLVED';
-                const origAiOutcome = item.isValid === false || isBlocked ? 'INVALID' : 'VALID';
-                const needsResolve = isBlocked && !isResolved;
+                const state = getWorkflowState(item);
+                const automated = formatAutomatedChecks(item);
+                const assessedDate = formatTimestamp(
+                  item.resolvedAt || item.assessmentTimestamp || item.startedAt || item.createdAt
+                );
 
                 return (
                   <div key={item.workflowId} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-blue-300 text-xs">{item.workflowId}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                            isBlocked && !isResolved
-                              ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
-                              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
-                          }`}
-                        >
-                          Gate: {isBlocked && !isResolved ? 'BLOCKED' : 'CLEAR'}
-                        </span>
-                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                          state.safetyGateState === 'CLEAR'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                            : state.safetyGateState === 'RESOLVED'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                            : state.safetyGateState === 'BLOCKED'
+                            ? 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                            : 'bg-slate-900 text-slate-500 border-slate-800'
+                        }`}
+                      >
+                        Gate: {state.safetyGateState}
+                      </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
                       <div>PO: <span className="text-white font-mono">{poNum}</span></div>
-                      <div>Original AI: <span className={`font-bold font-mono ${origAiOutcome === 'VALID' ? 'text-emerald-400' : 'text-rose-400'}`}>{origAiOutcome}</span></div>
-                      <div>Automated: <span className="text-emerald-400 font-bold">4/4 PASSED</span></div>
-                      <div>QA State: <span className={`font-bold ${isResolved ? 'text-emerald-400' : needsResolve ? 'text-amber-400' : 'text-slate-300'}`}>{isResolved ? 'RESOLVED' : needsResolve ? 'PENDING' : 'CLEAR'}</span></div>
+                      <div>Original AI: <span className={`font-bold font-mono ${state.origAiOutcome === 'VALID' ? 'text-emerald-400' : state.origAiOutcome === 'INVALID' ? 'text-rose-400' : 'text-slate-400'}`}>{state.origAiOutcome}</span></div>
+                      <div>Automated: <span className="text-slate-200 font-mono font-semibold">{automated.summary}</span></div>
+                      <div>QA State: <span className={`font-bold ${state.currentManualResolution === 'RESOLVED' ? 'text-emerald-400' : state.currentManualResolution === 'PENDING REVIEW' ? 'text-rose-400' : 'text-slate-300'}`}>{state.currentManualResolution}</span></div>
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                      <span className="text-[11px] text-slate-400">
-                        {formatTimestamp(item.resolvedAt || item.assessmentTimestamp || item.startedAt) || ''}
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {assessedDate}
                       </span>
                       <div className="flex items-center gap-2">
-                        {needsResolve && (
+                        {state.needsReview && (
                           <button
                             onClick={() => openResolveModal(item)}
                             className="text-emerald-400 font-bold text-xs"
@@ -966,219 +1126,263 @@ export default function AiValidationPage() {
         )}
       </section>
 
-      {/* 6. AUDIT DETAILS MODAL */}
-      {auditModalOpen && auditTarget && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto custom-scrollbar">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Validation Audit Ledger</h3>
-                  <p className="text-xs text-slate-400 font-mono">Workflow: {auditTarget.workflowId} • PO: {extractPoNumber(auditTarget)}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAuditModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* 5. AUDIT DETAILS MODAL */}
+      {auditModalOpen && auditTarget && (() => {
+        const modalState = getWorkflowState(auditTarget);
+        const modalAutomated = formatAutomatedChecks(auditTarget);
+        const modalAssessed = formatTimestamp(
+          auditTarget.resolvedAt || auditTarget.assessmentTimestamp || auditTarget.startedAt || auditTarget.createdAt
+        );
 
-            {/* SECTION 1 IN MODAL: AUTOMATED VERIFICATION */}
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  1. Automated Verification Checks
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">
-                  4 / 4 automated checks passed
-                </span>
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto custom-scrollbar">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Validation Audit Ledger</h3>
+                    <p className="text-xs text-slate-400 font-mono">Workflow: {auditTarget.workflowId} • PO: {extractPoNumber(auditTarget)}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAuditModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
+
+              {/* Workflow Identification */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block mb-0.5">Supplier</span>
-                  <span className="font-bold text-emerald-400 block font-mono">
-                    {auditTarget.supplierValidation || auditTarget.supplierCheck || 'PASSED'}
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Workflow ID</span>
+                  <span className="font-mono text-blue-300 font-bold block truncate mt-0.5">{auditTarget.workflowId}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block mb-0.5">Budget</span>
-                  <span className="font-bold text-emerald-400 block font-mono">
-                    {auditTarget.budgetCheck || 'PASSED'}
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">PO Reference</span>
+                  <span className="font-mono text-slate-200 font-bold block truncate mt-0.5">{extractPoNumber(auditTarget)}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block mb-0.5">PO Math</span>
-                  <span className="font-bold text-emerald-400 block font-mono">
-                    {auditTarget.poMathematicalCheck || auditTarget.poMathCheck || 'PASSED'}
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Status</span>
+                  <span className="text-slate-200 font-semibold block truncate mt-0.5">{auditTarget.status || 'Running'}</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block mb-0.5">Material</span>
-                  <span className="font-bold text-emerald-400 block font-mono">
-                    {auditTarget.materialValidation || auditTarget.materialCheck || 'PASSED'}
-                  </span>
+                <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Assessed</span>
+                  <span className="text-slate-300 font-mono block truncate mt-0.5">{modalAssessed}</span>
                 </div>
               </div>
-            </div>
 
-            {/* SECTION 2 IN MODAL: SAFETY GATE */}
-            {(() => {
-              const safety = String(auditTarget.qualitySafetyStatus || (auditTarget.isValid === false ? 'QUARANTINE_ACTIVE' : 'CLEAR')).toUpperCase();
-              const isBlocked = safety.includes('QUARANTINE') || safety === 'BLOCKED' || auditTarget.isValid === false;
-              const isResolved = auditTarget.manualResolutionStatus === 'RESOLVED';
-              return (
-                <div className={`p-4 rounded-2xl border space-y-2 ${
-                  isBlocked && !isResolved
-                    ? 'bg-rose-950/20 border-rose-500/40'
-                    : 'bg-emerald-950/15 border-emerald-500/30'
-                }`}>
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                      2. Safety Gate
-                    </span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                      isBlocked && !isResolved
-                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              {/* SECTION 1 IN MODAL: AUTOMATED VERIFICATION */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    1. Automated Verification Checks
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border font-mono ${
+                    modalAutomated.allPassed
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : modalAutomated.isAvailable
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-slate-900 text-slate-500 border-slate-800'
+                  }`}>
+                    {modalAutomated.summary}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  {modalAutomated.details.map((checkItem) => {
+                    const check = mapCheckStatus(checkItem.val);
+                    return (
+                      <div key={checkItem.key} className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block mb-0.5">{checkItem.name}</span>
+                        <span className={`block font-bold text-xs ${check.style}`}>
+                          {check.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* SECTION 2 IN MODAL: SAFETY GATE */}
+              <div className={`p-4 rounded-2xl border space-y-2 ${
+                modalState.isSafetyBlocked
+                  ? 'bg-rose-950/20 border-rose-500/40'
+                  : modalState.safetyGateState === 'RESOLVED' || modalState.safetyGateState === 'CLEAR'
+                  ? 'bg-emerald-950/15 border-emerald-500/30'
+                  : 'bg-slate-950/60 border-slate-800'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    2. Safety Gate
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                    modalState.isSafetyBlocked
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      : modalState.safetyGateState === 'RESOLVED' || modalState.safetyGateState === 'CLEAR'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-mono'
+                      : 'bg-slate-900 text-slate-500 border-slate-800'
+                  }`}>
+                    {modalState.safetyGateState}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-300">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Diagnostic Reason:</span>
+                  <p className="leading-relaxed">
+                    {auditTarget.impactReason || (modalState.isSafetyBlocked
+                      ? 'Active fabric roll quarantine holds detected. Order approval is blocked until QA inspector resolution.'
+                      : modalState.safetyGateState === 'RESOLVED'
+                      ? 'Safety hold was reviewed and released by Quality Inspector.'
+                      : modalState.safetyGateState === 'CLEAR'
+                      ? 'No active quarantine holds or containment defects detected.'
+                      : 'Not available')}
+                  </p>
+                </div>
+              </div>
+
+              {/* SECTION 3 IN MODAL: ORIGINAL AI ASSESSMENT */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    3. Original AI Assessment (Preserved)
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">Historical AI Finding</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Validation Outcome</span>
+                    <span className={`font-bold font-mono text-sm block mt-0.5 ${
+                      modalState.origAiOutcome === 'VALID' ? 'text-emerald-400' : modalState.origAiOutcome === 'INVALID' ? 'text-rose-400' : 'text-slate-400'
                     }`}>
-                      {isBlocked && !isResolved ? 'BLOCKED' : 'CLEAR'}
+                      {modalState.origAiOutcome}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-300">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Reason:</span>
-                    <p className="leading-relaxed">
-                      {auditTarget.impactReason || auditTarget.rejectionReason || (isBlocked
-                        ? 'Active fabric roll quarantine holds detected. Order approval is blocked until QA inspector resolution.'
-                        : 'No quarantine holds or containment defects detected.')}
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* SECTION 3 IN MODAL: ORIGINAL AI ASSESSMENT */}
-            {(() => {
-              const safety = String(auditTarget.qualitySafetyStatus || (auditTarget.isValid === false ? 'QUARANTINE_ACTIVE' : 'CLEAR')).toUpperCase();
-              const origOutcome = auditTarget.isValid === false || safety.includes('QUARANTINE') ? 'INVALID' : 'VALID';
-              const quarantinedCount = auditTarget.quarantinedRollsCount ?? (safety.includes('QUARANTINE') ? 1 : 0);
-              const rollsList = auditTarget.quarantinedRolls || (quarantinedCount > 0 ? `${quarantinedCount} roll(s)` : 'None');
-
-              return (
-                <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                      3. Original AI Assessment (Preserved)
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Quality Safety Status</span>
+                    <span className="font-bold text-white font-mono text-xs block mt-0.5 truncate">
+                      {modalState.origSafetyStatus}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">Historical AI Finding</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Validation Outcome</span>
-                      <span className={`font-bold font-mono text-sm block mt-0.5 ${origOutcome === 'VALID' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {origOutcome}
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Quality Safety Status</span>
-                      <span className="font-bold text-white font-mono text-xs block mt-0.5 truncate">
-                        {safety}
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Quarantined Rolls</span>
-                      <span className={`font-bold font-mono text-xs block mt-0.5 ${quarantinedCount > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
-                        {rollsList}
-                      </span>
-                    </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Quarantined Rolls</span>
+                    <span className={`font-bold font-mono text-xs block mt-0.5 ${
+                      auditTarget.quarantinedRollsCount > 0 ? 'text-rose-400' : 'text-slate-300'
+                    }`}>
+                      {modalState.quarantinedRollsDisplay}
+                    </span>
                   </div>
-                  {(auditTarget.impactReason || auditTarget.rejectionReason) && (
-                    <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">Impact Reason:</span>
-                      <p className="italic">{auditTarget.impactReason || auditTarget.rejectionReason}</p>
-                    </div>
-                  )}
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">High Impact</span>
+                    <span className={`font-bold font-mono text-xs block mt-0.5 ${
+                      auditTarget.isHighImpact === true ? 'text-amber-400' : 'text-slate-300'
+                    }`}>
+                      {modalState.highImpactDisplay}
+                    </span>
+                  </div>
                 </div>
-              );
-            })()}
-
-            {/* SECTION 4 IN MODAL: CURRENT QA RESOLUTION */}
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  4. Current QA Resolution
-                </span>
-                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                  auditTarget.manualResolutionStatus === 'RESOLVED'
-                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                }`}>
-                  {auditTarget.manualResolutionStatus === 'RESOLVED' ? 'RESOLVED' : 'PENDING REVIEW'}
-                </span>
+                {auditTarget.impactReason && (
+                  <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">Impact Analysis:</span>
+                    <p className="italic">{auditTarget.impactReason}</p>
+                  </div>
+                )}
               </div>
 
-              {auditTarget.manualResolutionStatus === 'RESOLVED' ? (
-                <div className="space-y-2.5 text-xs">
-                  <div className="grid grid-cols-2 gap-2.5">
+              {/* SECTION 4 IN MODAL: CURRENT QA RESOLUTION */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                    4. Current QA Resolution
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                    modalState.currentManualResolution === 'RESOLVED'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 font-mono'
+                      : modalState.currentManualResolution === 'NOT REQUIRED'
+                      ? 'bg-slate-800 text-slate-300 border-slate-700 font-mono'
+                      : modalState.currentManualResolution === 'PENDING REVIEW'
+                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 font-mono'
+                      : 'bg-slate-900 text-slate-500 border-slate-800'
+                  }`}>
+                    {modalState.currentManualResolution}
+                  </span>
+                </div>
+
+                {modalState.currentManualResolution === 'RESOLVED' ? (
+                  <div className="space-y-2.5 text-xs">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Manual Resolution</span>
+                        <span className="font-bold text-emerald-400 font-mono">RESOLVED</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Quarantine Disposition</span>
+                        <span className="font-bold text-emerald-400 font-mono">RELEASED</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Inspector</span>
+                        <span className="text-white font-semibold">{auditTarget.resolvedBy || 'Quality Inspector'}</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Resolved At</span>
+                        <span className="text-slate-200 font-mono">{formatTimestamp(auditTarget.resolvedAt)}</span>
+                      </div>
+                    </div>
+                    {auditTarget.manualResolutionNote && (
+                      <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Inspector Notes:</span>
+                        <p className="italic text-slate-200">"{auditTarget.manualResolutionNote}"</p>
+                      </div>
+                    )}
+                  </div>
+                ) : modalState.currentManualResolution === 'NOT REQUIRED' ? (
+                  <div className="grid grid-cols-2 gap-2.5 text-xs">
                     <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                       <span className="text-[10px] text-slate-400 block">Manual Resolution</span>
-                      <span className="font-bold text-emerald-400 font-mono">RESOLVED</span>
+                      <span className="font-bold text-slate-200 font-mono">NOT REQUIRED</span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Quarantine Disposition</span>
-                      <span className="font-bold text-emerald-400 font-mono">RELEASED</span>
+                      <span className="text-[10px] text-slate-400 block">Quarantine</span>
+                      <span className="font-bold text-slate-200 font-mono">NONE</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5">
+                ) : modalState.currentManualResolution === 'PENDING REVIEW' ? (
+                  <div className="grid grid-cols-2 gap-2.5 text-xs">
                     <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Inspector</span>
-                      <span className="text-white font-semibold">{auditTarget.resolvedBy || 'Quality Inspector'}</span>
+                      <span className="text-[10px] text-slate-400 block">Manual Resolution</span>
+                      <span className="font-bold text-rose-400 font-mono">PENDING REVIEW</span>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Timestamp</span>
-                      <span className="text-slate-200">{formatTimestamp(auditTarget.resolvedAt) || 'Recorded'}</span>
+                      <span className="text-[10px] text-slate-400 block">Quarantine</span>
+                      <span className="font-bold text-rose-400 font-mono">ACTIVE</span>
                     </div>
                   </div>
-                  {auditTarget.manualResolutionNote && (
-                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Inspector Notes:</span>
-                      <p className="italic text-slate-200">"{auditTarget.manualResolutionNote}"</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2.5 text-xs">
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Manual Resolution</span>
-                    <span className="font-bold text-amber-400 font-mono">PENDING REVIEW</span>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-900 text-xs text-slate-400">
+                    Not available
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Quarantine</span>
-                    <span className="font-bold text-rose-400 font-mono">ACTIVE</span>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div className="flex justify-end pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setAuditModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
-              >
-                Close Audit
-              </button>
+              <div className="flex justify-end pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAuditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                >
+                  Close Audit
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* 7. MANUAL RESOLUTION MODAL */}
+      {/* 6. MANUAL RESOLUTION MODAL */}
       {resolveModalOpen && selectedWorkflow && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-in fade-in">
