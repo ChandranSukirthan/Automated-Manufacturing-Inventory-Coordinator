@@ -31,6 +31,9 @@ export default function QALayout({ children, title, subtitle }) {
     if (path === '/quality') {
       return currentPath === '/quality' || currentPath === '/dashboard/quality';
     }
+    if (path === '/quality/ai-validation') {
+      return currentPath === '/quality/ai-validation' || currentPath === '/dashboard/ai-validation';
+    }
     if (path === '/quality/quarantine/history') {
       return currentPath === '/quality/quarantine/history' || currentPath === '/dashboard/quarantine/history';
     }
@@ -54,6 +57,7 @@ export default function QALayout({ children, title, subtitle }) {
       title: 'Quality Control',
       items: [
         { label: 'Dashboard', path: '/quality', icon: LayoutDashboard },
+        { label: 'AI Validation & Safety', path: '/quality/ai-validation', icon: Activity },
         { label: 'Defect Reports', path: '/quality/defects', icon: AlertTriangle },
         { label: 'Quarantine Management', path: '/quality/quarantine', icon: ShieldAlert },
         { label: 'Quarantine History', path: '/quality/quarantine/history', icon: History }

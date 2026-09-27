@@ -23,6 +23,7 @@ import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
 
 // Student 3: Quality & Defect Pages
 import QualityDashboard from './pages/Dashboard/QualityDashboard';
+import AiValidationPage from './pages/Dashboard/AiValidationPage';
 import DefectReportsPage from './pages/Dashboard/DefectReportsPage';
 import DefectFormPage from './pages/Dashboard/DefectFormPage';
 import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
@@ -230,6 +231,7 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={[2, 'QualityInspector', 'ITAdmin']} />}>
             <Route element={<QALayout />}>
               <Route path="/quality" element={<QualityDashboard />} />
+              <Route path="/quality/ai-validation" element={<AiValidationPage />} />
               <Route path="/quality/defects" element={<DefectReportsPage />} />
               <Route path="/quality/defects/new" element={<DefectFormPage />} />
               <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
@@ -238,6 +240,7 @@ function App() {
               <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
               <Route path="/dashboard/quality" element={<QualityDashboard />} />
+              <Route path="/dashboard/ai-validation" element={<AiValidationPage />} />
               <Route path="/dashboard/defects" element={<DefectReportsPage />} />
               <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
               <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />

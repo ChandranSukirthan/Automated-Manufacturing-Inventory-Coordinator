@@ -231,6 +231,12 @@ export default function QualityDashboard() {
 
   const quickActions = [
     {
+      title: 'AI Validation & Safety',
+      desc: 'Dedicated agent assessment portal & compliance audit',
+      path: '/quality/ai-validation',
+      icon: Sparkles
+    },
+    {
       title: 'Review Defect Reports',
       desc: 'Filter, inspect, and evaluate quality incidents',
       path: '/quality/defects',
@@ -416,7 +422,16 @@ export default function QualityDashboard() {
                 <h2 className="text-lg font-bold text-white tracking-tight">AI Validation &amp; Safety</h2>
                 <p className="text-xs text-slate-400 mt-0.5">Latest Validation/Safety Agent assessment</p>
               </div>
-              <Activity className="w-5 h-5 text-cyan-300" aria-hidden="true" />
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate('/quality/ai-validation')}
+                  className="px-3 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/20 transition-all flex items-center gap-1.5"
+                >
+                  <span>Dedicated Page</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+                <Activity className="w-5 h-5 text-cyan-300" aria-hidden="true" />
+              </div>
             </div>
 
             {aiValidationLoading ? (
