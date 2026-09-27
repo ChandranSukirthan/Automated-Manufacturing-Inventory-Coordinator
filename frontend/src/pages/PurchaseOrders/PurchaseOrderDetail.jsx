@@ -328,6 +328,47 @@ export default function PurchaseOrderDetail() {
         </div>
       )}
 
+      {/* QA Safety Gate Status Banner for Managers */}
+      {po.status === 'PendingApproval' && (() => {
+        const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
+        const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
+        const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
+
+        return (
+          <div className={`p-4 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+            isBlocked
+              ? 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+              : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              {isBlocked ? (
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              )}
+              <div>
+                <span className="font-bold text-white text-sm block">
+                  {isBlocked
+                    ? 'Approval Blocked — QA/Safety issue unresolved'
+                    : 'QA/Safety Issue Resolved — Approval may proceed'}
+                </span>
+                <span className="text-[11px] text-slate-300">
+                  {isBlocked
+                    ? 'Quality Agent flagged active quarantine or containment holds. Awaiting Quality Inspector resolution before final sign-off.'
+                    : 'Automated validation checks passed and Quality Safety Gate has been verified.'}
+                </span>
+              </div>
+            </div>
+            <Link
+              to="/quality/ai-validation"
+              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-xs shrink-0 transition-colors"
+            >
+              View QA Audit
+            </Link>
+          </div>
+        );
+      })()}
+
       {/* Lifecycle Progress Stepper */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4">
         <div className="flex items-center justify-between">
@@ -756,11 +797,30 @@ export default function PurchaseOrderDetail() {
                     <span className="text-[11px] text-slate-400 block">98.5% Quality &amp; Delivery</span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">QA Safety Gate</span>
-                    <p className="font-bold text-emerald-400">VERIFIED</p>
-                    <span className="text-[11px] text-slate-400 block">Containment &amp; QA Cleared</span>
-                  </div>
+                  {/* QA Safety Gate */}
+                  {(() => {
+                    const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
+                    const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
+                    const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
+
+                    return (
+                      <div className={`p-3 rounded-xl border space-y-1 ${
+                        isBlocked
+                          ? 'bg-rose-950/30 border-rose-500/40'
+                          : 'bg-slate-950/60 border-slate-800'
+                      }`}>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">QA Safety Gate</span>
+                        <p className={`font-bold font-mono text-xs ${isBlocked ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {isBlocked ? 'BLOCKED' : 'CLEAR / RESOLVED'}
+                        </p>
+                        <span className={`text-[10px] block font-medium leading-tight ${isBlocked ? 'text-rose-300' : 'text-emerald-400'}`}>
+                          {isBlocked
+                            ? 'Approval Blocked — QA/Safety issue unresolved'
+                            : 'QA/Safety Issue Resolved — Approval may proceed'}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Approval Rule</span>
