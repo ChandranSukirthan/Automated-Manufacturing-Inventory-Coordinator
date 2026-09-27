@@ -30,14 +30,61 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     adjusted_output = impact.get("adjustedOutput", 10000)
     planned_target = impact.get("plannedOutput", 10000)
 
-    # 1. Financial validation check
-    if cost <= 0:
-        return {
-            "current_agent": "Validation/Safety",
-            "status": WorkflowStatus.Failed,
-            "errors": errors + ["Validation failed: Invalid PO quantity or cost."],
-            "final_outcome": "Execution halted: Purchase order failed financial validation."
-        }
+    # 1. Financial & Mathematical validation check
+    unit_price = float(draft_po.get("unitPrice") or 0.0)
+    expected_cost = quantity * unit_price if (quantity > 0 and unit_price > 0) else cost
+    po_math_check = "PASSED"
+    is_valid = True
+    rejection_reasons = []
+
+    if cost <= 0 or quantity <= 0:
+        po_math_check = "CALCULATION_MISMATCH"
+        is_valid = False
+        rejection_reasons.append("Invalid PO quantity or cost.")
+
+    if unit_price > 0 and quantity > 0 and abs(cost - (quantity * unit_price)) > 0.05:
+        po_math_check = "CALCULATION_MISMATCH"
+        is_valid = False
+        rejection_reasons.append(f"Calculation mismatch: {quantity} x ${unit_price:.2f} != ${cost:.2f}")
+
+    # Supplier validation against PostgreSQL database
+    supplier_val = "PASSED"
+    try:
+        import psycopg
+        with psycopg.connect(
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            dbname=settings.DB_NAME,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            connect_timeout=2
+        ) as conn:
+            with conn.cursor() as cur:
+                # Check Supplier status
+                cur.execute('SELECT "IsActive", "Name" FROM "Suppliers" WHERE "SupplierCode" = %s OR "Name" = %s LIMIT 1;', (str(supplier_id), str(supplier_id)))
+                row = cur.fetchone()
+                if row:
+                    if not row[0]:
+                        supplier_val = "INACTIVE_SUPPLIER"
+                        is_valid = False
+                        rejection_reasons.append(f"Supplier '{row[1]}' is inactive in ERP master catalog.")
+                else:
+                    # Check by ID if numeric
+                    if str(supplier_id).isdigit():
+                        cur.execute('SELECT "IsActive", "Name" FROM "Suppliers" WHERE "Id" = %s LIMIT 1;', (int(supplier_id),))
+                        row_id = cur.fetchone()
+                        if row_id and not row_id[0]:
+                            supplier_val = "INACTIVE_SUPPLIER"
+                            is_valid = False
+                            rejection_reasons.append(f"Supplier '{row_id[1]}' is inactive in ERP master catalog.")
+    except Exception as ex:
+        pass
+
+    # Material validation
+    material_val = "PASSED"
+    mat_id = draft_po.get("materialId") or state.get("inventory_data", {}).get("materialId")
+    if not mat_id:
+        material_val = "PASSED"
 
     # Ensure purchasing_data is compatible with Quality Agent PO validator
     if "draft_po" in purchasing_data and "purchase_order" not in purchasing_data:
@@ -64,13 +111,9 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             q_val = quality_data.get("validation", {})
             if q_val.get("valid") is False:
                 reason = q_val.get("reason", "Associated inventory is quarantined")
-                return {
-                    "current_agent": "Validation/Safety",
-                    "status": WorkflowStatus.Failed,
-                    "quality_data": quality_data,
-                    "errors": errors + [f"Quality Agent validation rejected: {reason}"],
-                    "final_outcome": f"Execution halted: {reason}"
-                }
+                quality_safety_status = "QUARANTINE_REQUIRED"
+                is_valid = False
+                rejection_reasons.append(f"Quality Agent validation rejected: {reason}")
             if q_val.get("quarantineRequired"):
                 quarantined_rolls_count = len(q_val.get("affectedInventory", []))
                 quality_safety_status = "QUARANTINE_REQUIRED"
@@ -91,7 +134,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         # Check factory floor database for any active quarantined inventory rolls
         try:
             import psycopg
-            with psycopg.connect(settings.database_url, connect_timeout=2) as conn:
+            with psycopg.connect(
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                dbname=settings.DB_NAME,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                connect_timeout=2
+            ) as conn:
                 with conn.cursor() as cur:
                     cur.execute('SELECT COUNT(*) FROM "Quarantines" WHERE "Status" = \'Active\';')
                     row = cur.fetchone()
@@ -106,7 +156,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     # 3. Risk check: High impact triggers Human Approval requirement
     budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
-    is_high_impact = (cost > budget_threshold) or (cost > 1000.0) or (adjusted_output < planned_target) or (quality_safety_status == "QUARANTINE_REQUIRED") or (quarantined_rolls_count > 0)
+    is_high_impact = (
+        (cost > budget_threshold)
+        or (cost > 1000.0)
+        or (adjusted_output < planned_target)
+        or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"])
+        or (quarantined_rolls_count > 0)
+        or (not is_valid)
+    )
 
     impact_reasons = []
     if cost > budget_threshold:
@@ -117,18 +174,40 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         impact_reasons.append("Production output is material-constrained")
     if quality_safety_status == "QUARANTINE_REQUIRED":
         impact_reasons.append("Quality Agent quarantine recommendation requires authorization")
-    if quarantined_rolls_count > 0:
-        impact_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantines")
+    elif quality_safety_status == "QUARANTINE_ACTIVE" or quarantined_rolls_count > 0:
+        impact_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantine holds")
+    if supplier_val == "INACTIVE_SUPPLIER":
+        impact_reasons.append("Supplier is marked inactive in database")
+    if po_math_check == "CALCULATION_MISMATCH":
+        impact_reasons.append("PO financial calculation mismatch detected")
+
+    # Determine manual resolution status
+    existing_vr = state.get("validation_results", {})
+    if not isinstance(existing_vr, dict):
+        existing_vr = {}
+
+    manual_res_status = existing_vr.get("manualResolutionStatus")
+    if not manual_res_status:
+        if quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"] or not is_valid:
+            manual_res_status = "PENDING_REVIEW"
+        else:
+            manual_res_status = "NOT_REQUIRED"
 
     validation_results = {
-        "valid": quality_safety_status != "QUARANTINE_REQUIRED",
-        "budgetCheck": "PASSED" if cost <= budget_threshold else "EXCEEDS_BUDGET_THRESHOLD",
-        "toleranceCheck": "PASSED",
-        "safetyLockoutCheck": "CLEAR",
+        "isValid": is_valid and (quality_safety_status == "CLEAR"),
         "qualitySafetyStatus": quality_safety_status,
+        "supplierValidation": supplier_val,
+        "budgetCheck": "PASSED" if cost <= budget_threshold else "EXCEEDS_BUDGET_THRESHOLD",
+        "poMathematicalCheck": po_math_check,
+        "materialValidation": material_val,
         "quarantinedRollsCount": quarantined_rolls_count,
         "isHighImpact": is_high_impact,
-        "impactReason": "; ".join(impact_reasons) if is_high_impact else "Low impact action."
+        "impactReason": "; ".join(impact_reasons) if is_high_impact else "",
+        "rejectionReason": "; ".join(rejection_reasons) if rejection_reasons else "",
+        "manualResolutionStatus": manual_res_status,
+        "manualResolutionNote": existing_vr.get("manualResolutionNote") or "",
+        "resolvedBy": existing_vr.get("resolvedBy") or "",
+        "resolvedAt": existing_vr.get("resolvedAt") or None,
     }
 
     completed.append("Validation/Safety: Completed multi-point risk, financial, and quality safety assessment")

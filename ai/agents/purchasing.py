@@ -1,5 +1,11 @@
 from typing import Dict, Any
 from ai.core.state import AgentState, WorkflowStatus
+from ai.tools.purchasing_tools import (
+    query_supplier_rates,
+    select_supplier,
+    calculate_total_cost,
+    create_draft_po,
+)
 
 
 def purchasing_node(state: AgentState) -> Dict[str, Any]:
@@ -12,13 +18,18 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     completed = list(state.get("completed_steps", []))
     errors = list(state.get("errors", []))
 
-    # Student 2: Purchasing Agent implements query_supplier_rates, select_supplier, calculate_total_cost, create_draft_po
-    from ai.tools.purchasing_tools import (
-        query_supplier_rates,
-        select_supplier,
-        calculate_total_cost,
-        create_draft_po
-    )
+    # If draft_po is already provided (e.g., verifying an existing manual PO), preserve it
+    existing_purchasing = dict(state.get("purchasing_data", {}))
+    if existing_purchasing.get("draft_po"):
+        draft_po = existing_purchasing["draft_po"]
+        po_num = draft_po.get("poNumber", "PO-DRAFT")
+        completed.append(f"Purchasing: Validating existing purchase order {po_num}")
+        return {
+            "current_agent": "Purchasing",
+            "purchasing_data": existing_purchasing,
+            "completed_steps": completed,
+            "errors": errors
+        }
 
     inv_data = state.get("inventory_data", {})
     prod_data = state.get("production_data", {})

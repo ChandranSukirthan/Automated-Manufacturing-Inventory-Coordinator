@@ -376,7 +376,7 @@ export default function AiApprovals() {
                         />
                       </div>
                       <p className="text-[11px] text-emerald-400/90 pt-1">
-                        ✓ Validation Passed: Vendor active, threshold rule verified, no budget overrun.
+                        ✓ Multi-agent Validation Passed: Supplier active, budget verified, PO math checked, QA safety gate cleared.
                       </p>
                     </div>
 
@@ -384,13 +384,13 @@ export default function AiApprovals() {
                     <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 font-mono">
                       <span className="font-bold text-slate-300 flex items-center gap-1.5 uppercase text-[10px] tracking-wider font-sans">
                         <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Tool Execution Summary</span>
+                        <span>Tool Execution &amp; Gate Summary</span>
                       </span>
                       <div className="text-[11px] text-slate-400 space-y-1">
                         <p>• calculate_burn_rate(SKU) → 180.5 kg/day</p>
-                        <p>• calculate_days_remaining() → 3.2 days remaining</p>
-                        <p>• check_approval_threshold({totalAmount}) → True (&gt; $5,000)</p>
                         <p>• validate_budget({totalAmount}, {budgetLimit}) → APPROVED</p>
+                        <p>• check_qa_safety_status() → CLEAR / RESOLVED</p>
+                        <p>• enforce_backend_gate() → AUTHORITATIVE POSTGRESQL VERIFIED</p>
                       </div>
                     </div>
                   </div>

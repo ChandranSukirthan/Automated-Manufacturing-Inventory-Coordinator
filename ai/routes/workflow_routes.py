@@ -24,27 +24,28 @@ tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 class RunWorkflowRequest(BaseModel):
     objective: str = Field(
         ...,
-        example="Replenish BoxPouch film because inventory is low.",
         description="The business objective for the Planner agent."
     )
-    workflowId: Optional[str] = Field(None, example="WF-1004")
-    material_id: Optional[str] = Field(None, example="RM-STEEL-001")
-    required_quantity: Optional[float] = Field(None, example=2000.0)
+    workflowId: Optional[str] = Field(None)
+    material_id: Optional[str] = Field(None)
+    required_quantity: Optional[float] = Field(None)
+    purchasing_data: Optional[Dict[str, Any]] = Field(None)
+    quality_data: Optional[Dict[str, Any]] = Field(None)
 
 
 class RejectWorkflowRequest(BaseModel):
-    reason: Optional[str] = Field("Rejected by human administrator", example="Exceeds daily budget")
+    reason: Optional[str] = Field("Rejected by human administrator")
 
 
 class MaintenanceCheckRequest(BaseModel):
-    uptime: float = Field(..., example=480.0)
-    maintenanceInterval: float = Field(..., example=500.0)
-    machineId: str = Field("M001", example="M001")
+    uptime: float = Field(...)
+    maintenanceInterval: float = Field(...)
+    machineId: str = Field("M001")
 
 
 class ProductionImpactRequest(BaseModel):
-    target: int = Field(..., example=10000)
-    availableMaterial: int = Field(..., example=6000)
+    target: int = Field(...)
+    availableMaterial: int = Field(...)
 
 
 # Workflow Endpoints
@@ -58,7 +59,9 @@ def trigger_workflow(request: RunWorkflowRequest):
         objective=request.objective,
         workflow_id=request.workflowId,
         material_id=request.material_id,
-        required_quantity=request.required_quantity
+        required_quantity=request.required_quantity,
+        purchasing_data=request.purchasing_data,
+        quality_data=request.quality_data
     )
     return result
 

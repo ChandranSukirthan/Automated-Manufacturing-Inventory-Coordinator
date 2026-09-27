@@ -119,6 +119,11 @@ namespace ManufacturingCoordinator.Api.Services
 
         public async Task<QuarantineDto?> ReleaseAsync(Guid id)
         {
+            return await ReleaseAsync(id, null, null);
+        }
+
+        public async Task<QuarantineDto?> ReleaseAsync(Guid id, string? resolutionNote, string? resolvedBy)
+        {
             var quarantine = await _db.Quarantines
                 .Include(q => q.DefectReport)
                 .FirstOrDefaultAsync(q => q.Id == id);
@@ -144,6 +149,40 @@ namespace ManufacturingCoordinator.Api.Services
             quarantine.Status = QuarantineStatus.Released;
             quarantine.ReleasedAt = DateTime.UtcNow;
             inventoryRoll.Status = InventoryStatus.Available;
+
+            if (!string.IsNullOrWhiteSpace(resolutionNote))
+            {
+                quarantine.Reason = $"{quarantine.Reason} | Resolution: {resolutionNote.Trim()}";
+            }
+
+            // Sync with any QA workflow requiring quarantine resolution
+            if (!string.IsNullOrWhiteSpace(resolutionNote))
+            {
+                var workflows = await _db.AgentWorkflows
+                    .Where(w => w.WorkflowId.StartsWith("WF-QA-") || w.WorkflowId.StartsWith("WF-DEFECT-"))
+                    .ToListAsync();
+
+                foreach (var wf in workflows)
+                {
+                    if (!string.IsNullOrWhiteSpace(wf.ValidationResults))
+                    {
+                        try
+                        {
+                            var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(wf.ValidationResults);
+                            if (dict != null)
+                            {
+                                dict["manualResolutionStatus"] = "RESOLVED";
+                                dict["manualResolutionNote"] = resolutionNote.Trim();
+                                dict["resolvedBy"] = resolvedBy ?? "QualityInspector";
+                                dict["resolvedAt"] = DateTime.UtcNow.ToString("o");
+                                wf.ValidationResults = JsonSerializer.Serialize(dict);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             return ToDto(quarantine);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -25,6 +25,8 @@ export default function QuarantineDetailPage() {
   const [error, setError] = useState('');
   const [severity, setSeverity] = useState('Unknown');
   const [releasing, setReleasing] = useState(false);
+  const [releaseModalOpen, setReleaseModalOpen] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -43,11 +45,15 @@ export default function QuarantineDetailPage() {
     load();
   }, [id]);
 
-  const release = async () => {
-    if (!window.confirm('Release this quarantine and return the inventory to normal business handling?')) return;
+  const handleReleaseConfirm = async (e) => {
+    e.preventDefault();
     setReleasing(true);
     try {
-      setRecord(await quarantineService.release(id));
+      const updated = await quarantineService.release(id, {
+        resolutionNote: resolutionNote.trim() || 'Passed inspection and authorized for return to production.'
+      });
+      setRecord(updated);
+      setReleaseModalOpen(false);
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to release quarantine.'));
     } finally {
@@ -181,13 +187,15 @@ export default function QuarantineDetailPage() {
           </div>
         </div>
 
-        {/* Reason */}
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Quarantine Reason
-          </span>
-          <div className="mt-2 p-5 rounded-2xl bg-slate-950 border border-slate-800 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
-            {record.reason}
+        {/* Reason & Resolution Note */}
+        <div className="space-y-4">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Quarantine Containment Reason &amp; Resolution
+            </span>
+            <div className="mt-2 p-5 rounded-2xl bg-slate-950 border border-slate-800 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+              {record.reason}
+            </div>
           </div>
         </div>
 
@@ -201,25 +209,91 @@ export default function QuarantineDetailPage() {
               </p>
             </div>
             <button
-              onClick={release}
+              onClick={() => {
+                setResolutionNote('');
+                setReleaseModalOpen(true);
+              }}
               disabled={releasing}
               className="px-6 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm hover:bg-emerald-400 disabled:opacity-60 transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
             >
-              {releasing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Releasing...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
-                  <span>Release Quarantine</span>
-                </>
-              )}
+              <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
+              <span>Release Quarantine</span>
             </button>
           </div>
         )}
       </div>
+
+      {/* Release Disposition Modal */}
+      {releaseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl p-6 space-y-5">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Release Quarantine Hold</h3>
+                  <p className="text-xs font-mono text-cyan-300 mt-0.5">Roll {record.inventoryRollId} • Batch {record.batchId}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReleaseModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleReleaseConfirm} className="space-y-4">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Confirming release will change the quarantine status to <strong>Released</strong> and restore the roll to <strong>Available</strong> status in PostgreSQL for manufacturing and purchasing operations.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                  Disposition / Release Note <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  value={resolutionNote}
+                  onChange={(e) => setResolutionNote(e.target.value)}
+                  placeholder="e.g., Secondary lab test confirmed tensile strength within tolerance. Quarantine lifted."
+                  rows={4}
+                  required
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReleaseModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={releasing}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-600/25 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {releasing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Releasing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Confirm Release Disposition</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

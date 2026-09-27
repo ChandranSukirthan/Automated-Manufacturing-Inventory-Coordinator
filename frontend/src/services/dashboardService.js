@@ -14,6 +14,11 @@ const dashboardService = {
   getAiValidationHistory: async () => {
     const response = await api.get('/quality/ai-validation/history');
     return response.data;
+  },
+
+  resolveAiValidation: async (workflowId, data) => {
+    const response = await api.post(`/quality/ai-validation/${workflowId}/resolve`, data);
+    return response.data;
   }
 };
 

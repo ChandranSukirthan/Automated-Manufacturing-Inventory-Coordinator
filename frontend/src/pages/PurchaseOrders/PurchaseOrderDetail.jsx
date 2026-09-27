@@ -753,13 +753,13 @@ export default function PurchaseOrderDetail() {
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Supplier SLA Result</span>
                     <p className="font-bold text-emerald-400">PASSED</p>
-                    <span className="text-[11px] text-slate-400 block">98.5% Quality & Delivery</span>
+                    <span className="text-[11px] text-slate-400 block">98.5% Quality &amp; Delivery</span>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Validation Result</span>
-                    <p className="font-bold text-emerald-400">PASSED</p>
-                    <span className="text-[11px] text-slate-400 block">Zero compliance issues</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">QA Safety Gate</span>
+                    <p className="font-bold text-emerald-400">VERIFIED</p>
+                    <span className="text-[11px] text-slate-400 block">Containment &amp; QA Cleared</span>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1">
@@ -791,15 +791,15 @@ export default function PurchaseOrderDetail() {
                       </div>
                       <div className="flex items-center gap-2 text-emerald-400">
                         <Check className="w-3.5 h-3.5" />
-                        <span>Purchasing Agent: Matched vendor quotes & catalog pricing</span>
+                        <span>Purchasing Agent: Matched vendor quotes &amp; catalog pricing</span>
                       </div>
                       <div className="flex items-center gap-2 text-emerald-400">
                         <Check className="w-3.5 h-3.5" />
-                        <span>Validation Agent: Checked budget limits & compliance thresholds</span>
+                        <span>Validation/Safety Agent: Budget check, supplier validation, QA safety audit</span>
                       </div>
                       <div className="flex items-center gap-2 text-brand-300">
                         <Clock className="w-3.5 h-3.5 animate-spin" />
-                        <span>Human Approval Gate: Awaiting Supply Chain Manager decision</span>
+                        <span>Backend Approval Gate: Authoritative verification against PostgreSQL state</span>
                       </div>
                     </div>
                   </div>

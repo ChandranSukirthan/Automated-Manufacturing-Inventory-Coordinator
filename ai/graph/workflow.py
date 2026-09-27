@@ -34,18 +34,22 @@ def sync_to_database(state: AgentState) -> None:
     validation_results_json = None
     val_res = state.get("validation_results")
     if isinstance(val_res, dict) and val_res:
-        if (
-            val_res.get("qualitySafetyStatus") is not None
-            or val_res.get("quarantinedRollsCount") is not None
-            or val_res.get("isHighImpact") is not None
-            or val_res.get("impactReason") is not None
-        ):
-            validation_results_json = json.dumps({
-                "qualitySafetyStatus": val_res.get("qualitySafetyStatus"),
-                "quarantinedRollsCount": val_res.get("quarantinedRollsCount", 0),
-                "isHighImpact": val_res.get("isHighImpact", False),
-                "impactReason": val_res.get("impactReason")
-            })
+        validation_results_json = json.dumps({
+            "isValid": bool(val_res.get("isValid", True)),
+            "qualitySafetyStatus": val_res.get("qualitySafetyStatus", "CLEAR"),
+            "supplierValidation": val_res.get("supplierValidation", "PASSED"),
+            "budgetCheck": val_res.get("budgetCheck", "PASSED"),
+            "poMathematicalCheck": val_res.get("poMathematicalCheck", "PASSED"),
+            "materialValidation": val_res.get("materialValidation", "PASSED"),
+            "quarantinedRollsCount": int(val_res.get("quarantinedRollsCount", 0) or 0),
+            "isHighImpact": bool(val_res.get("isHighImpact", False)),
+            "impactReason": val_res.get("impactReason") or "",
+            "rejectionReason": val_res.get("rejectionReason") or "",
+            "manualResolutionStatus": val_res.get("manualResolutionStatus") or "NOT_REQUIRED",
+            "manualResolutionNote": val_res.get("manualResolutionNote") or "",
+            "resolvedBy": val_res.get("resolvedBy") or "",
+            "resolvedAt": val_res.get("resolvedAt") or None,
+        })
 
     try:
         with psycopg.connect(
@@ -165,7 +169,8 @@ def run_workflow(
     workflow_id: Optional[str] = None,
     material_id: Optional[str] = None,
     required_quantity: Optional[float] = None,
-    quality_data: Optional[Dict[str, Any]] = None
+    quality_data: Optional[Dict[str, Any]] = None,
+    purchasing_data: Optional[Dict[str, Any]] = None
 ) -> AgentState:
     """
     Starts and executes a workflow up to completion or approval gate.
@@ -190,7 +195,7 @@ def run_workflow(
         "tool_results": {},
         "inventory_data": initial_inv,
         "production_data": {},
-        "purchasing_data": {},
+        "purchasing_data": purchasing_data or {},
         "quality_data": quality_data or {},
         "validation_results": {},
         "final_outcome": None,
