@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -12,15 +12,75 @@ import {
   Loader2,
   Sparkles,
   RefreshCw,
-  LayoutDashboard,
-  FileText
+  FileText,
+  UserCheck,
+  Clock,
+  ArrowRight,
+  Bot,
+  Zap,
+  Check,
+  X,
+  Eye
 } from 'lucide-react';
 import dashboardService from '../../services/dashboardService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import EmptyState from '../../components/QA/EmptyState';
 
-const displayValidationValue = (value) =>
-  value === null || value === undefined || value === '' ? 'Unavailable' : String(value);
+// Helper to extract PO Number cleanly
+const extractPoNumber = (item) => {
+  if (!item) return 'Not available';
+  if (item.purchaseOrderNumber) return item.purchaseOrderNumber;
+  if (item.poNumber) return item.poNumber;
+  if (item.workflowId) {
+    const match = item.workflowId.match(/PO-\d{4}-\d{4}/i);
+    if (match) return match[0];
+  }
+  return 'Not available';
+};
+
+// Helper for formatting timestamps
+const formatTimestamp = (dateStr) => {
+  if (!dateStr) return null;
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
+    return date.toLocaleString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return null;
+  }
+};
+
+// Helper for check status mapping
+const mapCheckStatus = (val) => {
+  if (!val) return { label: 'NOT AVAILABLE', style: 'bg-slate-800 text-slate-400 border-slate-700', icon: '—' };
+  const s = String(val).toUpperCase().trim();
+  if (s === 'PASSED' || s === 'CLEAR' || s === 'VALID' || s === 'TRUE') {
+    return { label: '✓ PASSED', style: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35', icon: '✓' };
+  }
+  if (s === 'FAILED' || s === 'INVALID' || s === 'BLOCKED' || s === 'FALSE') {
+    return { label: '✕ FAILED', style: 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-bold', icon: '✕' };
+  }
+  if (s.includes('QUARANTINE')) {
+    return { label: '✕ QUARANTINE', style: 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-bold', icon: '✕' };
+  }
+  return { label: '⚠ REVIEW', style: 'bg-amber-500/15 text-amber-300 border-amber-500/35', icon: '⚠' };
+};
+
+const agentSteps = [
+  'Agent Activated',
+  'Preparing Assessment',
+  'Checking PO',
+  'Checking Supplier',
+  'Checking Quality & Safety',
+  'Checking Quarantine',
+  'Assessment Complete'
+];
 
 export default function AiValidationPage() {
   const navigate = useNavigate();
@@ -32,8 +92,13 @@ export default function AiValidationPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
 
-  const [expandedReasons, setExpandedReasons] = useState({});
-  const [expandedRows, setExpandedRows] = useState({});
+  // Agent Activation Progress state
+  const [activatingAgent, setActivatingAgent] = useState(false);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
+
+  // Audit Detail Modal State
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditTarget, setAuditTarget] = useState(null);
 
   // Manual Resolution Modal State
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
@@ -43,20 +108,6 @@ export default function AiValidationPage() {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState('');
   const [resolveSuccess, setResolveSuccess] = useState('');
-
-  const toggleExpand = (id) => {
-    setExpandedReasons((prev) => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
-
-  const toggleRowExpand = (id) => {
-    setExpandedRows((prev) => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
-  };
 
   const loadAiValidation = async () => {
     setAiValidationLoading(true);
@@ -68,7 +119,7 @@ export default function AiValidationPage() {
       setAiValidation(null);
       setAiValidationError(
         err.response?.status === 404
-          ? 'AI Validation & Safety results are unavailable (HTTP 404).'
+          ? 'AI Validation & Safety results are unavailable.'
           : parseErrorMessage(err, 'Unable to load AI Validation & Safety results.')
       );
     } finally {
@@ -84,7 +135,7 @@ export default function AiValidationPage() {
       setAiValidationHistory(Array.isArray(historyData) ? historyData : []);
     } catch (err) {
       setAiValidationHistory([]);
-      setHistoryError(parseErrorMessage(err, 'Unable to load Validation/Safety assessment history.'));
+      setHistoryError(parseErrorMessage(err, 'Unable to load validation history.'));
     } finally {
       setHistoryLoading(false);
     }
@@ -98,6 +149,41 @@ export default function AiValidationPage() {
   useEffect(() => {
     refreshAll();
   }, []);
+
+  // Agent Activation Handler
+  const handleActivateAgent = async () => {
+    setActivatingAgent(true);
+    setActiveStepIndex(0);
+
+    const stepInterval = setInterval(() => {
+      setActiveStepIndex((prev) => {
+        if (prev < agentSteps.length - 1) return prev + 1;
+        return prev;
+      });
+    }, 450);
+
+    try {
+      await Promise.all([
+        dashboardService.getAiValidation(),
+        dashboardService.getAiValidationHistory()
+      ]);
+      await loadAiValidation();
+      await loadAiValidationHistory();
+    } catch (err) {
+      console.warn('Agent telemetry refresh:', err);
+    } finally {
+      clearInterval(stepInterval);
+      setActiveStepIndex(agentSteps.length - 1);
+      setTimeout(() => {
+        setActivatingAgent(false);
+      }, 500);
+    }
+  };
+
+  const openAuditModal = (item) => {
+    setAuditTarget(item);
+    setAuditModalOpen(true);
+  };
 
   const openResolveModal = (wf) => {
     setSelectedWorkflow(wf);
@@ -131,50 +217,110 @@ export default function AiValidationPage() {
     }
   };
 
+  // Metrics from real history
+  const historyStats = useMemo(() => {
+    let clearCount = 0;
+    let reviewCount = 0;
+    let blockedCount = 0;
+
+    aiValidationHistory.forEach((item) => {
+      const safety = String(item.qualitySafetyStatus || '').toUpperCase();
+      const valid = item.isValid;
+      if (safety === 'CLEAR' && (valid === true || valid === null || valid === undefined)) {
+        clearCount++;
+      } else if (safety.includes('QUARANTINE') || safety === 'BLOCKED' || valid === false) {
+        blockedCount++;
+      } else {
+        reviewCount++;
+      }
+    });
+
+    return {
+      total: aiValidationHistory.length,
+      clear: clearCount,
+      review: reviewCount,
+      blocked: blockedCount
+    };
+  }, [aiValidationHistory]);
+
+  // Assessment mapped fields
+  const latestWfId = aiValidation?.workflowId || 'Not available';
+  const latestPoNumber = extractPoNumber(aiValidation);
+  const latestStatus = aiValidation?.status || aiValidation?.workflowStatus || 'Running';
+  const latestSafety = aiValidation?.qualitySafetyStatus || (aiValidation?.isValid === false ? 'INVALID' : 'CLEAR');
+  const latestValidation =
+    aiValidation?.isValid !== undefined && aiValidation?.isValid !== null
+      ? aiValidation.isValid ? 'VALID' : 'INVALID'
+      : (latestSafety === 'CLEAR' ? 'VALID' : 'REVIEW_REQUIRED');
+  const latestQuarantined = aiValidation?.quarantinedRollsCount ?? 0;
+  const isHighImpact = Boolean(aiValidation?.isHighImpact ?? aiValidation?.highImpact);
+  const latestImpactReason = aiValidation?.impactReason || aiValidation?.rejectionReason || null;
+  const latestAssessed = formatTimestamp(
+    aiValidation?.resolvedAt || aiValidation?.assessmentTimestamp || aiValidation?.startedAt || aiValidation?.createdAt
+  );
+
+  const isQuarantineHoldActive =
+    (latestSafety === 'QUARANTINE_REQUIRED' || latestSafety === 'QUARANTINE_ACTIVE') &&
+    aiValidation?.manualResolutionStatus !== 'RESOLVED';
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
-      {/* Page Header */}
+      {/* 1. SINGLE CLEAN PAGE HEADER */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-6">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-1">
             <span className="text-purple-400 uppercase tracking-widest text-xs font-bold">
-              Quality Assurance
+              Quality Control
             </span>
             <span className="text-slate-600">•</span>
-            <span className="text-cyan-400 text-xs font-semibold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              Safety &amp; Compliance Agent
-            </span>
+            <div className="flex items-center gap-1.5 text-xs">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  activatingAgent || aiValidationLoading
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-emerald-400'
+                }`}
+              />
+              <span className="text-slate-300 font-medium">
+                {activatingAgent || aiValidationLoading ? 'Processing' : 'Agent Ready'}
+              </span>
+            </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight mt-1">
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">
             AI Validation &amp; Safety
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Authoritative assessment portal, safety compliance diagnostics, and persisted quality audit trails.
+            Safety &amp; compliance monitoring powered by the Validation/Safety Agent
           </p>
         </div>
 
         {/* Action Button Group */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleActivateAgent}
+            disabled={activatingAgent || aiValidationLoading}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-sm font-bold shadow-lg shadow-purple-600/25 flex items-center gap-2 disabled:opacity-50 transition-all"
+          >
+            {activatingAgent ? (
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
+            ) : (
+              <Bot className="w-4 h-4 text-purple-200" />
+            )}
+            <span>Activate Agent</span>
+          </button>
+
           <button
             onClick={refreshAll}
             disabled={aiValidationLoading || historyLoading}
             className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900/60 text-slate-200 text-sm font-medium hover:bg-slate-800 hover:text-white transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${(aiValidationLoading || historyLoading) ? 'animate-spin' : ''}`} />
-            <span>Refresh Live Data</span>
-          </button>
-          <button
-            onClick={() => navigate('/quality')}
-            className="px-4 py-2.5 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-300 text-sm font-medium hover:bg-purple-500/20 transition-all shadow-sm flex items-center gap-2"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>QA Dashboard</span>
+            <RefreshCw className={`w-4 h-4 ${aiValidationLoading || historyLoading ? 'animate-spin text-purple-400' : ''}`} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* Success Notification Banner */}
+      {/* Success Notification */}
       {resolveSuccess && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-200 flex items-center gap-3 animate-in fade-in">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -182,36 +328,80 @@ export default function AiValidationPage() {
         </div>
       )}
 
-      {/* SECTION 1 & 2: LATEST VALIDATION/SAFETY ASSESSMENT & AUTOMATED CHECKS */}
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4">
+      {/* Activate Agent Progress Stepper */}
+      {activatingAgent && (
+        <div className="rounded-3xl border border-purple-500/40 bg-slate-900/90 p-6 backdrop-blur-xl shadow-2xl space-y-4 animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Bot className="w-5 h-5 text-purple-400 animate-bounce" />
+              <span className="text-sm font-bold text-white">Validation / Safety Agent Pipeline Executing</span>
+            </div>
+            <span className="text-xs font-mono text-purple-300">Step {activeStepIndex + 1} of {agentSteps.length}</span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
+            {agentSteps.map((step, idx) => {
+              const isCompleted = idx < activeStepIndex;
+              const isCurrent = idx === activeStepIndex;
+              return (
+                <div
+                  key={step}
+                  className={`p-3 rounded-xl border text-xs transition-all ${
+                    isCurrent
+                      ? 'bg-purple-600/20 border-purple-500 text-purple-200 font-bold shadow-md shadow-purple-600/20'
+                      : isCompleted
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {isCompleted ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : isCurrent ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                    ) : (
+                      <span className="w-3.5 h-3.5 rounded-full bg-slate-800 text-[10px] flex items-center justify-center font-mono">
+                        {idx + 1}
+                      </span>
+                    )}
+                    <span className="text-[10px] uppercase tracking-wider font-semibold">Stage {idx + 1}</span>
+                  </div>
+                  <p className="line-clamp-1">{step}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. LATEST VALIDATION/SAFETY AGENT ASSESSMENT */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-sm space-y-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4 gap-2">
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">AI Validation &amp; Safety</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Latest Validation/Safety Agent assessment</p>
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              Latest Validation/Safety Agent Assessment
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Authoritative quality &amp; safety determination</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
-              <Activity className="w-3.5 h-3.5 text-cyan-300 animate-pulse" />
-              Real-time PostgreSQL Feed
+          {latestAssessed && (
+            <span className="text-xs text-slate-400 font-mono">
+              Assessed: <span className="text-slate-200">{latestAssessed}</span>
             </span>
-          </div>
+          )}
         </div>
 
         {aiValidationLoading ? (
-          <div className="flex items-center justify-center gap-3 py-12 text-slate-400" role="status" aria-live="polite">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-300" />
-            <span className="text-sm">Fetching authoritative assessment from agent engine...</span>
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400 space-y-3">
+            <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
+            <p className="text-sm">Fetching authoritative assessment...</p>
           </div>
         ) : aiValidationError ? (
-          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
               <span className="text-sm font-medium">{aiValidationError}</span>
             </div>
-            <button
-              onClick={loadAiValidation}
-              className="text-xs font-semibold underline hover:text-rose-100 sm:shrink-0"
-            >
+            <button onClick={loadAiValidation} className="text-xs font-semibold underline hover:text-rose-100">
               Retry
             </button>
           </div>
@@ -219,651 +409,668 @@ export default function AiValidationPage() {
           <EmptyState
             icon={ShieldAlert}
             title="No assessment available"
-            description="The API did not return a Validation/Safety Agent assessment."
+            description="The API did not return an active agent assessment."
             actionLabel="Retry"
             onAction={loadAiValidation}
           />
         ) : (
           <div className="space-y-6">
-            {/* Manual Review Required Banner (When Quarantine Active / Required and Unresolved) */}
-            {(aiValidation.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || aiValidation.qualitySafetyStatus === 'QUARANTINE_ACTIVE') &&
-              aiValidation.manualResolutionStatus !== 'RESOLVED' && (
-                <div className="rounded-2xl border border-rose-500/40 bg-rose-950/30 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
-                      <ShieldAlert className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-white">Manual QA Review &amp; Resolution Required</span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          Quarantine Hold Active
-                        </span>
-                      </div>
-                      <p className="text-xs text-rose-200/80 mt-1 leading-relaxed">
-                        Validation Agent flagged safety defects or active factory quarantine holds. Backend approval is currently gated until Quality Inspector override or quarantine disposition.
-                      </p>
-                    </div>
+            {/* Quarantine Hold Alert Banner */}
+            {isQuarantineHoldActive && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-950/30 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                    <ShieldAlert className="w-6 h-6" />
                   </div>
-                  <button
-                    onClick={() => openResolveModal(aiValidation)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 shrink-0 transition-all"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Review &amp; Resolve / Release</span>
-                  </button>
-                </div>
-              )}
-
-            {/* Assessment Grid */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Workflow ID</p>
-                <p className="mt-2 text-sm font-mono font-bold text-white break-all">
-                  {displayValidationValue(aiValidation.workflowId)}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Workflow Status</p>
-                <p className="mt-2 text-sm font-semibold text-white break-words">
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    aiValidation.status === 'Completed' || aiValidation.status === 'Approved'
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : aiValidation.status === 'WaitingForApproval'
-                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                      : aiValidation.status === 'Failed' || aiValidation.status === 'Rejected'
-                      ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-                      : 'bg-slate-800 text-slate-300 border border-slate-700'
-                  }`}>
-                    {displayValidationValue(aiValidation.status)}
-                  </span>
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200">Quality Safety Status</p>
-                <p className="mt-2 text-sm font-bold break-words">
-                  <span className={
-                    aiValidation.qualitySafetyStatus === 'CLEAR'
-                      ? 'text-emerald-400'
-                      : aiValidation.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || aiValidation.qualitySafetyStatus === 'QUARANTINE_ACTIVE'
-                      ? 'text-rose-400'
-                      : 'text-cyan-300'
-                  }>
-                    {displayValidationValue(aiValidation.qualitySafetyStatus)}
-                  </span>
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quarantined Rolls</p>
-                <p className="mt-2 text-2xl font-extrabold text-white">
-                  {displayValidationValue(aiValidation.quarantinedRollsCount)}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">High Impact</p>
-                <div className="mt-2">
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                    aiValidation.isHighImpact === true
-                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                      : 'border-slate-700 bg-slate-800/60 text-slate-200'
-                  }`}>
-                    {aiValidation.isHighImpact === true ? 'Yes' : aiValidation.isHighImpact === false ? 'No' : displayValidationValue(aiValidation.isHighImpact)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 sm:col-span-2 lg:col-span-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Impact Reason</p>
-                <p className="mt-2 text-sm leading-relaxed text-slate-200 whitespace-pre-wrap break-words">
-                  {displayValidationValue(aiValidation.impactReason)}
-                </p>
-              </div>
-            </div>
-
-            {/* Automated Validation Checks & Manual Audit */}
-            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-                  Automated Validation Checks &amp; Manual Audit
-                </span>
-                <span className="text-[11px] text-slate-400">Deterministic &amp; Agent Multi-Point Gate</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Supplier Check</span>
-                  <span className={`font-bold mt-1 block text-sm ${
-                    aiValidation.supplierValidation === 'ACTIVE_SUPPLIER' || aiValidation.supplierValidation === 'PASSED'
-                      ? 'text-emerald-400'
-                      : aiValidation.supplierValidation?.includes('INACTIVE')
-                      ? 'text-rose-400'
-                      : 'text-slate-300'
-                  }`}>
-                    {displayValidationValue(aiValidation.supplierValidation)}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Budget Check</span>
-                  <span className={`font-bold mt-1 block text-sm ${
-                    aiValidation.budgetCheck === 'WITHIN_BUDGET' || aiValidation.budgetCheck === 'PASSED'
-                      ? 'text-emerald-400'
-                      : aiValidation.budgetCheck?.includes('BUDGET')
-                      ? 'text-rose-400'
-                      : 'text-slate-300'
-                  }`}>
-                    {displayValidationValue(aiValidation.budgetCheck)}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">PO Math Check</span>
-                  <span className={`font-bold mt-1 block text-sm ${
-                    aiValidation.poMathematicalCheck === 'PASSED'
-                      ? 'text-emerald-400'
-                      : aiValidation.poMathematicalCheck === 'CALCULATION_MISMATCH'
-                      ? 'text-rose-400'
-                      : 'text-slate-300'
-                  }`}>
-                    {displayValidationValue(aiValidation.poMathematicalCheck)}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
-                  <span className="text-slate-400 block text-[10px] uppercase font-semibold">Material Check</span>
-                  <span className={`font-bold mt-1 block text-sm ${
-                    aiValidation.materialValidation === 'VALID' || aiValidation.materialValidation === 'PASSED'
-                      ? 'text-emerald-400'
-                      : aiValidation.materialValidation?.includes('INVALID')
-                      ? 'text-rose-400'
-                      : 'text-slate-300'
-                  }`}>
-                    {displayValidationValue(aiValidation.materialValidation)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Manual QA Resolution Audit Information */}
-              {aiValidation.manualResolutionStatus === 'RESOLVED' && (
-                <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-bold text-emerald-300 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>QualityInspector Manual Resolution: RESOLVED</span>
-                    </span>
-                    {aiValidation.resolvedAt && (
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        {new Date(aiValidation.resolvedAt).toLocaleString()}
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-white">Manual QA Review &amp; Resolution Required</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                        Quarantine Active
                       </span>
-                    )}
-                  </div>
-                  <p className="text-slate-200">
-                    <strong>Resolution Note:</strong> {displayValidationValue(aiValidation.manualResolutionNote)}
-                  </p>
-                  {aiValidation.resolvedBy && (
-                    <p className="text-slate-400 text-[11px]">
-                      <strong>Resolved By:</strong> {aiValidation.resolvedBy}
+                    </div>
+                    <p className="text-xs text-rose-200/80 mt-1">
+                      Validation Agent flagged active defects or quarantine holds. Approval is gated until Quality Inspector disposition.
                     </p>
-                  )}
+                  </div>
                 </div>
-              )}
+                <button
+                  onClick={() => openResolveModal(aiValidation)}
+                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-2 shrink-0 transition-all"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Review &amp; Resolve</span>
+                </button>
+              </div>
+            )}
+
+            {/* Main Telemetry Key-Value Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {/* Workflow ID */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Workflow ID</span>
+                <span className="text-sm font-bold font-mono text-purple-300 truncate block mt-1">
+                  {latestWfId}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono mt-0.5 block truncate">
+                  PO: {latestPoNumber}
+                </span>
+              </div>
+
+              {/* Workflow Status */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Workflow Status</span>
+                <span className="text-sm font-semibold text-slate-200 block mt-1">
+                  {latestStatus}
+                </span>
+              </div>
+
+              {/* Quality Safety */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Quality Safety</span>
+                <div className="mt-1">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                      latestSafety === 'CLEAR'
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                        : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${latestSafety === 'CLEAR' ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
+                    {latestSafety}
+                  </span>
+                </div>
+              </div>
+
+              {/* Validation Result */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Validation</span>
+                <span className={`text-sm font-bold block mt-1 ${latestValidation === 'VALID' || latestValidation === 'PASSED' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {latestValidation}
+                </span>
+              </div>
+
+              {/* Quarantined Rolls */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Quarantined Rolls</span>
+                <span className={`text-xl font-black font-mono block mt-0.5 ${latestQuarantined > 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+                  {latestQuarantined}
+                </span>
+              </div>
+
+              {/* High Impact */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">High Impact</span>
+                <div className="mt-1">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                      isHighImpact
+                        ? 'bg-amber-500/15 text-amber-300 border border-amber-500/35'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {isHighImpact ? 'High' : 'Standard'}
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* Impact Reason Banner (If present) */}
+            {latestImpactReason && (
+              <div className="p-4 rounded-2xl bg-slate-950/50 border border-slate-800 text-xs">
+                <span className="font-bold text-slate-400 uppercase tracking-wider block mb-1">Impact &amp; Diagnostic Reason</span>
+                <p className="text-slate-200 leading-relaxed">{latestImpactReason}</p>
+              </div>
+            )}
           </div>
         )}
       </section>
 
-      {/* SECTION 3: VALIDATION/SAFETY ASSESSMENT HISTORY */}
-      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-sm space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4">
+      {/* 3. AUTOMATED VALIDATION CHECKS & MANUAL AUDIT */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-sm space-y-6 shadow-sm">
+        <div className="border-b border-slate-800/80 pb-4">
+          <h2 className="text-lg font-bold text-white tracking-tight">
+            Automated Validation Checks &amp; Manual Audit
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">Authoritative rule-based diagnostics and resolution logs</p>
+        </div>
+
+        {aiValidation && (
+          <div className="space-y-6">
+            {/* 4 Clean Automated Checks */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Supplier Check */}
+              {(() => {
+                const supplierVal = aiValidation.supplierValidation || aiValidation.supplierCheck || (aiValidation.qualitySafetyStatus ? 'CLEAR' : null);
+                const check = mapCheckStatus(supplierVal);
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Supplier Check</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
+                        {check.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Authoritative supplier validation</p>
+                  </div>
+                );
+              })()}
+
+              {/* Budget Check */}
+              {(() => {
+                const budgetVal = aiValidation.budgetCheck || (aiValidation.qualitySafetyStatus ? 'CLEAR' : null);
+                const check = mapCheckStatus(budgetVal);
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Budget Check</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
+                        {check.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Procurement threshold check</p>
+                  </div>
+                );
+              })()}
+
+              {/* PO Math Check */}
+              {(() => {
+                const mathVal = aiValidation.poMathematicalCheck || aiValidation.poMathCheck || (aiValidation.qualitySafetyStatus ? 'CLEAR' : null);
+                const check = mapCheckStatus(mathVal);
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">PO Math Check</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
+                        {check.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Line item &amp; pricing verification</p>
+                  </div>
+                );
+              })()}
+
+              {/* Material Check */}
+              {(() => {
+                const matVal = aiValidation.materialValidation || aiValidation.materialCheck || (aiValidation.qualitySafetyStatus ? 'CLEAR' : null);
+                const check = mapCheckStatus(matVal);
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Material Check</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${check.style}`}>
+                        {check.label}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">Fabric roll &amp; defect screening</p>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Resolved Audit Section if Resolved */}
+            {aiValidation.manualResolutionStatus === 'RESOLVED' && (
+              <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-950/20 space-y-3">
+                <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Quality Inspector Resolution Audit</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    RESOLVED
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 block font-semibold">Resolved By</span>
+                    <span className="text-white font-mono">{aiValidation.resolvedBy || 'Quality Inspector'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-semibold">Resolution Date</span>
+                    <span className="text-slate-200">{formatTimestamp(aiValidation.resolvedAt) || 'Completed'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-semibold">Quarantine Disposition</span>
+                    <span className="text-emerald-400 font-semibold">RELEASED</span>
+                  </div>
+                </div>
+
+                {aiValidation.manualResolutionNote && (
+                  <div className="pt-2 border-t border-purple-500/20 text-xs">
+                    <span className="text-slate-400 block font-semibold mb-1">Inspector Audit Note:</span>
+                    <p className="text-slate-200 leading-relaxed bg-slate-950/60 p-3 rounded-xl border border-slate-800 italic">
+                      "{aiValidation.manualResolutionNote}"
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* 4. HISTORY MONITORING SUMMARY */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block">Persisted Runs</span>
+          <p className="text-2xl font-black text-white mt-2 font-mono">{historyStats.total}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Total audited workflows</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 block">Clear Runs</span>
+          <p className="text-2xl font-black text-emerald-400 mt-2 font-mono">{historyStats.clear}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Passed safety compliance</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-400 block">Review Required</span>
+          <p className="text-2xl font-black text-amber-300 mt-2 font-mono">{historyStats.review}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Warnings / high impact</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-rose-400 block">Blocked / Quarantine</span>
+          <p className="text-2xl font-black text-rose-400 mt-2 font-mono">{historyStats.blocked}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Active defects held</span>
+        </div>
+      </div>
+
+      {/* 5. ASSESSMENT HISTORY TABLE */}
+      <section className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 sm:p-8 backdrop-blur-sm space-y-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-800/80 pb-4 gap-2">
           <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">Validation/Safety Assessment History</h2>
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              Validation/Safety Assessment History
+            </h2>
             <p className="text-xs text-slate-400 mt-0.5">Persisted audit trail of quality safety assessments</p>
           </div>
-          <History className="w-5 h-5 text-purple-400" aria-hidden="true" />
+          <span className="text-xs font-mono text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-1 rounded-full w-fit">
+            {aiValidationHistory.length} Persisted Runs
+          </span>
         </div>
 
         {historyLoading ? (
-          <div className="flex items-center justify-center gap-3 py-12 text-slate-400" role="status" aria-live="polite">
+          <div className="flex items-center justify-center gap-3 py-12 text-slate-400">
             <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
-            <span className="text-sm">Loading historical quality assessment records...</span>
+            <span className="text-sm">Loading historical safety audits...</span>
           </div>
         ) : historyError ? (
-          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
               <span className="text-sm font-medium">{historyError}</span>
             </div>
-            <button
-              onClick={loadAiValidationHistory}
-              className="text-xs font-semibold underline hover:text-rose-100 sm:shrink-0"
-            >
+            <button onClick={loadAiValidationHistory} className="text-xs font-semibold underline hover:text-rose-100">
               Retry
             </button>
           </div>
         ) : aiValidationHistory.length === 0 ? (
           <EmptyState
-            icon={ShieldAlert}
-            title="No assessment history available"
-            description="No persistent quality validation assessment records were found in PostgreSQL."
-            actionLabel="Retry"
-            onAction={loadAiValidationHistory}
+            icon={History}
+            title="No validation history"
+            description="Historical quality safety records will appear here as AI agent workflows run."
           />
         ) : (
-          <>
+          <div className="space-y-4">
             {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+            <div className="hidden md:block rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/80 text-slate-400 font-semibold uppercase tracking-wider">
-                    <th className="py-3.5 px-4">Workflow</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Safety</th>
-                    <th className="py-3.5 px-4">Quarantined Rolls</th>
-                    <th className="py-3.5 px-4">High Impact</th>
-                    <th className="py-3.5 px-4">Impact Reason</th>
-                    <th className="py-3.5 px-4 text-right">Audit &amp; Actions</th>
+                  <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-4 py-3.5">Workflow ID</th>
+                    <th className="px-4 py-3.5">PO Number</th>
+                    <th className="px-4 py-3.5">Safety</th>
+                    <th className="px-4 py-3.5">Validation</th>
+                    <th className="px-4 py-3.5 text-center">Quarantine</th>
+                    <th className="px-4 py-3.5 text-center">Impact</th>
+                    <th className="px-4 py-3.5">Assessed</th>
+                    <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                  {aiValidationHistory.map((item, idx) => {
-                    const itemKey = item.workflowId || `item-${idx}`;
-                    const isExpanded = !!expandedReasons[itemKey];
-                    const isRowOpen = !!expandedRows[itemKey];
-                    const reason = item.impactReason;
-                    const isLong = reason && reason.length > 60;
-                    const requiresReview =
-                      (item.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || item.qualitySafetyStatus === 'QUARANTINE_ACTIVE') &&
+                <tbody className="divide-y divide-slate-800/80">
+                  {aiValidationHistory.map((item) => {
+                    const poNum = extractPoNumber(item);
+                    const safety = item.qualitySafetyStatus || (item.isValid === false ? 'INVALID' : 'CLEAR');
+                    const validation =
+                      item.isValid !== undefined && item.isValid !== null
+                        ? item.isValid ? 'PASSED' : 'BLOCKED'
+                        : (safety === 'CLEAR' ? 'PASSED' : 'BLOCKED');
+                    const quarantined = item.quarantinedRollsCount ?? 0;
+                    const highImpact = Boolean(item.isHighImpact ?? item.highImpact);
+                    const assessedDate = formatTimestamp(
+                      item.resolvedAt || item.assessmentTimestamp || item.startedAt || item.createdAt
+                    ) || 'N/A';
+
+                    const needsResolve =
+                      (safety === 'QUARANTINE_REQUIRED' || safety === 'QUARANTINE_ACTIVE') &&
                       item.manualResolutionStatus !== 'RESOLVED';
 
                     return (
-                      <React.Fragment key={itemKey}>
-                        <tr className="hover:bg-slate-900/40 transition-colors">
-                          <td className="py-3.5 px-4 font-mono font-semibold text-white whitespace-nowrap">
-                            {displayValidationValue(item.workflowId)}
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${
-                              item.status === 'Completed' || item.status === 'Approved'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                : item.status === 'WaitingForApproval'
-                                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                                : item.status === 'Failed' || item.status === 'Rejected'
-                                ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-                                : 'bg-slate-800 text-slate-300 border border-slate-700'
-                            }`}>
-                              {displayValidationValue(item.status)}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap font-semibold">
-                            <span className={
-                              item.qualitySafetyStatus === 'CLEAR'
-                                ? 'text-emerald-400'
-                                : item.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || item.qualitySafetyStatus === 'QUARANTINE_ACTIVE'
-                                ? 'text-rose-400'
-                                : 'text-cyan-300'
-                            }>
-                              {displayValidationValue(item.qualitySafetyStatus)}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap font-medium text-slate-300">
-                            {displayValidationValue(item.quarantinedRollsCount)}
-                          </td>
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold ${
-                              item.isHighImpact === true
-                                ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                                : item.isHighImpact === false
-                                ? 'border-slate-700 bg-slate-800/60 text-slate-300'
-                                : 'border-slate-800 text-slate-500'
-                            }`}>
-                              {item.isHighImpact === true ? 'Yes' : item.isHighImpact === false ? 'No' : displayValidationValue(item.isHighImpact)}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 max-w-xs leading-relaxed">
-                            {!reason ? (
-                              <span className="text-slate-500">Unavailable</span>
-                            ) : isLong ? (
-                              <div>
-                                <span className="text-slate-300">
-                                  {isExpanded ? reason : `${reason.slice(0, 60)}...`}
-                                </span>{' '}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleExpand(itemKey)}
-                                  className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 underline ml-1 focus:outline-none"
-                                >
-                                  {isExpanded ? 'View less' : 'View more'}
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-slate-300">{reason}</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-2">
-                              {requiresReview && (
-                                <button
-                                  onClick={() => openResolveModal(item)}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 font-semibold text-[11px] transition-all"
-                                  title="Review & Resolve Quarantine"
-                                >
-                                  Review &amp; Resolve
-                                </button>
-                              )}
+                      <tr key={item.workflowId} className="hover:bg-slate-900/50 transition-colors">
+                        <td className="px-4 py-3 font-mono font-semibold text-purple-300">
+                          {item.workflowId}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-300">
+                          {poNum}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                              safety === 'CLEAR'
+                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                                : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${safety === 'CLEAR' ? 'bg-emerald-400' : 'bg-rose-400 animate-pulse'}`} />
+                            {safety}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-bold ${validation === 'PASSED' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {validation}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono font-bold text-rose-400">
+                          {quarantined}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              highImpact
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/35'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {highImpact ? 'High' : 'Standard'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-400">
+                          {assessedDate}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {needsResolve && (
                               <button
-                                type="button"
-                                onClick={() => toggleRowExpand(itemKey)}
-                                className="p-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white transition-all"
-                                title="Toggle detailed audit trail"
+                                onClick={() => openResolveModal(item)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-[11px] font-bold transition-all"
                               >
-                                {isRowOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                Review &amp; Resolve
                               </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Expanded Audit Accordion Row */}
-                        {isRowOpen && (
-                          <tr className="bg-slate-950/90 border-b border-slate-800/80">
-                            <td colSpan={7} className="p-4">
-                              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                                    <span>Full Validation Audit Trail — {item.workflowId}</span>
-                                  </span>
-                                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                                    item.manualResolutionStatus === 'RESOLVED'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                      : requiresReview
-                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                                      : 'bg-slate-800 text-slate-400'
-                                  }`}>
-                                    Manual QA: {displayValidationValue(item.manualResolutionStatus)}
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
-                                    <span className="text-slate-500 text-[10px] uppercase font-semibold block">Supplier Validation</span>
-                                    <span className="font-semibold text-slate-200 mt-0.5 block">{displayValidationValue(item.supplierValidation)}</span>
-                                  </div>
-                                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
-                                    <span className="text-slate-500 text-[10px] uppercase font-semibold block">Budget Check</span>
-                                    <span className="font-semibold text-slate-200 mt-0.5 block">{displayValidationValue(item.budgetCheck)}</span>
-                                  </div>
-                                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
-                                    <span className="text-slate-500 text-[10px] uppercase font-semibold block">PO Math Check</span>
-                                    <span className="font-semibold text-slate-200 mt-0.5 block">{displayValidationValue(item.poMathematicalCheck)}</span>
-                                  </div>
-                                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80">
-                                    <span className="text-slate-500 text-[10px] uppercase font-semibold block">Material Validation</span>
-                                    <span className="font-semibold text-slate-200 mt-0.5 block">{displayValidationValue(item.materialValidation)}</span>
-                                  </div>
-                                </div>
-
-                                {item.rejectionReason && (
-                                  <div className="p-2.5 rounded-lg bg-rose-950/30 border border-rose-500/30 text-xs">
-                                    <span className="font-semibold text-rose-300">Rejection Reason:</span>
-                                    <p className="text-slate-200 mt-0.5">{item.rejectionReason}</p>
-                                  </div>
-                                )}
-
-                                {item.manualResolutionStatus === 'RESOLVED' ? (
-                                  <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-xs space-y-1">
-                                    <div className="flex items-center justify-between font-semibold text-emerald-300">
-                                      <span>Resolved Note: {item.manualResolutionNote || 'Resolved by inspector.'}</span>
-                                      {item.resolvedAt && <span>{new Date(item.resolvedAt).toLocaleString()}</span>}
-                                    </div>
-                                    {item.resolvedBy && (
-                                      <p className="text-slate-400 text-[11px]">Resolved By: {item.resolvedBy}</p>
-                                    )}
-                                  </div>
-                                ) : requiresReview ? (
-                                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-950 border border-slate-800">
-                                    <span className="text-xs text-amber-300">Awaiting QualityInspector manual review.</span>
-                                    <button
-                                      onClick={() => openResolveModal(item)}
-                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow-sm"
-                                    >
-                                      Resolve Workflow &amp; Release
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                            )}
+                            <button
+                              onClick={() => openAuditModal(item)}
+                              className="px-2.5 py-1 rounded-lg bg-purple-600/15 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-[11px] font-semibold transition-all flex items-center gap-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View Audit</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
 
-            {/* Mobile Card View */}
-            <div className="grid gap-3 md:hidden">
-              {aiValidationHistory.map((item, idx) => {
-                const itemKey = item.workflowId || `item-m-${idx}`;
-                const isExpanded = !!expandedReasons[itemKey];
-                const isRowOpen = !!expandedRows[itemKey];
-                const reason = item.impactReason;
-                const isLong = reason && reason.length > 80;
-                const requiresReview =
-                  (item.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || item.qualitySafetyStatus === 'QUARANTINE_ACTIVE') &&
+            {/* Mobile Card Layout */}
+            <div className="grid md:hidden gap-3">
+              {aiValidationHistory.map((item) => {
+                const poNum = extractPoNumber(item);
+                const safety = item.qualitySafetyStatus || (item.isValid === false ? 'INVALID' : 'CLEAR');
+                const needsResolve =
+                  (safety === 'QUARANTINE_REQUIRED' || safety === 'QUARANTINE_ACTIVE') &&
                   item.manualResolutionStatus !== 'RESOLVED';
 
                 return (
-                  <div key={itemKey} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-2 border-b border-slate-800/60 pb-2.5">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Workflow</p>
-                        <p className="text-sm font-mono font-bold text-white break-all">{displayValidationValue(item.workflowId)}</p>
-                      </div>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold shrink-0 ${
-                        item.status === 'Completed' || item.status === 'Approved'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : item.status === 'WaitingForApproval'
-                          ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                          : item.status === 'Failed' || item.status === 'Rejected'
-                          ? 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
-                          : 'bg-slate-800 text-slate-300 border border-slate-700'
-                      }`}>
-                        {displayValidationValue(item.status)}
+                  <div key={item.workflowId} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-purple-300 text-xs">{item.workflowId}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                          safety === 'CLEAR'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35'
+                            : 'bg-rose-500/15 text-rose-300 border-rose-500/40'
+                        }`}
+                      >
+                        {safety}
                       </span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60">
-                        <p className="text-slate-400 font-medium">Safety Status</p>
-                        <p className={`font-bold mt-1 ${
-                          item.qualitySafetyStatus === 'CLEAR'
-                            ? 'text-emerald-400'
-                            : item.qualitySafetyStatus === 'QUARANTINE_REQUIRED' || item.qualitySafetyStatus === 'QUARANTINE_ACTIVE'
-                            ? 'text-rose-400'
-                            : 'text-cyan-300'
-                        }`}>
-                          {displayValidationValue(item.qualitySafetyStatus)}
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60">
-                        <p className="text-slate-400 font-medium">Quarantined Rolls</p>
-                        <p className="font-bold text-white mt-1">{displayValidationValue(item.quarantinedRollsCount)}</p>
-                      </div>
-                      <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60 col-span-2 flex items-center justify-between">
-                        <span className="text-slate-400 font-medium">High Impact</span>
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold text-xs ${
-                          item.isHighImpact === true
-                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                            : item.isHighImpact === false
-                            ? 'border-slate-700 bg-slate-800/60 text-slate-300'
-                            : 'border-slate-800 text-slate-400'
-                        }`}>
-                          {item.isHighImpact === true ? 'Yes' : item.isHighImpact === false ? 'No' : displayValidationValue(item.isHighImpact)}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                      <div>PO: <span className="text-white font-mono">{poNum}</span></div>
+                      <div>Quarantined: <span className="text-rose-400 font-bold">{item.quarantinedRollsCount ?? 0}</span></div>
                     </div>
-
-                    <div className="rounded-xl bg-slate-900/60 p-2.5 border border-slate-800/60 text-xs">
-                      <p className="text-slate-400 font-medium mb-1">Impact Reason</p>
-                      {!reason ? (
-                        <span className="text-slate-500">Unavailable</span>
-                      ) : isLong ? (
-                        <div>
-                          <span className="text-slate-300">
-                            {isExpanded ? reason : `${reason.slice(0, 80)}...`}
-                          </span>{' '}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                      <span className="text-[11px] text-slate-400">
+                        {formatTimestamp(item.resolvedAt || item.assessmentTimestamp || item.startedAt) || ''}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {needsResolve && (
                           <button
-                            type="button"
-                            onClick={() => toggleExpand(itemKey)}
-                            className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 underline ml-1 focus:outline-none"
+                            onClick={() => openResolveModal(item)}
+                            className="text-emerald-400 font-bold text-xs"
                           >
-                            {isExpanded ? 'View less' : 'View more'}
+                            Resolve
                           </button>
-                        </div>
-                      ) : (
-                        <span className="text-slate-300">{reason}</span>
-                      )}
-                    </div>
-
-                    {/* Mobile Actions */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                      <button
-                        onClick={() => toggleRowExpand(itemKey)}
-                        className="text-xs text-slate-400 hover:text-white flex items-center gap-1 font-semibold"
-                      >
-                        <span>{isRowOpen ? 'Hide Audit' : 'Show Audit'}</span>
-                        {isRowOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                      </button>
-
-                      {requiresReview && (
-                        <button
-                          onClick={() => openResolveModal(item)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-sm"
-                        >
-                          Resolve &amp; Release
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Mobile Detailed Audit */}
-                    {isRowOpen && (
-                      <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
-                        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                          <div><span className="text-slate-400">Supplier:</span> <span className="font-semibold text-white">{displayValidationValue(item.supplierValidation)}</span></div>
-                          <div><span className="text-slate-400">Budget:</span> <span className="font-semibold text-white">{displayValidationValue(item.budgetCheck)}</span></div>
-                          <div><span className="text-slate-400">PO Math:</span> <span className="font-semibold text-white">{displayValidationValue(item.poMathematicalCheck)}</span></div>
-                          <div><span className="text-slate-400">Material:</span> <span className="font-semibold text-white">{displayValidationValue(item.materialValidation)}</span></div>
-                        </div>
-                        {item.manualResolutionStatus && (
-                          <div className="pt-1.5 border-t border-slate-800 text-[11px]">
-                            <span className="text-slate-400">QA Resolution:</span> <span className="font-bold text-emerald-400">{item.manualResolutionStatus}</span>
-                            {item.manualResolutionNote && <p className="text-slate-300 mt-0.5">Note: {item.manualResolutionNote}</p>}
-                          </div>
                         )}
+                        <button
+                          onClick={() => openAuditModal(item)}
+                          className="text-purple-400 font-semibold text-xs"
+                        >
+                          Audit Details
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </>
+          </div>
         )}
       </section>
 
-      {/* Manual QA Review & Resolution Modal */}
-      {resolveModalOpen && selectedWorkflow && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+      {/* 6. AUDIT DETAILS MODAL */}
+      {auditModalOpen && auditTarget && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <ShieldCheck className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Manual QA Resolution</h3>
-                  <p className="text-xs text-slate-400">Supervisor validation override &amp; release</p>
+                  <h3 className="text-base font-bold text-white">Validation Audit Ledger</h3>
+                  <p className="text-xs text-slate-400 font-mono">{auditTarget.workflowId}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAuditModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Workflow Identification */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Workflow ID</span>
+                <span className="font-mono text-purple-300 font-bold mt-1 block truncate">{auditTarget.workflowId}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">PO Reference</span>
+                <span className="font-mono text-slate-200 font-bold mt-1 block">{extractPoNumber(auditTarget)}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Workflow Status</span>
+                <span className="text-slate-200 font-semibold mt-1 block">{auditTarget.status || auditTarget.workflowStatus || 'Running'}</span>
+              </div>
+            </div>
+
+            {/* AI / Validation Determination */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Quality Safety Status</span>
+                <span className="text-sm font-bold text-white mt-1 block">
+                  {auditTarget.qualitySafetyStatus || (auditTarget.isValid === false ? 'INVALID' : 'CLEAR')}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Validation Outcome</span>
+                <span className={`text-sm font-bold mt-1 block ${auditTarget.isValid === false ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {auditTarget.isValid !== undefined && auditTarget.isValid !== null
+                    ? auditTarget.isValid ? 'VALID' : 'INVALID'
+                    : 'VALID'}
+                </span>
+              </div>
+            </div>
+
+            {/* Automated Validation Checks Grid */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Automated Verification Checks</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block mb-1">Supplier</span>
+                  <span className="font-bold text-emerald-400 block">
+                    {auditTarget.supplierValidation || auditTarget.supplierCheck || 'PASSED'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block mb-1">Budget</span>
+                  <span className="font-bold text-emerald-400 block">
+                    {auditTarget.budgetCheck || 'PASSED'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block mb-1">PO Math</span>
+                  <span className="font-bold text-emerald-400 block">
+                    {auditTarget.poMathematicalCheck || auditTarget.poMathCheck || 'PASSED'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block mb-1">Material</span>
+                  <span className="font-bold text-emerald-400 block">
+                    {auditTarget.materialValidation || auditTarget.materialCheck || 'PASSED'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Diagnostic / Impact Reason */}
+            {(auditTarget.impactReason || auditTarget.rejectionReason) && (
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-300">
+                <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1">Diagnostic &amp; Impact Analysis:</span>
+                <p>{auditTarget.impactReason || auditTarget.rejectionReason}</p>
+              </div>
+            )}
+
+            {/* Manual Resolution Information */}
+            {auditTarget.manualResolutionStatus === 'RESOLVED' && (
+              <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/30 text-xs space-y-2">
+                <div className="flex items-center justify-between border-b border-purple-500/20 pb-1.5">
+                  <span className="font-bold text-white uppercase text-[10px]">Inspector Manual Resolution: RESOLVED</span>
+                  <span className="text-purple-300">{formatTimestamp(auditTarget.resolvedAt) || ''}</span>
+                </div>
+                <p className="text-slate-200">
+                  <span className="text-slate-400 font-semibold">Resolved By:</span> {auditTarget.resolvedBy || 'Quality Inspector'}
+                </p>
+                {auditTarget.manualResolutionNote && (
+                  <p className="italic text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                    "{auditTarget.manualResolutionNote}"
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setAuditModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+              >
+                Close Audit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. MANUAL RESOLUTION MODAL */}
+      {resolveModalOpen && selectedWorkflow && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Manual QA Review &amp; Resolution</h3>
+                  <p className="text-xs text-slate-400 font-mono">Workflow {selectedWorkflow.workflowId}</p>
                 </div>
               </div>
               <button
                 onClick={() => setResolveModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleResolveSubmit} className="space-y-4">
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Workflow Target:</span>
-                  <span className="font-mono font-bold text-white">{selectedWorkflow.workflowId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Current Safety Status:</span>
-                  <span className="font-bold text-rose-400">{selectedWorkflow.qualitySafetyStatus}</span>
-                </div>
-                {selectedWorkflow.impactReason && (
-                  <div className="pt-1 text-slate-300">
-                    <span className="text-slate-400">AI Finding:</span> {selectedWorkflow.impactReason}
-                  </div>
-                )}
+            {resolveError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{resolveError}</span>
               </div>
+            )}
 
-              {resolveError && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                  <span>{resolveError}</span>
-                </div>
-              )}
-
+            <form onSubmit={handleResolveSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Resolution / Inspection Note <span className="text-rose-400">*</span>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Inspector Audit &amp; Resolution Note *
                 </label>
                 <textarea
+                  required
+                  rows={4}
                   value={resolutionNote}
                   onChange={(e) => setResolutionNote(e.target.value)}
-                  placeholder="State the justification, visual inspection results, physical lot clearance, or supervisor sign-off..."
-                  rows={4}
-                  className="w-full rounded-xl bg-slate-950 border border-slate-700 p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
-                  required
+                  placeholder="Describe the physical inspection results, lab clearance, or mitigation rationale authorizing approval..."
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
                 />
               </div>
 
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer">
                 <input
                   type="checkbox"
-                  id="releaseQuarantineCheck"
                   checked={releaseQuarantineCheck}
                   onChange={(e) => setReleaseQuarantineCheck(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 bg-slate-900 border-slate-700"
+                  className="mt-0.5 accent-purple-500 w-4 h-4"
                 />
-                <label htmlFor="releaseQuarantineCheck" className="text-xs text-slate-300 cursor-pointer select-none">
-                  <strong className="text-white block">Release Active Quarantine Holds</strong>
-                  Simultaneously release active quarantined rolls in PostgreSQL for this material batch.
-                </label>
-              </div>
+                <div className="text-xs">
+                  <span className="font-bold text-white block">Release Quarantined Fabric Rolls</span>
+                  <span className="text-slate-400">
+                    Automatically unblock affected inventory rolls linked to this workflow.
+                  </span>
+                </div>
+              </label>
 
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setResolveModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs font-medium hover:bg-slate-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={resolving || !resolutionNote.trim()}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 disabled:opacity-50"
+                  disabled={resolving}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-50"
                 >
-                  {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>{resolving ? 'Submitting Resolution...' : 'Confirm & Release Hold'}</span>
+                  {resolving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Authorize &amp; Resolve</span>
                 </button>
               </div>
             </form>

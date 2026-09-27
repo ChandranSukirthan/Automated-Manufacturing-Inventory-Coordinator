@@ -237,8 +237,8 @@ function App() {
               <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
               <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
               <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
-              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/dashboard/quality" element={<QualityDashboard />} />
               <Route path="/dashboard/ai-validation" element={<AiValidationPage />} />
               <Route path="/dashboard/defects" element={<DefectReportsPage />} />
@@ -246,8 +246,8 @@ function App() {
               <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
               <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
               <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
-              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
             </Route>
           </Route>
 
