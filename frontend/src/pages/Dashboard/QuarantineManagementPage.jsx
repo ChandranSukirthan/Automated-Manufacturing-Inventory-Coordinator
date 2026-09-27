@@ -174,7 +174,7 @@ export default function QuarantineManagementPage() {
         actions={
           <button
             onClick={() => navigate('/quality/quarantine/history')}
-            className="px-4 py-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all shadow-sm flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all shadow-sm flex items-center gap-2"
           >
             <History className="w-4 h-4" />
             <span>Quarantine History</span>
@@ -253,7 +253,7 @@ export default function QuarantineManagementPage() {
               setPage(1);
             }}
             placeholder="Search roll, batch, containment reason..."
-            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
           />
         </div>
 
@@ -264,7 +264,7 @@ export default function QuarantineManagementPage() {
               setSeverity(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-purple-500"
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
           >
             <option value="All">All Severities</option>
             {severities.map((s) => (
@@ -278,7 +278,7 @@ export default function QuarantineManagementPage() {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-purple-500"
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
           >
             <option value="All">All Statuses</option>
             {statuses.map((s) => (
@@ -301,7 +301,7 @@ export default function QuarantineManagementPage() {
       {/* Main Table / Data View */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
           <p className="text-sm font-medium">Loading quarantine telemetry...</p>
         </div>
       ) : records.length === 0 ? (
@@ -372,7 +372,7 @@ export default function QuarantineManagementPage() {
                         )}
                         <Link
                           to={`/quality/quarantine/${r.id}`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 border border-transparent hover:border-purple-500/20 transition-all"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 border border-transparent hover:border-blue-500/20 transition-all"
                           title="View Details"
                         >
                           <Eye className="w-4 h-4" />
@@ -409,7 +409,7 @@ export default function QuarantineManagementPage() {
                         Resolve
                       </button>
                     )}
-                    <Link to={`/quality/quarantine/${r.id}`} className="text-purple-400 font-semibold">
+                    <Link to={`/quality/quarantine/${r.id}`} className="text-blue-400 font-semibold">
                       Details
                     </Link>
                   </div>
@@ -435,7 +435,7 @@ export default function QuarantineManagementPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <UserCheck className="w-5 h-5" />
                 </div>
                 <div>
@@ -485,7 +485,7 @@ export default function QuarantineManagementPage() {
                   value={resolutionNote}
                   onChange={(e) => setResolutionNote(e.target.value)}
                   placeholder="State the laboratory clearance, rework completion, or inspector authorization releasing this roll..."
-                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
 

@@ -70,7 +70,7 @@ export default function QuarantineDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
         <p className="text-sm font-medium">Loading quarantine telemetry...</p>
       </div>
     );
@@ -133,7 +133,7 @@ export default function QuarantineDetailPage() {
 
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Linked Defect ID</span>
-            <div className="mt-1 text-sm font-mono text-purple-400">
+            <div className="mt-1 text-sm font-mono text-blue-400">
               <Link to={`/quality/defects/${record.defectReportId}`} className="hover:underline">
                 #{record.defectReportId}
               </Link>
@@ -223,7 +223,7 @@ export default function QuarantineDetailPage() {
                   value={resolutionNote}
                   onChange={(e) => setResolutionNote(e.target.value)}
                   placeholder="Passed secondary tensile re-test and approved for floor utilization..."
-                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
 

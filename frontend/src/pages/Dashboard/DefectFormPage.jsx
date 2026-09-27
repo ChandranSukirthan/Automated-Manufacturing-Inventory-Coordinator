@@ -246,7 +246,7 @@ export default function DefectFormPage() {
               value={form.skuCode}
               onChange={handleSkuChange}
               disabled={loadingInventory}
-              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-colors"
             >
               <option value="">Select Inventory Roll</option>
               {createdMaterials.map((item) => (
@@ -272,7 +272,7 @@ export default function DefectFormPage() {
               name="severity"
               value={form.severity}
               onChange={handleChange}
-              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-colors"
             >
               {severities.map((value) => (
                 <option key={value} value={value}>
@@ -288,7 +288,7 @@ export default function DefectFormPage() {
               name="status"
               value={form.status}
               onChange={handleChange}
-              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-colors"
             >
               {statuses.map((value) => (
                 <option key={value} value={value}>
@@ -307,7 +307,7 @@ export default function DefectFormPage() {
             onChange={handleChange}
             rows={5}
             placeholder="Detail the observed imperfection, fabric distortion, batch anomalies, or inspection findings..."
-            className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+            className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
           />
         </label>
 
@@ -328,7 +328,7 @@ export default function DefectFormPage() {
                     key={roll.id}
                     className={`flex gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-all ${
                       selectedInventory.includes(roll.id)
-                        ? 'bg-purple-600/15 border-purple-500/40 text-white'
+                        ? 'bg-blue-600/15 border-blue-500/40 text-white'
                         : 'bg-slate-950/40 border-slate-800 text-slate-200 hover:border-slate-700'
                     }`}
                   >
@@ -342,7 +342,7 @@ export default function DefectFormPage() {
                             : current.filter((v) => v !== roll.id)
                         )
                       }
-                      className="mt-1 accent-purple-500 w-4 h-4 rounded"
+                      className="mt-1 accent-blue-500 w-4 h-4 rounded"
                     />
                     <span className="min-w-0">
                       <span className="block font-mono text-cyan-300 font-bold truncate">
@@ -368,10 +368,10 @@ export default function DefectFormPage() {
             type="button"
             onClick={activateAgent}
             disabled={aiLoading}
-            className="px-5 py-2.5 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 text-sm font-bold flex items-center gap-2 transition-all shadow-sm disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 text-sm font-bold flex items-center gap-2 transition-all shadow-sm disabled:opacity-50"
           >
             {aiLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-purple-300" />
+              <Loader2 className="w-4 h-4 animate-spin text-blue-300" />
             ) : (
               <Sparkles className="w-4 h-4 text-cyan-300" />
             )}
@@ -381,7 +381,7 @@ export default function DefectFormPage() {
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-purple-600/30 disabled:opacity-50 transition-all"
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-blue-600/25 disabled:opacity-50 transition-all"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>{isEdit ? 'Update Defect Report' : 'Create Defect Report'}</span>
@@ -391,16 +391,16 @@ export default function DefectFormPage() {
 
       {/* Stepped Progress Indicator during Agent Activation */}
       {aiLoading && (
-        <section className="rounded-3xl border border-purple-500/40 bg-slate-900/90 p-6 shadow-2xl space-y-4 animate-in fade-in" role="status" aria-live="polite">
+        <section className="rounded-3xl border border-blue-500/40 bg-slate-900/90 p-6 shadow-2xl space-y-4 animate-in fade-in" role="status" aria-live="polite">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2 text-purple-200">
-              <Bot className="w-5 h-5 text-purple-400 animate-bounce" />
+            <div className="flex items-center gap-2 text-blue-200">
+              <Bot className="w-5 h-5 text-blue-400 animate-bounce" />
               <div>
                 <p className="font-bold text-white text-sm">AI Defect Assessment Pipeline Running</p>
                 <p className="text-xs text-slate-400 mt-0.5">Reviewing submitted defect context and evaluating related factory inventory.</p>
               </div>
             </div>
-            <span className="text-xs font-mono text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full">
+            <span className="text-xs font-mono text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-full">
               Step {aiStepIndex + 1} of {agentProgressSteps.length}
             </span>
           </div>
@@ -414,7 +414,7 @@ export default function DefectFormPage() {
                   key={step}
                   className={`p-2.5 rounded-xl border text-xs transition-all ${
                     isCurrent
-                      ? 'bg-purple-600/20 border-purple-500 text-purple-200 font-bold shadow-md'
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-200 font-bold shadow-md'
                       : isCompleted
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                       : 'bg-slate-950/40 border-slate-800 text-slate-500'
@@ -424,7 +424,7 @@ export default function DefectFormPage() {
                     {isCompleted ? (
                       <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     ) : isCurrent ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400 shrink-0" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 shrink-0" />
                     ) : (
                       <span className="w-3.5 h-3.5 rounded-full bg-slate-800 text-[9px] flex items-center justify-center font-mono shrink-0">
                         {idx + 1}
@@ -442,10 +442,10 @@ export default function DefectFormPage() {
 
       {/* AI Recommendation Box (Exact Text & Box Format as Previous, Clean Industrial Finish) */}
       {aiRecommendation && !aiLoading && (
-        <section className="rounded-3xl border border-purple-500/30 bg-slate-900/70 overflow-hidden shadow-xl animate-in fade-in" aria-labelledby="ai-assessment-title">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 bg-purple-500/10 px-6 py-5">
+        <section className="rounded-3xl border border-blue-500/30 bg-slate-900/70 overflow-hidden shadow-xl animate-in fade-in" aria-labelledby="ai-assessment-title">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 bg-blue-500/10 px-6 py-5">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/15 text-purple-300 shadow-md">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-500/30 bg-blue-500/15 text-blue-300 shadow-md">
                 <Bot className="w-5 h-5" />
               </div>
               <div>

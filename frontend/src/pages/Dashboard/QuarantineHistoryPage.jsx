@@ -140,7 +140,7 @@ export default function QuarantineHistoryPage() {
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Quarantine Events</span>
-            <History className="w-4 h-4 text-purple-400" />
+            <History className="w-4 h-4 text-blue-400" />
           </div>
           <p className="text-2xl font-black text-white mt-2 font-mono">{allRecords.length}</p>
           <span className="text-[11px] text-slate-400 mt-1 block">Historical factory holds</span>
@@ -198,7 +198,7 @@ export default function QuarantineHistoryPage() {
               setPage(1);
             }}
             placeholder="Search roll ID, batch, defect ID, or reason..."
-            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
           />
         </div>
 
@@ -209,7 +209,7 @@ export default function QuarantineHistoryPage() {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-purple-500"
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
           >
             <option value="All">All Events ({allRecords.length})</option>
             <option value="Released">Released Only ({releasedCount})</option>
@@ -231,7 +231,7 @@ export default function QuarantineHistoryPage() {
       {/* Main Content Area */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
           <p className="text-sm font-medium">Loading historical quarantine records...</p>
         </div>
       ) : allRecords.length === 0 ? (
@@ -298,7 +298,7 @@ export default function QuarantineHistoryPage() {
                           <div className="flex items-center justify-end gap-2">
                             <Link
                               to={`/quality/quarantine/${r.id}`}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 transition-all"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all"
                               title="Full Profile"
                             >
                               <Eye className="w-4 h-4" />
@@ -320,7 +320,7 @@ export default function QuarantineHistoryPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               <div>
                                 <span className="text-slate-400 block font-semibold">Linked Defect ID</span>
-                                <span className="font-mono text-purple-300">
+                                <span className="font-mono text-blue-300">
                                   {r.defectReportId ? (
                                     <Link to={`/quality/defects/${r.defectReportId}`} className="hover:underline">
                                       #{r.defectReportId}
@@ -373,7 +373,7 @@ export default function QuarantineHistoryPage() {
                   <p className="text-xs text-slate-300 line-clamp-2">{r.reason}</p>
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
                     <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
-                    <Link to={`/quality/quarantine/${r.id}`} className="text-purple-400 font-semibold">
+                    <Link to={`/quality/quarantine/${r.id}`} className="text-blue-400 font-semibold">
                       View Details
                     </Link>
                   </div>

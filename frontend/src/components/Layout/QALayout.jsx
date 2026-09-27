@@ -72,10 +72,10 @@ export default function QALayout({ children, title, subtitle }) {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-purple-500 selection:text-white">
+    <div className="min-h-screen bg-[#070b14] text-slate-100 flex font-sans selection:bg-blue-500 selection:text-white">
       {/* Ambient background glows */}
-      <div className="fixed top-0 left-64 w-96 h-96 bg-purple-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
-      <div className="fixed bottom-0 right-10 w-96 h-96 bg-violet-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed top-0 left-64 w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed bottom-0 right-10 w-96 h-96 bg-cyan-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
 
       {/* Mobile Sidebar Backdrop Overlay */}
       {mobileMenuOpen && (
@@ -86,28 +86,28 @@ export default function QALayout({ children, title, subtitle }) {
         />
       )}
 
-      {/* Left Sidebar */}
+      {/* Sidebar */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900/90 backdrop-blur-2xl border-r border-slate-800 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-950/95 backdrop-blur-2xl border-r border-slate-800/80 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         aria-label="Quality Control Sidebar"
       >
         {/* Brand Header */}
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
           <Link
             to="/quality"
             onClick={() => setMobileMenuOpen(false)}
             className="flex items-center gap-3 group"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform text-white">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-600/20 group-hover:scale-105 transition-transform text-white">
               <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
             </div>
             <div>
               <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-200">
                 QUALITY CONTROL
               </span>
-              <span className="block text-xs font-semibold text-purple-400 tracking-wider uppercase">
+              <span className="block text-xs font-semibold text-blue-400 tracking-wider uppercase">
                 Manufacturing QA
               </span>
             </div>
@@ -137,16 +137,16 @@ export default function QALayout({ children, title, subtitle }) {
                       key={item.path}
                       to={item.path}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group ${
                         isActive
-                          ? 'bg-purple-600 text-white font-bold shadow-lg shadow-purple-600/25'
-                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold shadow-lg shadow-blue-600/25'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80'
                       }`}
                     >
                       <div className="flex items-center gap-3">
                         <Icon
                           className={`w-4 h-4 transition-colors ${
-                            isActive ? 'text-white stroke-[2.5]' : 'text-slate-400 group-hover:text-purple-400'
+                            isActive ? 'text-white stroke-[2.5]' : 'text-slate-400 group-hover:text-blue-400'
                           }`}
                         />
                         <span>{item.label}</span>
@@ -160,7 +160,7 @@ export default function QALayout({ children, title, subtitle }) {
                 {section.title === 'Account' && (
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all group text-left"
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all group text-left"
                   >
                     <div className="flex items-center gap-3">
                       <LogOut className="w-4 h-4 text-slate-400 group-hover:text-rose-400" />
@@ -174,17 +174,17 @@ export default function QALayout({ children, title, subtitle }) {
         </div>
 
         {/* User Profile Bar */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60">
+        <div className="p-4 border-t border-slate-800/80 bg-slate-950/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-purple-400 font-semibold shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400 font-semibold shrink-0">
                 {user?.fullName ? user.fullName.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
               </div>
               <div className="truncate">
                 <p className="text-sm font-semibold text-white truncate">
                   {user?.fullName || 'Quality Inspector'}
                 </p>
-                <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
                   Quality Inspector
                 </span>
               </div>
@@ -222,8 +222,8 @@ export default function QALayout({ children, title, subtitle }) {
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-              <span className="font-mono text-purple-400 font-medium">System Online</span>
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span className="font-mono text-blue-400 font-medium">System Online</span>
             </div>
           </div>
         </header>
@@ -234,6 +234,5 @@ export default function QALayout({ children, title, subtitle }) {
         </main>
       </div>
     </div>
-
   );
 }

@@ -161,7 +161,7 @@ export default function DefectReportsPage() {
         actions={
           <Link
             to="/quality/defects/new"
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-sm font-bold shadow-lg shadow-purple-600/25 flex items-center gap-2 transition-all"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Log Defect Report</span>
@@ -174,7 +174,7 @@ export default function DefectReportsPage() {
         <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Open</span>
-            <ClipboardList className="w-4 h-4 text-violet-400" />
+            <ClipboardList className="w-4 h-4 text-blue-400" />
           </div>
           <p className="text-2xl font-extrabold text-white mt-2">{openDefects.length}</p>
           <span className="text-[11px] text-slate-400 mt-1 block">Active investigation</span>
@@ -232,7 +232,7 @@ export default function DefectReportsPage() {
               setPage(1);
             }}
             placeholder="Search SKU, roll, defect description..."
-            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
           />
         </div>
 
@@ -244,7 +244,7 @@ export default function DefectReportsPage() {
               setSeverity(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-purple-500"
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
           >
             <option value="All">All Severities</option>
             {severities.map((s) => (
@@ -259,7 +259,7 @@ export default function DefectReportsPage() {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-purple-500"
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
           >
             <option value="All">All Statuses</option>
             {statuses.map((s) => (
@@ -282,7 +282,7 @@ export default function DefectReportsPage() {
       {/* Main Table / Data View */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
           <p className="text-sm font-medium">Loading defect telemetry...</p>
         </div>
       ) : defects.length === 0 ? (
@@ -325,7 +325,7 @@ export default function DefectReportsPage() {
               <tbody className="divide-y divide-slate-800/80">
                 {visibleDefects.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-800/40 transition-colors group">
-                    <td className="px-4 py-3.5 font-mono font-semibold text-purple-300">
+                    <td className="px-4 py-3.5 font-mono font-semibold text-blue-300">
                       #{d.id.substring(0, 8)}
                     </td>
                     <td className="px-4 py-3.5">
@@ -354,7 +354,7 @@ export default function DefectReportsPage() {
                         </Link>
                         <Link
                           to={`/quality/defects/${d.id}/edit`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 border border-transparent hover:border-purple-500/20 transition-all"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 border border-transparent hover:border-blue-500/20 transition-all"
                           title="Edit"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -379,7 +379,7 @@ export default function DefectReportsPage() {
             {visibleDefects.map((d) => (
               <div key={d.id} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-purple-300 text-xs">#{d.id.substring(0, 8)}</span>
+                  <span className="font-mono font-bold text-blue-300 text-xs">#{d.id.substring(0, 8)}</span>
                   <StatusBadge status={d.status} />
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -391,7 +391,7 @@ export default function DefectReportsPage() {
                   <span>{d.createdAt ? new Date(d.createdAt).toLocaleDateString() : ''}</span>
                   <div className="flex items-center gap-2">
                     <Link to={`/quality/defects/${d.id}`} className="text-cyan-400 font-semibold">View</Link>
-                    <Link to={`/quality/defects/${d.id}/edit`} className="text-purple-400 font-semibold">Edit</Link>
+                    <Link to={`/quality/defects/${d.id}/edit`} className="text-blue-400 font-semibold">Edit</Link>
                   </div>
                 </div>
               </div>

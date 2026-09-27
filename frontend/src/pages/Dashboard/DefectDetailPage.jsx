@@ -86,7 +86,7 @@ export default function DefectDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
         <p className="text-sm font-medium">Loading defect profile...</p>
       </div>
     );
@@ -131,7 +131,7 @@ export default function DefectDetailPage() {
             </button>
             <button
               onClick={() => navigate(`/quality/defects/${defect.id}/edit`)}
-              className="px-4 py-2.5 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all shadow-sm flex items-center gap-2"
+              className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all shadow-sm flex items-center gap-2"
             >
               <Edit2 className="w-4 h-4" />
               <span>Edit</span>
@@ -179,7 +179,7 @@ export default function DefectDetailPage() {
 
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Defect Reference ID</span>
-            <div className="mt-1 text-sm font-mono text-purple-400">#{defect.id}</div>
+            <div className="mt-1 text-sm font-mono text-blue-400">#{defect.id}</div>
           </div>
         </div>
 

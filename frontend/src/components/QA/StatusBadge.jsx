@@ -1,7 +1,7 @@
 import React from 'react';
 
 const statusStyles = {
-  open: 'bg-violet-500/15 text-violet-300 border-violet-500/35',
+  open: 'bg-blue-500/15 text-blue-300 border-blue-500/35',
   inreview: 'bg-amber-500/15 text-amber-300 border-amber-500/35',
   resolved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/35',
   closed: 'bg-slate-800/80 text-slate-400 border-slate-700/80',
@@ -25,7 +25,7 @@ const statusLabels = {
 };
 
 const statusDots = {
-  open: 'bg-violet-400',
+  open: 'bg-blue-400',
   inreview: 'bg-amber-400 animate-pulse',
   resolved: 'bg-emerald-400',
   closed: 'bg-slate-500',

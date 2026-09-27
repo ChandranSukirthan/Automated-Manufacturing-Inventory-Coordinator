@@ -106,7 +106,7 @@ export default function QualityDashboard() {
 
   // Defect Pipeline Status
   const statusPipeline = [
-    { label: 'Open', count: defects.filter((d) => String(d.status).toLowerCase() === 'open').length, color: 'bg-violet-500', text: 'text-violet-400' },
+    { label: 'Open', count: defects.filter((d) => String(d.status).toLowerCase() === 'open').length, color: 'bg-blue-500', text: 'text-blue-400' },
     { label: 'In Review', count: defects.filter((d) => String(d.status).toLowerCase() === 'inreview').length, color: 'bg-amber-500', text: 'text-amber-400' },
     { label: 'Resolved', count: defects.filter((d) => String(d.status).toLowerCase() === 'resolved').length, color: 'bg-emerald-500', text: 'text-emerald-400' },
     { label: 'Closed', count: defects.filter((d) => String(d.status).toLowerCase() === 'closed').length, color: 'bg-slate-600', text: 'text-slate-400' }
@@ -202,7 +202,7 @@ export default function QualityDashboard() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
         <p className="text-sm font-medium">Aggregating manufacturing QA telemetry...</p>
       </div>
     );
@@ -211,12 +211,12 @@ export default function QualityDashboard() {
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
       {/* 1. Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-purple-900/40 via-violet-900/20 to-slate-900/60 border border-purple-500/20 p-6 lg:p-8 backdrop-blur-xl shadow-2xl">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-900/40 via-cyan-900/20 to-slate-900/60 border border-blue-500/20 p-6 lg:p-8 backdrop-blur-xl shadow-2xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold tracking-wide uppercase">
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 text-xs font-bold tracking-wide uppercase">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
                 Quality Assurance · Student 3
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
@@ -239,12 +239,12 @@ export default function QualityDashboard() {
               disabled={refreshing}
               className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900/80 text-slate-200 text-sm font-medium hover:bg-slate-800 hover:text-white transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-purple-400' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-400' : ''}`} />
               <span>Refresh Telemetry</span>
             </button>
             <Link
               to="/quality/defects/new"
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-sm font-bold shadow-lg shadow-purple-600/30 flex items-center gap-2 transition-all"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Log Defect</span>
@@ -263,10 +263,10 @@ export default function QualityDashboard() {
       {/* 2. Top Level KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Open Defects */}
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-purple-500/40 transition-all">
+        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm relative overflow-hidden group hover:border-blue-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Open Defects</span>
-            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
               <ClipboardList className="w-4 h-4" />
             </div>
           </div>
@@ -336,7 +336,7 @@ export default function QualityDashboard() {
             <span className="text-slate-400 truncate max-w-[120px]">
               {aiValidation?.workflowId || 'Real-time agent'}
             </span>
-            <Link to="/quality/ai-validation" className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-0.5">
+            <Link to="/quality/ai-validation" className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-0.5">
               <span>Inspect</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
@@ -350,7 +350,7 @@ export default function QualityDashboard() {
         <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-purple-400" />
+              <AlertTriangle className="w-4 h-4 text-blue-400" />
               <h2 className="text-sm font-bold text-white uppercase tracking-wider">Defect Severity Breakdown</h2>
             </div>
             <span className="text-xs text-slate-400 font-mono">{totalDefectsCount} Total</span>
@@ -380,7 +380,7 @@ export default function QualityDashboard() {
 
           <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
             <span>Critical & High: {criticalDefects.length + highDefects.length}</span>
-            <Link to="/quality/defects" className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1">
+            <Link to="/quality/defects" className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
               <span>View Defect Matrix</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
@@ -449,7 +449,7 @@ export default function QualityDashboard() {
 
           <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
             <span>Active Holds: {activeQuarantines.length}</span>
-            <Link to="/quality/quarantine" className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1">
+            <Link to="/quality/quarantine" className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
               <span>Manage Holds</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
@@ -488,7 +488,7 @@ export default function QualityDashboard() {
 
           <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
             <span>Resolved / Closed: {resolvedDefects.length}</span>
-            <Link to="/quality/defects" className="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1">
+            <Link to="/quality/defects" className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
               <span>Inspect Queue</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
@@ -525,7 +525,7 @@ export default function QualityDashboard() {
               {attentionItems.map((item) => (
                 <div
                   key={item.id}
-                  className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-purple-500/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-blue-500/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                 >
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -539,7 +539,7 @@ export default function QualityDashboard() {
                   </div>
                   <Link
                     to={item.path}
-                    className="px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all shrink-0 flex items-center justify-center gap-1.5 shadow-sm"
+                    className="px-3.5 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-bold transition-all shrink-0 flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     <span>Inspect</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -554,7 +554,7 @@ export default function QualityDashboard() {
         <div className="p-6 rounded-3xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm space-y-4 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2">
-              <History className="w-4 h-4 text-purple-400" />
+              <History className="w-4 h-4 text-blue-400" />
               <h2 className="text-base font-bold text-white tracking-tight">Recent QA Activity</h2>
             </div>
             <span className="text-xs text-slate-400">Live Stream</span>
@@ -571,7 +571,7 @@ export default function QualityDashboard() {
                   className="block p-3 rounded-2xl bg-slate-950/40 border border-slate-800/80 hover:border-slate-700 transition-colors"
                 >
                   <div className="flex items-center justify-between text-[11px] mb-1">
-                    <span className="font-bold text-purple-400">{act.type}</span>
+                    <span className="font-bold text-blue-400">{act.type}</span>
                     <span className="text-slate-400">
                       {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
                     </span>
@@ -592,10 +592,10 @@ export default function QualityDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
         <Link
           to="/quality/ai-validation"
-          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-purple-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
+          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-blue-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
@@ -608,15 +608,47 @@ export default function QualityDashboard() {
 
         <Link
           to="/quality/defects"
-          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-purple-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
+          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-blue-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 group-hover:scale-105 transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
               <ClipboardList className="w-5 h-5" />
             </div>
             <div>
               <p className="text-xs font-bold text-white">Defect Reports</p>
               <p className="text-[11px] text-slate-400">Inspection &amp; Logging</p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+        </Link>
+
+        <Link
+          to="/quality/quarantine"
+          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-rose-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 group-hover:scale-105 transition-transform">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">Quarantine Control</p>
+              <p className="text-[11px] text-slate-400">Active Holds &amp; Releases</p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+        </Link>
+
+        <Link
+          to="/quality/quarantine/history"
+          className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800 hover:border-cyan-500/40 hover:bg-slate-900/80 transition-all flex items-center justify-between group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
+              <History className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-white">Quarantine History</p>
+              <p className="text-[11px] text-slate-400">Audit Ledger &amp; Dispositions</p>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
