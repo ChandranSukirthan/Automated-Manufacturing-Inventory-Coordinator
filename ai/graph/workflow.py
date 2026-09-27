@@ -144,7 +144,8 @@ def run_workflow(
     objective: str,
     workflow_id: Optional[str] = None,
     material_id: Optional[str] = None,
-    required_quantity: Optional[float] = None
+    required_quantity: Optional[float] = None,
+    quality_data: Optional[Dict[str, Any]] = None
 ) -> AgentState:
     """
     Starts and executes a workflow up to completion or approval gate.
@@ -170,6 +171,7 @@ def run_workflow(
         "inventory_data": initial_inv,
         "production_data": {},
         "purchasing_data": {},
+        "quality_data": quality_data or {},
         "validation_results": {},
         "final_outcome": None,
         "errors": [],
