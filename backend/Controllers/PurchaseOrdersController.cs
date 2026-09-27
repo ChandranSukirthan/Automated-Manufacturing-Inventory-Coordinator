@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Services.PurchaseOrders;
+using backend.Services;
 
 namespace ManufacturingCoordinator.Controllers
 {
@@ -16,10 +17,12 @@ namespace ManufacturingCoordinator.Controllers
     public class PurchaseOrdersController : ControllerBase
     {
         private readonly IPurchaseOrderService _poService;
+        private readonly IInventoryService _inventoryService;
 
-        public PurchaseOrdersController(IPurchaseOrderService poService)
+        public PurchaseOrdersController(IPurchaseOrderService poService, IInventoryService inventoryService)
         {
             _poService = poService;
+            _inventoryService = inventoryService;
         }
 
         // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -83,6 +86,13 @@ namespace ManufacturingCoordinator.Controllers
             {
                 var userId = GetCurrentUserId();
                 var po = await _poService.CreateAsync(dto, userId);
+                
+                var materialIds = dto.Lines.Select(l => l.RawMaterialId > 0 ? l.RawMaterialId : l.MaterialId).Distinct().ToList();
+                if (materialIds.Any())
+                {
+                    await _inventoryService.ResolveAlertsForMaterialsAsync(materialIds);
+                }
+                
                 return CreatedAtAction(nameof(GetById), new { id = po.Id }, po);
             }
             catch (KeyNotFoundException ex)
@@ -307,6 +317,45 @@ namespace ManufacturingCoordinator.Controllers
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+        [HttpPost("{id:int}/create-checkout-session")]
+        [Authorize(Roles = "SupplyChainManager")]
+        public async Task<ActionResult> CreateCheckoutSession(int id)
+        {
+            var po = await _poService.GetByIdAsync(id);
+            if (po == null) return NotFound(new { message = "Purchase Order not found." });
+
+            Stripe.StripeConfiguration.ApiKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY") ?? "sk_test_placeholder_key";
+
+            var domain = "http://localhost:5173"; 
+            var options = new Stripe.Checkout.SessionCreateOptions
+            {
+                LineItems = new List<Stripe.Checkout.SessionLineItemOptions>
+                {
+                    new Stripe.Checkout.SessionLineItemOptions
+                    {
+                        PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
+                        {
+                            UnitAmount = (long)(po.TotalCost * 100),
+                            Currency = po.Currency ?? "usd",
+                            ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions
+                            {
+                                Name = $"Purchase Order {po.PoNumber} from {po.SupplierName}",
+                            },
+                        },
+                        Quantity = 1,
+                    },
+                },
+                Mode = "payment",
+                SuccessUrl = domain + $"/purchase-orders/{id}?payment=success",
+                CancelUrl = domain + $"/purchase-orders/{id}?payment=cancel",
+            };
+
+            var service = new Stripe.Checkout.SessionService();
+            var session = await service.CreateAsync(options);
+
+            return Ok(new { url = session.Url });
         }
 
         /// <summary>

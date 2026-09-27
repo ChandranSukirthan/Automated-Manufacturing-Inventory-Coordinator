@@ -21,5 +21,6 @@ namespace backend.Services
         // Student A - New Method for Inventory Roll and Raw Material
         Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
         Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material);
+        Task ResolveAlertsForMaterialsAsync(IEnumerable<int> materialIds);
     }
 }

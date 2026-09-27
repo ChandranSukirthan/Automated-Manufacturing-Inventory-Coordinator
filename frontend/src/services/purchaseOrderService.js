@@ -51,6 +51,11 @@ export const purchaseOrderService = {
     return response.data;
   },
 
+  async createCheckoutSession(id) {
+    const response = await api.post(`/purchase-orders/${id}/create-checkout-session`);
+    return response.data;
+  },
+
   async uploadBankSlip(id, formData) {
     const response = await api.post(`/purchase-orders/${id}/bank-slip`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }

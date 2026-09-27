@@ -20,19 +20,22 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         private readonly IPurchaseOrderService _poService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ProcurementService> _logger;
+        private readonly backend.Services.IInventoryService _inventoryService;
 
         public ProcurementService(
             ApplicationDbContext context,
             IAgentIntegrationService agentService,
             IPurchaseOrderService poService,
             IConfiguration configuration,
-            ILogger<ProcurementService> logger)
+            ILogger<ProcurementService> logger,
+            backend.Services.IInventoryService inventoryService)
         {
             _context = context;
             _agentService = agentService;
             _poService = poService;
             _configuration = configuration;
             _logger = logger;
+            _inventoryService = inventoryService;
         }
 
         // ── Deterministic Calculations ────────────────────────────────────────────
@@ -261,32 +264,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var candidateEntities = new List<SupplierCandidate>();
 
-            // 1. Pull active approved suppliers from existing PostgreSQL database
-            var existingSuppliers = await _context.Suppliers
-                .Where(s => s.IsActive)
-                .ToListAsync();
-
-            foreach (var sup in existingSuppliers)
-            {
-                candidateEntities.Add(new SupplierCandidate
-                {
-                    ProcurementRequestId = request.Id,
-                    SupplierId = sup.Id,
-                    SupplierName = sup.Name,
-                    MaterialName = request.RawMaterial?.Name ?? "Raw Material",
-                    UnitPrice = 1.35m,
-                    Currency = "USD",
-                    MinimumOrderQuantity = 200m,
-                    PackSize = 50m,
-                    LeadTimeDays = sup.LeadTimeDays > 0 ? sup.LeadTimeDays : 5,
-                    QualityEvidence = "Existing approved supplier — ISO 9001 on file",
-                    Availability = "In Stock",
-                    SupplierStatus = "APPROVED",
-                    ConfidenceScore = 95.0m,
-                    SourceUrl = "internal://database/suppliers/" + sup.Id,
-                    CreatedAt = DateTime.UtcNow
-                });
-            }
+            // Removed legacy database supplier injection.
 
             // 2. Invoke Python FastAPI LangGraph workflow via AgentIntegrationService
             //    ASP.NET Core → FastAPI (internal boundary). React/Flutter never call FastAPI directly.
@@ -313,21 +291,24 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
                 foreach (var c in aiCandidates)
                 {
-                    // Architectural Rule: online discovered candidates are always UNVERIFIED
+                    // Map to existing verified supplier if available
+                    var existingSupplier = await _context.Suppliers
+                        .FirstOrDefaultAsync(s => s.Name.ToLower() == c.SupplierName.ToLower() && s.IsActive);
+
                     candidateEntities.Add(new SupplierCandidate
                     {
                         ProcurementRequestId = request.Id,
-                        SupplierId = null,
-                        SupplierName = c.SupplierName,
+                        SupplierId = existingSupplier?.Id,
+                        SupplierName = existingSupplier?.Name ?? c.SupplierName,
                         MaterialName = c.MaterialName,
                         UnitPrice = c.UnitPrice,
                         Currency = string.IsNullOrWhiteSpace(c.Currency) ? "USD" : c.Currency,
                         MinimumOrderQuantity = c.MinimumOrderQuantity,
                         PackSize = c.PackSize > 0 ? c.PackSize : 1m,
-                        LeadTimeDays = c.LeadTimeDays,
+                        LeadTimeDays = existingSupplier?.LeadTimeDays > 0 ? existingSupplier.LeadTimeDays : c.LeadTimeDays,
                         QualityEvidence = c.QualityEvidence,
                         Availability = c.Availability,
-                        SupplierStatus = "UNVERIFIED",
+                        SupplierStatus = existingSupplier != null ? "APPROVED" : "UNVERIFIED",
                         ConfidenceScore = c.ConfidenceScore,
                         SourceUrl = c.SourceUrl,
                         CreatedAt = DateTime.UtcNow
@@ -373,19 +354,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             {
                 request.RecommendedSupplierId = bestCandidate.SupplierId;
                 request.Status = ProcurementRequestStatus.RecommendationReady;
-
-                try
-                {
-                    var po = await CreateDraftPoInternalAsync(request, bestCandidate);
-                    request.GeneratedPurchaseOrderId = po.Id;
-                    request.Status = ProcurementRequestStatus.DraftPoCreated;
-                    request.FailureReason = null;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to auto-create Draft PO for request {Id}", request.Id);
-                    request.FailureReason = $"Recommended supplier found, but PO drafting failed: {ex.Message}";
-                }
+                request.FailureReason = null;
             }
             else
             {
@@ -725,8 +694,27 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             SupplierCandidate candidate,
             Guid? userId = null)
         {
+            // Auto-create a minimal Supplier record from candidate data if not already linked
             if (!candidate.SupplierId.HasValue)
-                throw new InvalidOperationException("Cannot generate Purchase Order without an assigned SupplierId in the database.");
+            {
+                var autoSupplier = new Supplier
+                {
+                    SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
+                    Name = candidate.SupplierName,
+                    ContactEmail = candidate.SupplierName.ToLower().Replace(" ", "") + "@supplier.example.com",
+                    ContactPhone = string.Empty,
+                    Address = candidate.SourceUrl ?? string.Empty,
+                    PaymentTerms = "Net 30",
+                    LeadTimeDays = candidate.LeadTimeDays > 0 ? candidate.LeadTimeDays : 7,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Suppliers.Add(autoSupplier);
+                await _context.SaveChangesAsync();
+                candidate.SupplierId = autoSupplier.Id;
+                await _context.SaveChangesAsync();
+            }
 
             var poDto = new CreatePurchaseOrderDto
             {
@@ -749,6 +737,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             };
 
             var createdPo = await _poService.CreateAsync(poDto, userId ?? request.CreatedById);
+
+            // Automatically resolve active alerts for this raw material
+            await _inventoryService.ResolveAlertsForMaterialsAsync(new List<int> { request.RawMaterialId });
 
             // Record structured outcome telemetry for future learning dataset (Requirement 12)
             try

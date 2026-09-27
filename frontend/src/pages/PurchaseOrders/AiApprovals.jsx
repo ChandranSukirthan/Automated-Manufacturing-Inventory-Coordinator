@@ -92,26 +92,18 @@ export default function AiApprovals() {
     setError('');
 
     try {
-      // Step 1: Approved
+      // Step 1: Validating
       setApprovalStep(1);
       await delay(600);
 
-      // Step 2: Payment Processing
+      // Step 2: Approving Order
       setApprovalStep(2);
       
-      // Execute backend API (ASP.NET Core -> Stripe Sandbox & SendGrid)
+      // Execute backend API (ASP.NET Core)
       await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
       
-      // Step 3: Payment Successful
+      // Step 3: Awaiting Payment
       setApprovalStep(3);
-      await delay(700);
-
-      // Step 4: Supplier Notification
-      setApprovalStep(4);
-      await delay(700);
-
-      // Step 5: PO Sent
-      setApprovalStep(5);
     } catch (err) {
       setAnimatingApproval(false);
       setApprovalStep(0);
@@ -512,11 +504,9 @@ export default function AiApprovals() {
             {/* Stepper Progress */}
             <div className="space-y-3">
               {[
-                { step: 1, title: 'Approved', desc: 'Manager authorization verified via JWT' },
-                { step: 2, title: 'Payment Processing', desc: 'Invoking Stripe Sandbox payment gateway' },
-                { step: 3, title: 'Payment Successful', desc: 'Transaction authorized and settlement confirmed' },
-                { step: 4, title: 'Supplier Notification', desc: 'Generating PO PDF invoice & packaging documents' },
-                { step: 5, title: 'PO Sent', desc: `Dispatched to ${selectedOrder?.supplierName} via SendGrid` },
+                { step: 1, title: 'Validating Authorization', desc: 'Manager authorization verified via JWT' },
+                { step: 2, title: 'Approving Order', desc: 'Transitioning Purchase Order state to Approved' },
+                { step: 3, title: 'Awaiting Payment', desc: 'Order is ready for Stripe Checkout settlement' },
               ].map((item) => {
                 const isPassed = approvalStep > item.step;
                 const isCurrent = approvalStep === item.step;
@@ -561,7 +551,7 @@ export default function AiApprovals() {
             </div>
 
             {/* Footer with Done button when completed */}
-            {approvalStep === 5 ? (
+            {approvalStep === 3 ? (
               <div className="pt-2">
                 <button
                   onClick={handleFinishApprovalAnimation}

@@ -38,6 +38,7 @@ namespace backend.Services
         public async Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync()
         {
             var alerts = await _context.StockAlerts
+                .Where(alert => alert.Status != "Resolved")
                 .OrderByDescending(alert => alert.Timestamp)
                 .ToListAsync();
 
@@ -53,7 +54,7 @@ namespace backend.Services
         public async Task<IEnumerable<StockAlertResponseDto>> GetUnreadStockAlertsAsync()
         {
             var alerts = await _context.StockAlerts
-                .Where(alert => !alert.IsRead)
+                .Where(alert => !alert.IsRead && alert.Status != "Resolved")
                 .OrderByDescending(alert => alert.Timestamp)
                 .ToListAsync();
 
@@ -68,6 +69,31 @@ namespace backend.Services
             alert.IsRead = true;
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task ResolveAlertsForMaterialsAsync(IEnumerable<int> materialIds)
+        {
+            if (materialIds == null || !materialIds.Any()) return;
+
+            var didResolveAny = false;
+            foreach (var matId in materialIds)
+            {
+                var alert = await _context.StockAlerts
+                    .Where(a => a.MaterialId == matId && a.Status != "Resolved")
+                    .OrderBy(a => a.Timestamp)
+                    .FirstOrDefaultAsync();
+                
+                if (alert != null)
+                {
+                    alert.Status = "Resolved";
+                    didResolveAny = true;
+                }
+            }
+
+            if (didResolveAny)
+            {
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task<StockAlertResponseDto> CreateStockAlertAsync(CreateStockAlertDto alertDto)

@@ -365,6 +365,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
         public async Task<PurchaseOrderResponseDto> ApproveAsync(int id, Guid approverId, string? notes = null)
         {
+            int poId;
             using (var tx = await BeginTransactionIfSupportedAsync())
             {
                 var po = await LoadPoAsync(id);
@@ -380,15 +381,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 await RecordAuditAsync(po.Id, "PO approved", approverId, notes ?? "Manager approved purchase order.");
 
                 if (tx is not null) await tx.CommitAsync();
+                poId = po.Id;
             }
 
-            // Reload for payment processing
-            var approvedPo = await LoadPoAsync(id);
-
-            // Trigger payment and dispatch after approval (with dev sandbox support)
-            await ProcessPaymentInternalAsync(approvedPo, approverId, forceDispatch: true);
-
-            return (await GetByIdAsync(approvedPo.Id))!;
+            return (await GetByIdAsync(poId))!;
         }
 
         public async Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason)

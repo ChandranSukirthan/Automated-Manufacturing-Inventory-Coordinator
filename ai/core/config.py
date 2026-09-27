@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     db_password: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    groq_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
     fastapi_port: int = 8000
 

@@ -40,10 +40,11 @@ start_backend() {
 
 start_ai() {
     echo -e "${GREEN}▶ Starting AI Service (Python FastAPI on http://localhost:8000)...${NC}"
-    cd "$PROJECT_ROOT/ai" || exit 1
-    if [ -f ".venv/bin/activate" ]; then
-        source .venv/bin/activate
+    cd "$PROJECT_ROOT" || exit 1
+    if [ -f "ai/.venv/bin/activate" ]; then
+        source ai/.venv/bin/activate
     fi
+    export PYTHONPATH="$PROJECT_ROOT"
     uvicorn ai.main:app --host 0.0.0.0 --port 8000 --reload
 }
 
@@ -79,8 +80,9 @@ start_all() {
 
     # 1. AI Service
     echo -e "${GREEN}[1/3] Launching Python FastAPI AI Engine (port 8000)...${NC}"
-    cd "$PROJECT_ROOT/ai" && (
-        if [ -f ".venv/bin/activate" ]; then source .venv/bin/activate; fi
+    cd "$PROJECT_ROOT" && (
+        if [ -f "ai/.venv/bin/activate" ]; then source ai/.venv/bin/activate; fi
+        export PYTHONPATH="$PROJECT_ROOT"
         uvicorn ai.main:app --host 0.0.0.0 --port 8000 --reload
     ) > "$PROJECT_ROOT/ai_service.log" 2>&1 &
     AI_PID=$!

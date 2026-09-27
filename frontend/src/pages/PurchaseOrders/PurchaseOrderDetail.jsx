@@ -115,6 +115,16 @@ export default function PurchaseOrderDetail() {
   useEffect(() => {
     fetchPoDetails();
     fetchTrackingDetails();
+
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('payment') === 'success') {
+       purchaseOrderService.processPayment(id).then(() => {
+          fetchPoDetails();
+          fetchTrackingDetails();
+          setSlipSuccessMessage('Stripe Checkout successful! Payment verified and purchase order dispatched.');
+       }).catch(err => setError(parseErrorMessage(err, 'Failed to complete payment settlement.')));
+       window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, [id]);
 
   // Submit PO
@@ -135,7 +145,7 @@ export default function PurchaseOrderDetail() {
   // Approve PO (Triggers Stripe Sandbox & SendGrid PDF)
   const handleApproveConfirm = async () => {
     setActionLoading(true);
-    setActionMessage('Processing manager approval, invoking Stripe Sandbox, and generating SendGrid PDF...');
+    setActionMessage('Processing manager approval...');
     try {
       const updated = await purchaseOrderService.approvePurchaseOrder(id);
       setApproveModalOpen(false);
@@ -177,20 +187,17 @@ export default function PurchaseOrderDetail() {
     }
   };
 
-  // Settle Payment & Dispatch PO via Stripe Sandbox
+  // Redirect to Stripe Hosted Checkout
   const handleProcessPayment = async () => {
     setActionLoading(true);
-    setActionMessage('Connecting to Stripe Sandbox, settling payment and dispatching PO PDF...');
+    setActionMessage('Redirecting to secure Stripe Checkout...');
     setError('');
     setSlipSuccessMessage('');
     try {
-      const updated = await purchaseOrderService.processPayment(id);
-      setPo(updated);
-      await fetchPoDetails();
-      await fetchTrackingDetails();
+      const session = await purchaseOrderService.createCheckoutSession(id);
+      window.location.href = session.url;
     } catch (err) {
-      setError(parseErrorMessage(err, 'Failed to complete payment settlement & dispatch.'));
-    } finally {
+      setError(parseErrorMessage(err, 'Failed to create Stripe Checkout session.'));
       setActionLoading(false);
       setActionMessage('');
     }
@@ -379,35 +386,8 @@ export default function PurchaseOrderDetail() {
             </div>
           )}
 
-          {/* Pending Approval Manager Actions (Requirement 7: [Approve Purchase], [Reject], [Request Revision]) */}
-          {po.status === 'PendingApproval' && isManager && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setReviseModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-orange-400 font-semibold rounded-xl text-xs transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Request Revision</span>
-              </button>
-              <button
-                onClick={() => setRejectModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-rose-600/20 border border-rose-500/40 hover:bg-rose-600/30 text-rose-400 font-semibold rounded-xl text-xs transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>Reject</span>
-              </button>
-              <button
-                onClick={() => setApproveModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-600/20 transition-all"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Approve Purchase</span>
-              </button>
-            </div>
-          )}
-
           {/* Payment Status Manager Actions */}
-          {po.status === 'Payment' && isManager && (
+          {(po.status === 'Approved' || po.status === 'Payment') && isManager && (
             <button
               onClick={handleProcessPayment}
               disabled={actionLoading}
@@ -575,7 +555,7 @@ export default function PurchaseOrderDetail() {
       )}
 
       {/* DUAL PAYMENT GATEWAY COCKPIT (Requirement 8) */}
-      {(po.status === 'Payment' || po.status === 'PaymentPending') && (
+      {(po.status === 'Approved' || po.status === 'Payment' || po.status === 'PaymentPending') && (
         <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/50 via-slate-900 to-slate-900 border border-blue-500/40 shadow-2xl space-y-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
             <div className="flex items-center gap-3">
@@ -641,27 +621,20 @@ export default function PurchaseOrderDetail() {
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-300">Stripe Test Card Simulation</span>
-                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/40 text-cyan-300">
-                    4242 Visa Sandbox
+                  <span className="text-xs font-semibold text-slate-300">Stripe Hosted Checkout</span>
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-brand-950/80 border border-brand-700/40 text-brand-300">
+                    Live Test Mode
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
-                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">Card Number</span>
-                    <span className="text-white">4242 •••• •••• 4242</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
-                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">Expiration</span>
-                    <span className="text-white">12 / 28</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 font-mono">
-                    <span className="text-[9px] uppercase text-slate-500 block mb-0.5">CVC</span>
-                    <span className="text-white">123</span>
-                  </div>
+                <div className="p-4 rounded-lg bg-slate-900 border border-slate-800 text-center">
+                  <CreditCard className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                  <p className="text-sm text-white font-semibold">Secure Payment via Stripe</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    You will be securely redirected to Stripe's hosted checkout page to enter your test card details (use <strong className="text-white">4242 4242 4242 4242</strong>).
+                  </p>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Clicking below authorizes payment through Stripe's test payment intent, generates the official PO PDF, and sends it directly to <strong className="text-white">{po.supplierName}</strong> via SendGrid / SMTP.
+                  After successful payment, you will be redirected back here. We will then automatically verify the transaction, mark the PO as Paid, and dispatch the official PDF to <strong className="text-white">{po.supplierName}</strong> via SendGrid / SMTP.
                 </p>
               </div>
 
