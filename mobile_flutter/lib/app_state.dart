@@ -39,6 +39,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void setSession(AuthSession newSession) {
+    session = newSession;
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await auth.logout();
     session = null;

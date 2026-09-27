@@ -2,8 +2,28 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'package:flutter/foundation.dart';
+
 import '../models/auth_models.dart';
 import 'session_storage.dart';
+
+String get _defaultApiBaseUrl {
+  const envUrl = String.fromEnvironment('API_BASE_URL');
+  if (envUrl.isNotEmpty) return envUrl;
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:5070/api';
+  }
+  return 'http://localhost:5070/api';
+}
+
+String get _defaultAiBaseUrl {
+  const envUrl = String.fromEnvironment('AI_API_BASE_URL');
+  if (envUrl.isNotEmpty) return envUrl;
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:8000';
+  }
+  return 'http://localhost:8000';
+}
 
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode});
@@ -19,18 +39,9 @@ class ApiClient {
   static const requestTimeout = Duration(seconds: 15);
 
   ApiClient({required this.storage, String? baseUrl, this.onSessionExpired})
-    : baseUrl =
-          (baseUrl ??
-                  const String.fromEnvironment(
-                    'API_BASE_URL',
-                    defaultValue: 'http://10.0.2.2:5070/api',
-                  ))
-              .replaceAll(RegExp(r'/$'), '');
+    : baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
 
-  final String aiBaseUrl = const String.fromEnvironment(
-    'AI_API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000',
-  ).replaceAll(RegExp(r'/$'), '');
+  final String aiBaseUrl = _defaultAiBaseUrl.replaceAll(RegExp(r'/$'), '');
 
   final SessionStorage storage;
   final String baseUrl;

@@ -9,6 +9,7 @@ import 'services/auth_service.dart';
 import 'services/purchase_order_service.dart';
 import 'services/quality_service.dart';
 import 'services/session_storage.dart';
+import 'services/admin_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ Future<void> main() async {
       appState: appState,
       qualityService: QualityService(api),
       poService: PurchaseOrderService(api),
+      adminService: AdminService(api),
     ),
   );
 }
@@ -31,12 +33,14 @@ class ManufacturingApp extends StatelessWidget {
     required this.appState,
     required this.qualityService,
     required this.poService,
+    required this.adminService,
     super.key,
   });
 
   final AppState appState;
   final QualityService qualityService;
   final PurchaseOrderService poService;
+  final AdminService adminService;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -79,6 +83,7 @@ class ManufacturingApp extends StatelessWidget {
               appState: appState,
               qualityService: qualityService,
               poService: poService,
+              adminService: adminService,
             )
           : LoginScreen(appState: appState),
     ),

@@ -51,6 +51,31 @@ class AuthService {
     return session;
   }
 
+  Future<dynamic> googleLogin(String idToken) async {
+    final data = await api.post('/auth/google-login', {
+      'tokenId': idToken,
+      'token': idToken,
+    }) as Map<String, dynamic>;
+
+    if (data['requiresRoleSelection'] == true) {
+      return data;
+    }
+    final session = AuthSession.fromJson(data['authResponse'] as Map<String, dynamic>);
+    await storage.save(session);
+    return session;
+  }
+
+  Future<AuthSession> googleRegister(String idToken, int role) async {
+    final data = await api.post('/auth/google-register', {
+      'tokenId': idToken,
+      'token': idToken,
+      'role': role,
+    }) as Map<String, dynamic>;
+    final session = AuthSession.fromJson(data as Map<String, dynamic>);
+    await storage.save(session);
+    return session;
+  }
+
   Future<void> logout() => storage.clear();
 
   Future<UserSummary> getProfile() async => UserSummary.fromJson(
