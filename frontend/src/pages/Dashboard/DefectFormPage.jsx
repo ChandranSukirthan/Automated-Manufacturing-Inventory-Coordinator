@@ -46,10 +46,11 @@ function getCreatedMaterials(inventoryItems, rawMaterials) {
 }
 
 const agentProgressSteps = [
-  'Initializing Agent Context',
-  'Analyzing Inventory Roll History',
-  'Evaluating Defect Severity Rules',
-  'Checking Quarantine Thresholds',
+  'Agent Activated',
+  'Analyzing Defect Context',
+  'Inspecting Related Inventory Rolls',
+  'Evaluating Quarantine Thresholds',
+  'Generating Roll Recommendations',
   'Assessment Complete'
 ];
 
@@ -133,6 +134,7 @@ export default function DefectFormPage() {
     const skuCode = event.target.value;
     const material = createdMaterials.find((item) => item.skuCode === skuCode);
     setSelectedInventory([]);
+    setAiRecommendation(null);
     setForm((current) => ({ ...current, skuCode, rawMaterialName: material?.name || '' }));
   };
 
@@ -140,7 +142,9 @@ export default function DefectFormPage() {
 
   const validate = (requireInventory = true) => {
     if (!form.skuCode) return 'Inventory roll SKU is required.';
-    if (requireInventory && selectedInventory.length === 0) return 'Select at least one inventory roll.';
+    if (requireInventory && selectedInventory.length === 0) {
+      return 'Select at least one inventory roll or click "Activate Agent" to evaluate affected rolls.';
+    }
     if (!form.description.trim()) return 'Description is required.';
     return '';
   };
@@ -181,23 +185,35 @@ export default function DefectFormPage() {
     setAiError('');
     setAiStepIndex(0);
 
-    const interval = setInterval(() => {
+    const stepInterval = setInterval(() => {
       setAiStepIndex((prev) => (prev < agentProgressSteps.length - 1 ? prev + 1 : prev));
-    }, 400);
+    }, 450);
 
     try {
       const recommendation = await defectService.analyzeWithAi(payload);
       setAiRecommendation(recommendation);
+
+      // Auto-select recommended rolls if provided by the agent
+      if (recommendation?.affectedInventory && Array.isArray(recommendation.affectedInventory)) {
+        setSelectedInventory((prev) => {
+          const combined = Array.from(new Set([...prev, ...recommendation.affectedInventory]));
+          return combined;
+        });
+      }
     } catch (err) {
       setAiError(parseErrorMessage(err, 'Unable to complete AI defect analysis.'));
     } finally {
-      clearInterval(interval);
-      setAiLoading(false);
+      clearInterval(stepInterval);
+      setAiStepIndex(agentProgressSteps.length - 1);
+      setTimeout(() => {
+        setAiLoading(false);
+      }, 500);
     }
   };
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
+      {/* Page Header */}
       <PageHeader
         category="Quality Assurance"
         title={isEdit ? 'Edit Defect Report' : 'Create Defect Report'}
@@ -213,132 +229,112 @@ export default function DefectFormPage() {
         }
       />
 
+      {/* Error Notifications */}
       {(error || aiError) && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center gap-3">
+        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center gap-3 animate-in fade-in">
           <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
           <span className="text-sm font-medium">{error || aiError}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Section 1: Defect Information */}
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-6 shadow-sm">
-          <div className="flex items-center gap-2 border-b border-slate-800/80 pb-4">
-            <ClipboardList className="w-5 h-5 text-purple-400" />
-            <h2 className="text-base font-bold text-white tracking-tight">Defect Information</h2>
-          </div>
+      {/* Main Input Form */}
+      <form onSubmit={handleSubmit} className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-6 shadow-sm">
+        <div className="grid md:grid-cols-2 gap-6">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+            Inventory Roll
+            <select
+              value={form.skuCode}
+              onChange={handleSkuChange}
+              disabled={loadingInventory}
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+            >
+              <option value="">Select Inventory Roll</option>
+              {createdMaterials.map((item) => (
+                <option key={item.skuCode} value={item.skuCode}>
+                  {item.skuCode} ({item.name})
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <div className="grid sm:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Inventory Roll SKU *
-              </label>
-              <select
-                value={form.skuCode}
-                onChange={handleSkuChange}
-                disabled={loadingInventory}
-                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-              >
-                <option value="">Select Inventory Roll SKU</option>
-                {createdMaterials.map((item) => (
-                  <option key={item.skuCode} value={item.skuCode}>
-                    {item.skuCode} ({item.name})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Raw Material Name
-              </label>
-              <input
-                readOnly
-                value={form.rawMaterialName || 'Auto-populated from selected SKU'}
-                className="w-full rounded-xl bg-slate-950/60 border border-slate-800 px-4 py-3 text-sm text-slate-400 cursor-not-allowed"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Severity Level *
-              </label>
-              <select
-                name="severity"
-                value={form.severity}
-                onChange={handleChange}
-                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-              >
-                {severities.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                Inspection Status *
-              </label>
-              <select
-                name="status"
-                value={form.status}
-                onChange={handleChange}
-                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-              >
-                {statuses.map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-              Defect Description &amp; Findings *
-            </label>
-            <textarea
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              rows={4}
-              placeholder="Detail the observed imperfection, fabric distortion, batch anomalies, or inspection findings..."
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+            Raw Material
+            <input
+              readOnly
+              value={form.rawMaterialName || 'Determined from selected inventory'}
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-slate-300 cursor-not-allowed"
             />
-          </div>
+          </label>
+
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+            Severity
+            <select
+              name="severity"
+              value={form.severity}
+              onChange={handleChange}
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+            >
+              {severities.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+            Status
+            <select
+              name="status"
+              value={form.status}
+              onChange={handleChange}
+              className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-purple-500 transition-colors"
+            >
+              {statuses.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
-        {/* Section 2: Affected Inventory Rolls */}
-        {skuRolls.length > 0 && (
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
-              <div className="flex items-center gap-2">
-                <Package className="w-5 h-5 text-cyan-400" />
-                <h2 className="text-base font-bold text-white tracking-tight">Affected Inventory Rolls</h2>
-              </div>
-              <span className="text-xs text-slate-400 font-mono">
-                {selectedInventory.length} selected
-              </span>
-            </div>
+        <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+          Description
+          <textarea
+            name="description"
+            value={form.description}
+            onChange={handleChange}
+            rows={5}
+            placeholder="Detail the observed imperfection, fabric distortion, batch anomalies, or inspection findings..."
+            className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
+          />
+        </label>
 
-            <p className="text-xs text-slate-400">
-              Select the specific warehouse fabric rolls tied to this defect report:
+        {/* Rolls Selection Section (Displayed when AI recommendation is received or when editing) */}
+        {(aiRecommendation || isEdit) && (
+          <div className="pt-2 border-t border-slate-800/80">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Select Inventory Rolls
             </p>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {skuRolls.map((roll) => {
-                const isChecked = selectedInventory.includes(roll.id);
-                return (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {skuRolls.length === 0 ? (
+                <p className="text-sm text-slate-500 p-3 rounded-xl bg-slate-950/40 border border-slate-800">
+                  No current inventory rolls found for this SKU.
+                </p>
+              ) : (
+                skuRolls.map((roll) => (
                   <label
                     key={roll.id}
-                    className={`flex items-start gap-3 rounded-2xl border p-4 cursor-pointer transition-all ${
-                      isChecked
+                    className={`flex gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-all ${
+                      selectedInventory.includes(roll.id)
                         ? 'bg-purple-600/15 border-purple-500/40 text-white'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-300 hover:border-slate-700'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-200 hover:border-slate-700'
                     }`}
                   >
                     <input
                       type="checkbox"
-                      checked={isChecked}
+                      checked={selectedInventory.includes(roll.id)}
                       onChange={(event) =>
                         setSelectedInventory((current) =>
                           event.target.checked
@@ -348,119 +344,188 @@ export default function DefectFormPage() {
                       }
                       className="mt-1 accent-purple-500 w-4 h-4 rounded"
                     />
-                    <div className="min-w-0">
-                      <span className="block font-mono font-bold text-cyan-300 text-xs truncate">
+                    <span className="min-w-0">
+                      <span className="block font-mono text-cyan-300 font-bold truncate">
                         {roll.rollIdentifier || roll.id}
                       </span>
-                      <span className="block text-[11px] text-slate-400 mt-0.5">
-                        Stock: {roll.currentQuantity} / {roll.initialQuantity} units · Status: {roll.status}
+                      <span className="block text-xs text-slate-400 mt-0.5">
+                        Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units — {roll.status}
                       </span>
-                    </div>
+                    </span>
                   </label>
-                );
-              })}
+                ))
+              )}
             </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Review or adjust the rolls selected for this defect report.
+            </p>
           </div>
         )}
 
-        {/* Section 3: AI Safety Agent Assistant Card */}
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-            <div className="flex items-center gap-2">
-              <Bot className="w-5 h-5 text-purple-400" />
-              <div>
-                <h2 className="text-base font-bold text-white tracking-tight">AI Safety Agent Assistant</h2>
-                <p className="text-xs text-slate-400">Automated defect severity and quarantine recommendation</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={activateAgent}
-              disabled={aiLoading}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-violet-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 flex items-center justify-center gap-2 disabled:opacity-50 transition-all shrink-0"
-            >
-              {aiLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Sparkles className="w-4 h-4 text-cyan-200" />
-              )}
-              <span>Activate Agent</span>
-            </button>
-          </div>
-
-          {/* AI Stepped Progress Animation */}
-          {aiLoading && (
-            <div className="p-4 rounded-2xl bg-slate-950/60 border border-purple-500/30 space-y-2 animate-in fade-in">
-              <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                <Loader2 className="w-4 h-4 animate-spin text-cyan-300" />
-                <span>{agentProgressSteps[aiStepIndex]}...</span>
-              </div>
-              <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-purple-500 to-cyan-400 h-full transition-all duration-300"
-                  style={{ width: `${((aiStepIndex + 1) / agentProgressSteps.length) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* AI Recommendation Output */}
-          {aiRecommendation && !aiLoading && (
-            <div className="p-5 rounded-2xl bg-slate-950/80 border border-purple-500/30 space-y-4 animate-in fade-in">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">Agent Evaluation Complete</span>
-                </div>
-                <StatusBadge status={aiRecommendation.quarantineRequired ? 'Active' : 'Released'} />
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Recommended Risk Level</span>
-                  <div className="mt-1">
-                    <SeverityBadge severity={aiRecommendation.riskLevel} />
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Quarantine Containment</span>
-                  <p className={`text-sm font-bold mt-1 ${aiRecommendation.quarantineRequired ? 'text-rose-400' : 'text-emerald-400'}`}>
-                    {aiRecommendation.quarantineRequired ? 'QUARANTINE REQUIRED' : 'NO QUARANTINE NEEDED'}
-                  </p>
-                </div>
-              </div>
-
-              {aiRecommendation.reason && (
-                <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/20 text-xs text-slate-200">
-                  <span className="font-bold text-purple-300 block mb-1">Agent Diagnostic Rationale:</span>
-                  <p className="leading-relaxed">{aiRecommendation.reason}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Form Submission Station */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+        {/* Action Buttons Toolbar */}
+        <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
           <button
             type="button"
-            onClick={() => navigate('/quality/defects')}
-            className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-sm font-medium hover:bg-slate-800 transition-colors"
+            onClick={activateAgent}
+            disabled={aiLoading}
+            className="px-5 py-2.5 rounded-xl border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 text-sm font-bold flex items-center gap-2 transition-all shadow-sm disabled:opacity-50"
           >
-            Cancel
+            {aiLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-purple-300" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-cyan-300" />
+            )}
+            <span>Activate Agent</span>
           </button>
+
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white text-sm font-bold shadow-lg shadow-purple-600/30 flex items-center gap-2 disabled:opacity-50 transition-all"
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white font-bold text-sm flex items-center gap-2 shadow-lg shadow-purple-600/30 disabled:opacity-50 transition-all"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>{isEdit ? 'Update Defect Report' : 'Create Defect Report'}</span>
           </button>
         </div>
       </form>
+
+      {/* Stepped Progress Indicator during Agent Activation */}
+      {aiLoading && (
+        <section className="rounded-3xl border border-purple-500/40 bg-slate-900/90 p-6 shadow-2xl space-y-4 animate-in fade-in" role="status" aria-live="polite">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2 text-purple-200">
+              <Bot className="w-5 h-5 text-purple-400 animate-bounce" />
+              <div>
+                <p className="font-bold text-white text-sm">AI Defect Assessment Pipeline Running</p>
+                <p className="text-xs text-slate-400 mt-0.5">Reviewing submitted defect context and evaluating related factory inventory.</p>
+              </div>
+            </div>
+            <span className="text-xs font-mono text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full">
+              Step {aiStepIndex + 1} of {agentProgressSteps.length}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
+            {agentProgressSteps.map((step, idx) => {
+              const isCompleted = idx < aiStepIndex;
+              const isCurrent = idx === aiStepIndex;
+              return (
+                <div
+                  key={step}
+                  className={`p-2.5 rounded-xl border text-xs transition-all ${
+                    isCurrent
+                      ? 'bg-purple-600/20 border-purple-500 text-purple-200 font-bold shadow-md'
+                      : isCompleted
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-slate-950/40 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {isCompleted ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : isCurrent ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400 shrink-0" />
+                    ) : (
+                      <span className="w-3.5 h-3.5 rounded-full bg-slate-800 text-[9px] flex items-center justify-center font-mono shrink-0">
+                        {idx + 1}
+                      </span>
+                    )}
+                    <span className="text-[10px] uppercase font-semibold">Stage {idx + 1}</span>
+                  </div>
+                  <p className="line-clamp-1 text-[11px]">{step}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* AI Recommendation Box (Exact Text & Box Format as Previous, Clean Industrial Finish) */}
+      {aiRecommendation && !aiLoading && (
+        <section className="rounded-3xl border border-purple-500/30 bg-slate-900/70 overflow-hidden shadow-xl animate-in fade-in" aria-labelledby="ai-assessment-title">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 bg-purple-500/10 px-6 py-5">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/15 text-purple-300 shadow-md">
+                <Bot className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 id="ai-assessment-title" className="text-lg font-bold text-white">AI Defect Assessment</h2>
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-300">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Analysis completed</span>
+                </div>
+              </div>
+            </div>
+            <StatusBadge status={aiRecommendation.quarantineRequired ? 'Active' : 'Released'} />
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Risk Level and Quarantine Required Cards */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Risk Level</p>
+                <div className="mt-3">
+                  <SeverityBadge severity={aiRecommendation.riskLevel} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Quarantine Required</p>
+                <div className={`mt-3 inline-flex items-center gap-2 text-lg font-bold ${aiRecommendation.quarantineRequired ? 'text-amber-300' : 'text-emerald-300'}`}>
+                  <span className={`h-2.5 w-2.5 rounded-full ${aiRecommendation.quarantineRequired ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                  <span>{aiRecommendation.quarantineRequired ? 'YES' : 'NO'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Affected Inventory Rolls List */}
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Affected Inventory Rolls</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Rolls returned by the AI assessment.</p>
+                </div>
+                <span className="text-xs font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+                  {assessedRollIds.length} roll{assessedRollIds.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {assessedRolls.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {assessedRolls.map((roll) => (
+                    <div key={roll.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-sm font-bold text-cyan-300">
+                          {roll.rollIdentifier || roll.id}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400 truncate">
+                          Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units
+                        </p>
+                      </div>
+                      <StatusBadge status={roll.status || 'In Stock'} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
+                  No affected rolls identified.
+                </p>
+              )}
+            </div>
+
+            {/* Assessment Summary */}
+            <div className="border-t border-slate-800 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Assessment Summary</p>
+              <p className="mt-2 text-sm leading-6 text-slate-200 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+                {aiRecommendation.reason ||
+                  `The AI assessment returned a ${aiRecommendation.riskLevel || 'LOW'} risk level and quarantine is ${
+                    aiRecommendation.quarantineRequired ? 'required' : 'not required'
+                  }.`}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
