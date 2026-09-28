@@ -1,1 +1,1 @@
-﻿namespace backend.Dtos { public class UpdateAlertStatusDto { public string Status { get; set; } } }
+﻿namespace backend.Dtos { public class UpdateAlertStatusDto { public string Status { get; set; } = string.Empty; } }

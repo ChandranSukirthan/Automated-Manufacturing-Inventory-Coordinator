@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/worker_workflow_models.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
@@ -9,9 +8,14 @@ import '../controllers/inventory_controller.dart';
 import '../views/stock_view.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
-  const WorkerDashboardScreen({required this.qualityService, super.key});
+  const WorkerDashboardScreen({
+    required this.qualityService,
+    this.initialIndex = 0,
+    super.key,
+  });
 
   final QualityService qualityService;
+  final int initialIndex;
 
   @override
   State<WorkerDashboardScreen> createState() => _WorkerDashboardScreenState();
@@ -20,7 +24,7 @@ class WorkerDashboardScreen extends StatefulWidget {
 class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   final _inventory = InventoryApiService();
   final _controller = InventoryController();
-  int _index = 0;
+  late int _index;
   bool _loading = true;
   String? _error;
   List<InventoryItemModel> _items = [];
@@ -29,11 +33,10 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   List<Map<String, dynamic>> _levels = [];
   List<StockAlertModel> _alerts = [];
   List<Map<String, dynamic>> _history = [];
-  WorkerWorkflowResult? _workflow;
+  Map<String, dynamic>? _analysis;
   String? _selectedMaterial;
   int? _selectedHistoryMaterialId;
-  num _requiredQuantity = 2000;
-  bool _triggeringAi = false;
+  bool _analyzing = false;
   String _alertFilter = 'All';
 
   static const _tabs = [
@@ -42,12 +45,13 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     'Stock Levels & Burn Rate',
     'Low Stock Alerts',
     'Inventory History',
-    'AI Agent Coordinator',
+    'Data Extraction Agent',
   ];
 
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex.clamp(0, _tabs.length - 1).toInt();
     _load();
   }
 
@@ -57,108 +61,154 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     super.dispose();
   }
 
+  Future<T> _loadSection<T>(
+    Future<T> Function() request,
+    T fallback,
+    List<String> failures,
+  ) async {
+    try {
+      return await request();
+    } on ApiException catch (exception) {
+      failures.add(exception.message);
+      return fallback;
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
-    try {
-      final results = await Future.wait([
-        _inventory.fetchOwnedInventory(),
-        _inventory.fetchOwnedRolls(),
-        _inventory.fetchRawMaterials(),
-        _inventory.fetchStockLevels(),
-        _inventory.fetchAlerts(),
-      ]);
-      if (!mounted) return;
-      final materials = results[2] as List<RawMaterialModel>;
-      final selectedHistoryId =
-          _selectedHistoryMaterialId != null &&
-              materials.any(
-                (material) => material.id == _selectedHistoryMaterialId,
-              )
-          ? _selectedHistoryMaterialId
-          : materials.firstOrNull?.id;
-      setState(() {
-        _items = results[0] as List<InventoryItemModel>;
-        _rolls = results[1] as List<InventoryRollModel>;
-        _materials = materials;
-        _levels = results[3] as List<Map<String, dynamic>>;
-        _alerts = results[4] as List<StockAlertModel>;
-        _selectedMaterial ??= _levels.isNotEmpty
-            ? _levels.first['skuCode']?.toString()
-            : _materials.isNotEmpty
-            ? _materials.first.skuCode
-            : null;
-        _selectedHistoryMaterialId = selectedHistoryId;
-        _loading = false;
-      });
-      if (selectedHistoryId != null) {
-        final history = await _inventory.fetchHistory(selectedHistoryId);
-        if (mounted) {
-          setState(() => _history = history);
-        }
-      }
-    } on ApiException catch (exception) {
+    final failures = <String>[];
+    final items = await _loadSection(
+      _inventory.fetchOwnedInventory,
+      const <InventoryItemModel>[],
+      failures,
+    );
+    final rolls = await _loadSection(
+      _inventory.fetchOwnedRolls,
+      const <InventoryRollModel>[],
+      failures,
+    );
+    final materials = await _loadSection(
+      _inventory.fetchRawMaterials,
+      const <RawMaterialModel>[],
+      failures,
+    );
+    final levels = await _loadSection(
+      _inventory.fetchStockLevels,
+      const <Map<String, dynamic>>[],
+      failures,
+    );
+    final alerts = await _loadSection(
+      _inventory.fetchAlerts,
+      const <StockAlertModel>[],
+      failures,
+    );
+    if (!mounted) return;
+    final selectedHistoryId =
+        _selectedHistoryMaterialId != null &&
+            materials.any(
+              (material) => material.id == _selectedHistoryMaterialId,
+            )
+        ? _selectedHistoryMaterialId
+        : materials.firstOrNull?.id;
+    setState(() {
+      _items = items;
+      _rolls = rolls;
+      _materials = materials;
+      _levels = levels;
+      _alerts = alerts;
+      _selectedMaterial ??= _levels.isNotEmpty
+          ? _levels.first['skuCode']?.toString()
+          : _materials.isNotEmpty
+          ? _materials.first.skuCode
+          : null;
+      _selectedHistoryMaterialId = selectedHistoryId;
+      _error = failures.isEmpty
+          ? null
+          : 'Some live inventory data is unavailable. Pull down or tap Retry to refresh.';
+      _loading = false;
+    });
+    if (selectedHistoryId != null) {
+      final history = await _loadSection(
+        () => _inventory.fetchHistory(selectedHistoryId),
+        const <Map<String, dynamic>>[],
+        failures,
+      );
       if (mounted) {
         setState(() {
-          _error = exception.message;
-          _loading = false;
+          _history = history;
+          _error = failures.isEmpty
+              ? null
+              : 'Some live inventory data is unavailable. Pull down or tap Retry to refresh.';
         });
       }
     }
   }
 
-  Future<void> _runAiForMaterial(String materialId, num quantity) async {
-    if (materialId.isEmpty || quantity < 100 || quantity % 100 != 0) {
-      setState(
-        () => _error = 'Quantity must be at least 100 and increase by 100.',
-      );
+  Future<void> _openDataExtraction(String sku, num _) async {
+    if (!mounted) return;
+    setState(() {
+      _selectedMaterial = sku;
+      _analysis = null;
+      _index = 5;
+    });
+  }
+
+  Future<void> _runDataExtraction() async {
+    final materialSku = _selectedMaterial ?? _allMaterialOptions().firstOrNull?['sku'];
+    if (materialSku == null || materialSku.isEmpty) {
+      setState(() => _error = 'Select a material before analysing its stock data.');
       return;
     }
+
     setState(() {
-      _triggeringAi = true;
+      _analyzing = true;
       _error = null;
     });
     try {
-      final result = await _inventory.triggerReplenishment(
-        materialId: materialId,
-        requiredQuantity: quantity,
-      );
-      if (mounted) {
+      final levels = await _inventory.fetchStockLevels();
+      final analysis = levels
+          .where((level) =>
+              level['skuCode']?.toString().toLowerCase() == materialSku.toLowerCase())
+          .firstOrNull;
+      if (!mounted) return;
+      if (analysis == null) {
         setState(() {
-          _workflow = result;
-          _triggeringAi = false;
+          _levels = levels;
+          _analysis = null;
+          _error = 'No stock record exists yet for $materialSku.';
+          _analyzing = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Replenishment workflow initiated!')),
-        );
-        await _load();
+        return;
       }
+      setState(() {
+        _levels = levels;
+        _analysis = analysis;
+        _analyzing = false;
+      });
     } on ApiException catch (exception) {
       if (mounted) {
         setState(() {
           _error = exception.message;
-          _triggeringAi = false;
+          _analyzing = false;
         });
       }
     }
-  }
-
-  Future<void> _runAi() async {
-    final materialId =
-        _selectedMaterial ??
-        (_levels.isNotEmpty
-            ? _levels.first['skuCode']?.toString()
-            : _materials.firstOrNull?.skuCode);
-    if (materialId == null || materialId.isEmpty) return;
-    await _runAiForMaterial(materialId, _requiredQuantity);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Back to Factory Assistant',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        titleSpacing: 0,
         title: Text(_tabs[_index]),
         actions: [
           IconButton(
@@ -176,22 +226,30 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(_error!, textAlign: TextAlign.center),
-              ),
-            )
-          : IndexedStack(
-              index: _index,
+          : Column(
               children: [
-                _inventoryTab(),
-                _rollsTab(),
-                _levelsTab(),
-                _alertsTab(),
-                _historyTab(),
-                _agentTab(),
+                if (_error != null)
+                  MaterialBanner(
+                    backgroundColor: const Color(0xFF3A2424),
+                    content: Text(_error!),
+                    leading: const Icon(Icons.cloud_off_outlined),
+                    actions: [
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ],
+                  ),
+                Expanded(
+                  child: IndexedStack(
+                    index: _index,
+                    children: [
+                      _inventoryTab(),
+                      _rollsTab(),
+                      _levelsTab(),
+                      _alertsTab(),
+                      _historyTab(),
+                      _agentTab(),
+                    ],
+                  ),
+                ),
               ],
             ),
       bottomNavigationBar: NavigationBar(
@@ -214,7 +272,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           NavigationDestination(
             icon: Icon(Icons.smart_toy_outlined),
-            label: 'AI Agent',
+            label: 'Data Agent',
           ),
         ],
       ),
@@ -223,8 +281,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
 
   Widget _inventoryTab() => StockView(
     controller: _controller,
-    triggeringAi: _triggeringAi,
-    onTriggerAi: _runAiForMaterial,
+    onTriggerAi: _openDataExtraction,
   );
 
   Widget _rollsTab() => _rolls.isEmpty
@@ -260,15 +317,6 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
             final status = level['status']?.toString() ?? 'NORMAL';
             final sku = level['skuCode']?.toString() ?? '';
             final needsReorder = status == 'CRITICAL' || status == 'LOW';
-            final hasActiveAlert = _alerts.any(
-              (alert) =>
-                  alert.sku.toLowerCase() == sku.toLowerCase() &&
-                  const [
-                    'Pending',
-                    'Processing',
-                    'Acknowledged',
-                  ].contains(alert.status),
-            );
             return Card(
               child: ListTile(
                 title: Text(
@@ -280,14 +328,10 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                   '${level['skuCode'] ?? ''} • Burn rate: ${level['burnRate'] ?? 0} KG/day • ${level['daysRemaining'] ?? 0} days left',
                 ),
                 trailing: needsReorder
-                    ? hasActiveAlert
-                          ? const Text('In Progress')
-                          : TextButton.icon(
-                              onPressed: _triggeringAi
-                                  ? null
-                                  : () => _runAiForMaterial(sku, 2000),
+                    ? TextButton.icon(
+                              onPressed: () => _openDataExtraction(sku, 0),
                               icon: const Icon(Icons.auto_awesome, size: 16),
-                              label: const Text('Reorder via AI'),
+                              label: const Text('Analyze data'),
                             )
                     : Text(status),
               ),
@@ -414,25 +458,35 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     ],
   );
 
+  List<Map<String, String>> _allMaterialOptions() {
+    final optionsBySku = <String, Map<String, String>>{};
+    void addMaterial(String sku, String name) {
+      final cleanedSku = sku.trim();
+      if (cleanedSku.isEmpty) return;
+      optionsBySku.putIfAbsent(cleanedSku.toLowerCase(), () => {
+        'sku': cleanedSku,
+        'name': name.trim().isEmpty ? cleanedSku : name.trim(),
+      });
+    }
+
+    for (final material in _materials) {
+      addMaterial(material.skuCode, material.name);
+    }
+    for (final level in _levels) {
+      addMaterial(
+        level['skuCode']?.toString() ?? '',
+        level['materialName']?.toString() ?? '',
+      );
+    }
+    for (final item in _items) {
+      addMaterial(item.sku, item.name);
+    }
+    return optionsBySku.values.toList()
+      ..sort((left, right) => left['name']!.compareTo(right['name']!));
+  }
+
   Widget _agentTab() {
-    final materialOptions = _levels.isNotEmpty
-        ? _levels
-              .map(
-                (level) => <String, String>{
-                  'sku': level['skuCode']?.toString() ?? '',
-                  'name': level['materialName']?.toString() ?? '',
-                },
-              )
-              .where((material) => material['sku']!.isNotEmpty)
-              .toList()
-        : _materials
-              .map(
-                (material) => <String, String>{
-                  'sku': material.skuCode,
-                  'name': material.name,
-                },
-              )
-              .toList();
+    final materialOptions = _allMaterialOptions();
 
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
@@ -448,18 +502,18 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               const Center(child: Icon(Icons.smart_toy_outlined, size: 48)),
               const SizedBox(height: 16),
               const Text(
-                'LangGraph Multi-Agent Workflow',
+                'Data Extraction Agent',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Trigger autonomous replenishment through the ASP.NET Core API Gateway.',
+                'Reads live stock, burn rate, days remaining, and low-stock status for the selected material.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
               if (materialOptions.isEmpty)
-                const Text('No materials available for replenishment.')
+                const Text('No materials are available yet. Add or refresh inventory materials first.')
               else ...[
                 DropdownButtonFormField<String>(
                   isExpanded: true,
@@ -481,43 +535,31 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                         ),
                       )
                       .toList(),
-                  onChanged: _triggeringAi
+                  onChanged: _analyzing
                       ? null
                       : (value) => setState(() => _selectedMaterial = value),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: _requiredQuantity.toString(),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: const InputDecoration(labelText: 'Quantity (KG)'),
-                  onChanged: (value) {
-                    final parsed = num.tryParse(value);
-                    if (parsed != null) _requiredQuantity = parsed;
-                  },
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _triggeringAi ? null : _runAi,
-                    icon: _triggeringAi
+                    onPressed: _analyzing ? null : _runDataExtraction,
+                    icon: _analyzing
                         ? const SizedBox.square(
                             dimension: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.auto_awesome),
                     label: Text(
-                      _triggeringAi ? 'Initiating...' : 'Run Auto Replenishment',
+                      _analyzing ? 'Analysing...' : 'Analyze selected material',
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
               ],
-              if (_workflow != null) ...[
+              if (_analysis != null) ...[
                 const SizedBox(height: 20),
-                _workflowResultCard(_workflow!),
+                _analysisResultCard(_analysis!),
               ],
             ],
         ),
@@ -525,40 +567,32 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     );
   }
 
-  Widget _workflowResultCard(WorkerWorkflowResult result) => Card(
+  Widget _analysisResultCard(Map<String, dynamic> result) => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Workflow: ${result.workflowId ?? 'Active'}'),
-          Text('Status: ${result.status ?? 'Active'}'),
-          Text('Current Agent: ${result.currentAgent ?? 'Completed'}'),
-          Text('Approval: ${result.approvalStatus ?? 'Pending'}'),
-          Text('Requires Approval: ${result.requiresApproval ? 'Yes' : 'No'}'),
-          if (result.materialName != null)
-            Text(
-              'Material: ${result.materialSku ?? ''} - ${result.materialName}',
+          const Text(
+            'Live data extraction result',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text('Material: ${result['skuCode'] ?? ''} - ${result['materialName'] ?? ''}'),
+          Text('Current stock: ${result['currentStock'] ?? 0}'),
+          Text('Minimum stock: ${result['minimumStock'] ?? 0}'),
+          Text('Burn rate: ${result['burnRate'] ?? 0} per day'),
+          Text('Days remaining: ${result['daysRemaining'] ?? 0}'),
+          const SizedBox(height: 8),
+          Text(
+            'Status: ${result['status'] ?? 'Unknown'}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: (result['status']?.toString() == 'NORMAL')
+                  ? Colors.green
+                  : Colors.orange,
             ),
-          if (result.objective != null) Text('Objective: ${result.objective}'),
-          if (result.poNumber != null) ...[
-            const Divider(),
-            Text('PO Generated: ${result.poNumber}'),
-            Text('Supplier: ${result.supplierName ?? 'Unknown'}'),
-            Text('Quantity: ${result.quantity ?? _requiredQuantity} units'),
-            Text('Unit Price: ${result.unitPrice ?? 0}'),
-            Text('Total Amount: ${result.totalAmount ?? 0}'),
-            const SizedBox(height: 8),
-            Text(
-              result.requiresApproval
-                  ? 'Pending Manager Approval'
-                  : 'Workflow Completed',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: result.requiresApproval ? Colors.orange : Colors.green,
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     ),
@@ -643,7 +677,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                     ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'An active replenishment alert (${duplicate.status}) already exists for ${sku.text.trim()}.',
+                          'An active alert (${duplicate.status}) already exists for ${sku.text.trim()}.',
                         ),
                       ),
                     );

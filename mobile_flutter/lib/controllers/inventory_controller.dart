@@ -8,15 +8,15 @@ class InventoryController extends ChangeNotifier {
   InventoryController({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
 
-  String _packagingType = 'Standard Roll';
+  String? _packagingType;
   String _sku = '';
-  int _quantityRequested = 500;
+  int _quantityRequested = 0;
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
 
   // Getters
-  String get packagingType => _packagingType;
+  String? get packagingType => _packagingType;
   String get sku => _sku;
   int get quantityRequested => _quantityRequested;
   bool get isLoading => _isLoading;
@@ -24,7 +24,7 @@ class InventoryController extends ChangeNotifier {
   String? get successMessage => _successMessage;
 
   // Setters / State Mutators
-  void setPackagingType(String value) {
+  void setPackagingType(String? value) {
     _packagingType = value;
     notifyListeners();
   }
@@ -55,7 +55,10 @@ class InventoryController extends ChangeNotifier {
 
   /// Triggers the ApiService when the user submits the form.
   Future<bool> submitLowStockAlert() async {
-    if (_packagingType.isEmpty || _sku.isEmpty || _quantityRequested <= 0) {
+    if (_packagingType == null ||
+        _packagingType!.isEmpty ||
+        _sku.isEmpty ||
+        _quantityRequested <= 0) {
       _errorMessage = 'Please provide valid packaging type, SKU, and quantity > 0.';
       _successMessage = null;
       notifyListeners();
@@ -69,7 +72,7 @@ class InventoryController extends ChangeNotifier {
 
     try {
       final alert = LowStockAlert(
-        packagingType: _packagingType,
+        packagingType: _packagingType!,
         sku: _sku,
         quantityRequested: _quantityRequested,
       );
@@ -77,7 +80,7 @@ class InventoryController extends ChangeNotifier {
       final success = await _apiService.submitLowStockAlert(alert);
 
       if (success) {
-        _successMessage = 'Low stock alert for SKU "$_sku" ($_quantityRequested x $_packagingType) submitted to AI Coordinator!';
+        _successMessage = 'Low-stock alert for SKU "$_sku" ($_quantityRequested x $_packagingType) submitted.';
       } else {
         _errorMessage = 'Failed to submit low stock alert to backend.';
       }

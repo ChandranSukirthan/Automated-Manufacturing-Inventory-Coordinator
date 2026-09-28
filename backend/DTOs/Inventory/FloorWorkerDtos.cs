@@ -25,12 +25,12 @@ namespace backend.Dtos
         public decimal PreviousStock { get; set; }
         public decimal NewStock { get; set; }
         public string Reason { get; set; } = string.Empty;
-        public string User { get; set; } = "Floor Worker";
+        public string User { get; set; } = string.Empty;
     }
 
     public class QrLookupResultDto
     {
-        public string RollId { get; set; } = string.Empty;
+        public int RollId { get; set; }
         public string RollIdentifier { get; set; } = string.Empty;
         public string BarcodeUrl { get; set; } = string.Empty;
         public int RawMaterialId { get; set; }

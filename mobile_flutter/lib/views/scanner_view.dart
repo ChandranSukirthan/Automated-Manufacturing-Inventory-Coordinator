@@ -50,8 +50,8 @@ class _ScannerViewState extends State<ScannerView> {
         if (!mounted) return;
 
         widget.controller.setSku(
-          (roll?['rollIdentifier'] as String?)?.trim().isNotEmpty == true
-            ? roll!['rollIdentifier'] as String
+          (roll?['skuCode'] as String?)?.trim().isNotEmpty == true
+            ? roll!['skuCode'] as String
             : scannedCode,
         );
 
@@ -134,6 +134,12 @@ class _ScannerViewState extends State<ScannerView> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Switch front or rear camera',
+            icon: const Icon(Icons.cameraswitch_outlined, color: Colors.white),
+            onPressed: () => _scannerController.switchCamera(),
+          ),
+          IconButton(
+            tooltip: 'Toggle flashlight',
             icon: ValueListenableBuilder<MobileScannerState>(
               valueListenable: _scannerController,
               builder: (context, state, child) {
@@ -239,13 +245,7 @@ class _ScannerViewState extends State<ScannerView> {
 
                 // Yellow text button "Enter SKU Manually"
                 TextButton(
-                  onPressed: () {
-                    if (widget.onBack != null) {
-                      widget.onBack!();
-                    } else if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                    }
-                  },
+                  onPressed: _showManualSkuEntry,
                   child: const Text(
                     'Enter SKU Manually',
                     style: TextStyle(
@@ -281,4 +281,91 @@ class _ScannerViewState extends State<ScannerView> {
       ),
     );
   }
+
+  Future<void> _showManualSkuEntry() async {
+    final skuController = TextEditingController(text: widget.controller.sku);
+    String? enteredSku;
+    try {
+      enteredSku = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Enter material SKU'),
+          content: TextField(
+            controller: skuController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              labelText: 'Material SKU',
+              hintText: 'e.g. CR-001',
+            ),
+            onSubmitted: (value) => Navigator.pop(dialogContext, value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, skuController.text),
+              child: const Text('Use SKU'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      skuController.dispose();
+    }
+
+    final sku = enteredSku?.trim();
+    if (sku == null || sku.isEmpty || !mounted) return;
+
+    // Manual input must select a material that actually exists in the live
+    // catalogue.  This prevents arbitrary text such as "Testsku" from being
+    // carried into a low-stock alert as though it were an inventory item.
+    try {
+      final materials = await _inventoryApi.fetchRawMaterials();
+      final normalizedSku = _normalizeSku(sku);
+      final matchingMaterial = materials.where(
+        (material) => _normalizeSku(material.skuCode) == normalizedSku,
+      );
+      if (matchingMaterial.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'SKU not found. Select an existing material from inventory.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      widget.controller.setSku(matchingMaterial.first.skuCode);
+    } on ApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(exception.message)),
+        );
+      }
+      return;
+    }
+
+    // Do not add a snackbar or stop the camera while popping this route. The
+    // old sequence raced the scanner's native view teardown and could cause a
+    // Flutter render-tree assertion after manual entry.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    });
+  }
+
+  String _normalizeSku(String value) => value
+      .trim()
+      .toUpperCase()
+      .replaceAll('-', '')
+      .replaceAll(' ', '');
 }

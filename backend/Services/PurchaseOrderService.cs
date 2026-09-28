@@ -321,9 +321,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
                         var newRoll = new backend.Models.InventoryRoll
                         {
-                            Id = rollId,
                             RollIdentifier = rollId,
-                            BatchId = "BATCH001",
                             RawMaterialId = material.Id,
                             InitialQuantity = line.Quantity,
                             CurrentQuantity = line.Quantity,

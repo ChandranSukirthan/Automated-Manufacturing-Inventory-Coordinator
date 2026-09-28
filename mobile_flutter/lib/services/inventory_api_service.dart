@@ -1,6 +1,5 @@
 import 'api_client.dart';
 import 'session_storage.dart';
-import '../models/worker_workflow_models.dart';
 
 int _toInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 num _toNum(dynamic value) => value is num ? value : num.tryParse('$value') ?? 0;
@@ -166,17 +165,6 @@ class InventoryApiService {
     return data.cast<Map<String, dynamic>>();
   }
 
-  Future<WorkerWorkflowResult> triggerReplenishment({
-    required String materialId,
-    required num requiredQuantity,
-  }) async {
-    final data = await _api.post('/inventory/trigger-replenishment', {
-      'materialId': materialId,
-      'requiredQuantity': requiredQuantity,
-    });
-    return WorkerWorkflowResult.fromJson(data as Map<String, dynamic>);
-  }
-
   Future<void> updateAlertStatus(int id, String status) async {
     await _api.put('/inventory/alerts/$id', {'status': status});
   }
@@ -239,12 +227,4 @@ class InventoryApiService {
       await _api.get('/inventory/roll/qr/${Uri.encodeComponent(qrCode)}')
           as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> triggerDataExtractionAgent(String batchName) async {
-    final data = await _api.post('/inventory/trigger-replenishment', {
-      'objective': 'Floor Worker Stock Replenishment: Analyze $batchName',
-      'materialId': batchName,
-      'requiredQuantity': 2000,
-    });
-    return data as Map<String, dynamic>;
-  }
 }

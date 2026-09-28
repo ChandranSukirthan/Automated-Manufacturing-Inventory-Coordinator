@@ -43,7 +43,7 @@ class InventoryHistoryOutput(BaseModel):
 class BurnRateInput(BaseModel):
     consumption: float = Field(..., ge=0, description="Historical consumption quantity")
     periodDays: int = Field(..., description="Number of days over which consumption occurred")
-    materialId: Optional[str] = Field(default="RM001", description="Material identifier")
+    materialId: Optional[str] = Field(default=None, description="Material identifier")
 
 
 class BurnRateOutput(BaseModel):
@@ -52,12 +52,12 @@ class BurnRateOutput(BaseModel):
 
 
 class LowStockInput(BaseModel):
-    materialId: Optional[str] = Field(default="RM001", description="Material identifier")
+    materialId: Optional[str] = Field(default=None, description="Material identifier")
     currentStock: float = Field(..., ge=0, description="Current stock level")
     minimumStock: float = Field(..., ge=0, description="Safety reorder threshold")
     burnRate: float = Field(..., ge=0, description="Daily consumption burn rate")
     daysRemaining: Optional[float] = Field(default=None, description="Calculated days of supply remaining")
-    supplierLeadTime: float = Field(default=3.0, ge=0, description="Supplier delivery lead time in days")
+    supplierLeadTime: float = Field(default=0.0, ge=0, description="Supplier delivery lead time in days")
 
 
 class LowStockOutput(BaseModel):

@@ -59,6 +59,12 @@ namespace ManufacturingCoordinator.Data
                     .IsRequired()
                     .HasMaxLength(150);
 
+                entity.Property(u => u.EmployeeId)
+                    .HasMaxLength(16);
+
+                entity.HasIndex(u => u.EmployeeId)
+                    .IsUnique();
+
                 entity.Property(u => u.Email)
                     .IsRequired()
                     .HasMaxLength(256);

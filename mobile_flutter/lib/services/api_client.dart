@@ -105,6 +105,7 @@ class ApiClient {
           ...data,
           'user': {
             'id': oldSession.user.id,
+            'employeeId': oldSession.user.employeeId,
             'fullName': oldSession.user.fullName,
             'email': oldSession.user.email,
             'role': oldSession.user.role,

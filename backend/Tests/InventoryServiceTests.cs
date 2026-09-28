@@ -120,7 +120,7 @@ namespace backend.Tests
                 CurrentQuantity = 450m,
                 Status = "In Stock"
             });
-            Assert.False(string.IsNullOrEmpty(roll.Id));
+            Assert.True(roll.Id > 0);
             Assert.False(string.IsNullOrEmpty(roll.BarcodeUrl));
 
             // QR CODE LOOKUP
@@ -170,6 +170,52 @@ namespace backend.Tests
             // Confirm StockAlert was automatically registered
             var alerts = await service.GetStockAlertsAsync();
             Assert.Contains(alerts, a => a.Sku == "RM-POLY-LOW");
+        }
+
+        [Fact]
+        public async Task GetStockAlertsAsync_ReturnsOnlyTheLatestAlertForEachSku()
+        {
+            var context = CreateInMemoryContext();
+            var service = CreateService(context);
+            var earlier = DateTime.UtcNow.AddMinutes(-10);
+            var latest = DateTime.UtcNow;
+
+            context.StockAlerts.AddRange(
+                new StockAlert
+                {
+                    Sku = "CR-001",
+                    PackagingType = "BoxPouch",
+                    QuantityRequested = 500,
+                    Status = "Pending",
+                    Timestamp = earlier,
+                    WorkerId = "Floor Worker"
+                },
+                new StockAlert
+                {
+                    Sku = "CR-001",
+                    PackagingType = "BoxPouch",
+                    QuantityRequested = 650,
+                    Status = "Processing",
+                    Timestamp = latest,
+                    WorkerId = "Floor Worker"
+                },
+                new StockAlert
+                {
+                    Sku = "CR-002",
+                    PackagingType = "Can",
+                    QuantityRequested = 300,
+                    Status = "Pending",
+                    Timestamp = latest,
+                    WorkerId = "Floor Worker"
+                });
+            await context.SaveChangesAsync();
+
+            var alerts = (await service.GetStockAlertsAsync()).ToList();
+
+            Assert.Equal(2, alerts.Count);
+            var boxPouchAlert = Assert.Single(alerts, alert => alert.Sku == "CR-001");
+            Assert.Equal(650, boxPouchAlert.QuantityRequested);
+            Assert.Equal("Processing", boxPouchAlert.Status);
         }
     }
 }

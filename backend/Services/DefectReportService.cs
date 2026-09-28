@@ -97,16 +97,13 @@ namespace ManufacturingCoordinator.Api.Services
                 .Where(d => d.BatchId == batchId)
                 .Select(d => d.AffectedInventoryJson)
                 .ToListAsync();
-            var duplicateRoll = batchDefects
-                .SelectMany(DeserializeInventory)
-                .Intersect(affectedInventory, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (duplicateRoll != null || (affectedInventory.Count == 0 && batchDefects.Count > 0))
+            // A batch must have one authoritative defect report. Allowing a
+            // second report for different rolls made the batch status
+            // ambiguous and bypassed the duplicate-report business rule.
+            if (batchDefects.Count > 0)
             {
                 throw new AuthException(
-                    duplicateRoll == null
-                        ? "A defect has already been created for this batch."
-                        : $"A defect has already been created for inventory roll {duplicateRoll}.",
+                    "A defect has already been created for this batch.",
                     HttpStatusCode.Conflict);
             }
 
@@ -167,16 +164,10 @@ namespace ManufacturingCoordinator.Api.Services
                 .Where(d => d.BatchId == batchId && d.Id != id)
                 .Select(d => d.AffectedInventoryJson)
                 .ToListAsync();
-            var duplicateRoll = otherBatchDefects
-                .SelectMany(DeserializeInventory)
-                .Intersect(affectedInventory, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (duplicateRoll != null || (affectedInventory.Count == 0 && otherBatchDefects.Count > 0))
+            if (otherBatchDefects.Count > 0)
             {
                 throw new AuthException(
-                    duplicateRoll == null
-                        ? "A defect has already been created for this batch."
-                        : $"A defect has already been created for inventory roll {duplicateRoll}.",
+                    "A defect has already been created for this batch.",
                     HttpStatusCode.Conflict);
             }
 
@@ -248,12 +239,13 @@ namespace ManufacturingCoordinator.Api.Services
             }
             var rollIds = affectedInventory?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList() ?? new List<string>();
             var rolls = _inventoryDb.InventoryRolls.Where(roll => roll.RawMaterial != null && roll.RawMaterial.SkuCode == skuCode.Trim());
+            var inventoryRolls = await rolls.ToListAsync();
             if (rollIds.Count > 0)
             {
-                rolls = rolls.Where(roll => rollIds.Contains(roll.Id));
+                inventoryRolls = inventoryRolls
+                    .Where(roll => rollIds.Contains(roll.Id.ToString()))
+                    .ToList();
             }
-
-            var inventoryRolls = await rolls.ToListAsync();
             if (inventoryRolls.Count == 0)
             {
                 throw new AuthException("No inventory rolls were found for the selected SKU.", HttpStatusCode.NotFound);

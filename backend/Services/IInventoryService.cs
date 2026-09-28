@@ -28,11 +28,11 @@ namespace backend.Services
 
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();
-        Task<InventoryRoll?> GetInventoryRollByIdAsync(string id);
+        Task<InventoryRoll?> GetInventoryRollByIdAsync(int id);
         Task<QrLookupResultDto?> GetInventoryRollByQrAsync(string qrCode);
         Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
-        Task<bool> UpdateInventoryRollAsync(string id, InventoryRoll roll);
-        Task<bool> DeleteInventoryRollAsync(string id);
+        Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll);
+        Task<bool> DeleteInventoryRollAsync(int id);
 
         // Student 1: Stock Levels & Business Calculations
         Task<IEnumerable<StockLevelDetailDto>> GetStockLevelsAsync();
@@ -44,6 +44,6 @@ namespace backend.Services
         Task<IEnumerable<InventoryHistoryItemDto>> GetInventoryHistoryAsync(int rawMaterialId);
 
         // Student 1: Proxy AI Trigger via ASP.NET Core
-        Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto);
+        Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto, string? authorizationHeader);
     }
 }

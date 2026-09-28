@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using backend.Dtos;
 using backend.Services;
@@ -9,6 +10,9 @@ namespace backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    // Stock-level routes are defined in this controller as well as inventory
+    // routes. Keep the worker role read/write access explicit at the boundary.
+    [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
     public class InventoryController : ControllerBase
     {
         private readonly IInventoryService _inventoryService;
@@ -136,8 +140,8 @@ namespace backend.Controllers
         }
 
         // GET: api/inventory/rolls/{id}
-        [HttpGet("rolls/{id}")]
-        public async Task<ActionResult<InventoryRoll>> GetRollById(string id)
+        [HttpGet("rolls/{id:int}")]
+        public async Task<ActionResult<InventoryRoll>> GetRollById(int id)
         {
             var roll = await _inventoryService.GetInventoryRollByIdAsync(id);
             if (roll == null) return NotFound($"Roll {id} not found.");
@@ -161,8 +165,8 @@ namespace backend.Controllers
         }
 
         // PUT: api/inventory/rolls/{id}
-        [HttpPut("rolls/{id}")]
-        public async Task<IActionResult> UpdateRoll(string id, [FromBody] InventoryRoll roll)
+        [HttpPut("rolls/{id:int}")]
+        public async Task<IActionResult> UpdateRoll(int id, [FromBody] InventoryRoll roll)
         {
             if (id != roll.Id) return BadRequest("ID mismatch.");
             var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
@@ -171,8 +175,8 @@ namespace backend.Controllers
         }
 
         // DELETE: api/inventory/rolls/{id}
-        [HttpDelete("rolls/{id}")]
-        public async Task<IActionResult> DeleteRoll(string id)
+        [HttpDelete("rolls/{id:int}")]
+        public async Task<IActionResult> DeleteRoll(int id)
         {
             var deleted = await _inventoryService.DeleteInventoryRollAsync(id);
             if (!deleted) return NotFound();
@@ -226,6 +230,10 @@ namespace backend.Controllers
         public async Task<ActionResult<StockAlertResponseDto>> CreateLowStockAlert([FromBody] CreateStockAlertDto alertDto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!AssignWorkerEmployeeId(alertDto))
+            {
+                return BadRequest("Floor worker employee ID is missing. Please sign in again.");
+            }
             var created = await _inventoryService.CreateStockAlertAsync(alertDto);
             return Ok(created);
         }
@@ -243,6 +251,10 @@ namespace backend.Controllers
         public async Task<ActionResult<StockAlertResponseDto>> CreateAlert([FromBody] CreateStockAlertDto alertDto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!AssignWorkerEmployeeId(alertDto))
+            {
+                return BadRequest("Floor worker employee ID is missing. Please sign in again.");
+            }
             var created = await _inventoryService.CreateStockAlertAsync(alertDto);
             return CreatedAtAction(nameof(GetAlerts), new { id = created.Id }, created);
         }
@@ -278,8 +290,29 @@ namespace backend.Controllers
         public async Task<IActionResult> TriggerReplenishment([FromBody] TriggerReplenishmentDto dto)
         {
             if (dto == null) return BadRequest("Replenishment request is empty.");
-            var result = await _inventoryService.TriggerAgentReplenishmentAsync(dto);
-            return Ok(result);
+            try
+            {
+                var result = await _inventoryService.TriggerAgentReplenishmentAsync(
+                    dto,
+                    Request.Headers.Authorization.ToString());
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
+            }
+        }
+
+        private bool AssignWorkerEmployeeId(CreateStockAlertDto alertDto)
+        {
+            var employeeId = User.FindFirst("employee_id")?.Value;
+            if (string.IsNullOrWhiteSpace(employeeId)) return false;
+            alertDto.WorkerId = employeeId;
+            return true;
         }
     }
 }

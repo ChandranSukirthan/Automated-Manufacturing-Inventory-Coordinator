@@ -12,6 +12,7 @@ using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
+using ManufacturingCoordinator.Api.Services;
 using RawMaterial = backend.Models.RawMaterial;
 
 namespace ManufacturingCoordinator.Data
@@ -24,13 +25,14 @@ namespace ManufacturingCoordinator.Data
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
 
-            // 1. Seed Users for all roles
+            // 1. Seed roles. The verified development worker avoids an email-OTP
+            // dependency during local testing; registered Floor Workers start at EMP0001.
             var seedUsers = new[]
             {
                 ("admin@amic.com", "System Admin", "Admin@123", UserRole.ITAdmin),
-                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker),
                 ("manager@amic.com", "Supply Chain Manager", "Manager@123", UserRole.SupplyChainManager),
-                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector)
+                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector),
+                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker)
             };
 
             foreach (var (email, name, pwd, role) in seedUsers)
@@ -44,6 +46,10 @@ namespace ManufacturingCoordinator.Data
                     existing.Role = role;
                     existing.IsEmailVerified = true;
                     existing.IsActive = true;
+                    if (role == UserRole.FloorWorker)
+                    {
+                        existing.EmployeeId = "EMP0000";
+                    }
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -54,12 +60,15 @@ namespace ManufacturingCoordinator.Data
                         Email = email,
                         PasswordHash = hash,
                         Role = role,
+                        EmployeeId = role == UserRole.FloorWorker ? "EMP0000" : null,
                         IsEmailVerified = true,
                         IsActive = true
                     });
                 }
             }
             await db.SaveChangesAsync();
+
+            await FloorWorkerEmployeeIdGenerator.AssignMissingAsync(db);
 
             await SeedEntitiesAsync(db);
         }

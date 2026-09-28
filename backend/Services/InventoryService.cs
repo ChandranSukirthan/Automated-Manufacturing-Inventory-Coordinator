@@ -136,7 +136,16 @@ namespace backend.Services
 
         public async Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync()
         {
+            var newestAlertIdsBySku = _context.StockAlerts
+                .GroupBy(alert => alert.Sku)
+                .Select(group => group.Max(alert => alert.Id));
+
             return await _context.StockAlerts
+                .AsNoTracking()
+                // A floor-worker card represents the newest saved alert for a
+                // SKU.  The grouped subquery prevents old duplicate rows from
+                // appearing as repeated cards in the returned JSON.
+                .Where(alert => newestAlertIdsBySku.Contains(alert.Id))
                 .OrderByDescending(alert => alert.Timestamp)
                 .Select(alert => new StockAlertResponseDto
                 {
@@ -175,7 +184,7 @@ namespace backend.Services
                 Sku = alertDto.Sku,
                 PackagingType = alertDto.PackagingType,
                 QuantityRequested = alertDto.QuantityRequested,
-                WorkerId = string.IsNullOrWhiteSpace(alertDto.WorkerId) ? "Floor Worker" : alertDto.WorkerId,
+                WorkerId = alertDto.WorkerId,
                 Status = "Pending",
                 Timestamp = DateTime.UtcNow
             };
@@ -209,8 +218,11 @@ namespace backend.Services
         public async Task<IEnumerable<RawMaterial>> GetRawMaterialsAsync()
         {
             return await _context.RawMaterials
-                .Include(r => r.InventoryRolls)
-                .Include(r => r.StockLevels)
+                // The list endpoint only needs the material catalogue.  Loading
+                // both child collections here creates a Cartesian join and can
+                // duplicate rows (or fail under warning-as-error settings).
+                // Detail endpoints load related data only when it is needed.
+                .AsNoTracking()
                 .OrderBy(r => r.Id)
                 .ToListAsync();
         }
@@ -270,7 +282,7 @@ namespace backend.Services
                 .ToListAsync();
         }
 
-        public async Task<InventoryRoll?> GetInventoryRollByIdAsync(string id)
+        public async Task<InventoryRoll?> GetInventoryRollByIdAsync(int id)
         {
             return await _context.InventoryRolls
                 .Include(r => r.RawMaterial)
@@ -332,34 +344,10 @@ namespace backend.Services
                 }
             }
 
-            if (_context.Database.IsRelational())
-            {
-                var requestedBatchId = roll.BatchId ?? string.Empty;
-                var batchId = await _context.Database
-                    .SqlQueryRaw<string>("SELECT \"Id\" AS \"Value\" FROM \"Batches\" WHERE \"Id\" = {0} LIMIT 1", requestedBatchId)
-                    .FirstOrDefaultAsync();
-                if (batchId == null)
-                {
-                    batchId = await _context.Database
-                        .SqlQueryRaw<string>("SELECT \"Id\" AS \"Value\" FROM \"Batches\" ORDER BY \"Id\" LIMIT 1")
-                        .FirstOrDefaultAsync();
-                }
-                if (batchId == null)
-                {
-                    throw new InvalidOperationException("No batch is available for the new inventory roll.");
-                }
-                roll.BatchId = batchId;
-            }
-
             if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
             {
                 roll.RollIdentifier = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
             }
-            if (string.IsNullOrWhiteSpace(roll.Id))
-            {
-                roll.Id = roll.RollIdentifier;
-            }
-
             roll.BarcodeUrl = _barcodeService.GenerateQrCodeUrl(roll.RollIdentifier);
             roll.CreatedAt = DateTime.UtcNow;
             roll.UpdatedAt = DateTime.UtcNow;
@@ -372,7 +360,7 @@ namespace backend.Services
             return roll;
         }
 
-        public async Task<bool> UpdateInventoryRollAsync(string id, InventoryRoll roll)
+        public async Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll)
         {
             if (id != roll.Id) return false;
             var existing = await _context.InventoryRolls.FindAsync(id);
@@ -387,7 +375,7 @@ namespace backend.Services
             return true;
         }
 
-        public async Task<bool> DeleteInventoryRollAsync(string id)
+        public async Task<bool> DeleteInventoryRollAsync(int id)
         {
             var roll = await _context.InventoryRolls.FindAsync(id);
             if (roll == null) return false;
@@ -421,17 +409,9 @@ namespace backend.Services
 
             foreach (var m in materials)
             {
-                // Calculate stock from active available rolls (strictly excluding Depleted and Quarantined)
-                var activeRolls = m.InventoryRolls.Where(r => 
-                    !r.Status.Equals("Depleted", StringComparison.OrdinalIgnoreCase) &&
-                    !r.Status.Equals("Quarantined", StringComparison.OrdinalIgnoreCase));
-                var currentStock = activeRolls.Any() ? activeRolls.Sum(r => r.CurrentQuantity) : (m.ReorderThreshold * 1.5m);
+                var (currentStock, burnRate) = GetLiveInventoryMetrics(m);
                 var minStock = m.ReorderThreshold;
                 var maxStock = minStock * 5m;
-
-                // Estimate burn rate based on category / historical rate
-                var burnRate = m.SkuCode.Contains("STEEL", StringComparison.OrdinalIgnoreCase) ? 80m :
-                               m.SkuCode.Contains("ALUM", StringComparison.OrdinalIgnoreCase) ? 25m : 180m;
                 var daysRemaining = CalculateDaysRemaining(currentStock, burnRate);
 
                 var status = currentStock <= (minStock * 0.5m) || daysRemaining <= 3 ? "CRITICAL" :
@@ -456,6 +436,28 @@ namespace backend.Services
             return list;
         }
 
+        private (decimal CurrentStock, decimal BurnRate) GetLiveInventoryMetrics(RawMaterial material)
+        {
+            var rolls = material.InventoryRolls.ToList();
+            var currentStock = rolls
+                .Where(roll =>
+                    !roll.Status.Equals("Depleted", StringComparison.OrdinalIgnoreCase) &&
+                    !roll.Status.Equals("Quarantined", StringComparison.OrdinalIgnoreCase))
+                .Sum(roll => roll.CurrentQuantity);
+            var historicalConsumption = rolls
+                .Where(roll => roll.InitialQuantity > roll.CurrentQuantity)
+                .Sum(roll => roll.InitialQuantity - roll.CurrentQuantity);
+            var firstRecordedAt = rolls
+                .Select(roll => roll.ReceivedDate)
+                .DefaultIfEmpty(material.CreatedAt)
+                .Min();
+            var recordedDays = Math.Max(
+                1,
+                (int)Math.Ceiling((DateTime.UtcNow - firstRecordedAt).TotalDays));
+
+            return (currentStock, CalculateBurnRate(historicalConsumption, recordedDays));
+        }
+
         public async Task<StockLevel> CreateStockLevelAsync(StockLevel stockLevel)
         {
             stockLevel.RecordedAt = DateTime.UtcNow;
@@ -475,13 +477,8 @@ namespace backend.Services
                 return new LowStockItemDto { MaterialId = rawMaterialId, LowStock = false, Reason = "Material not found" };
             }
 
-            var activeRolls = material.InventoryRolls.Where(r => 
-                !r.Status.Equals("Depleted", StringComparison.OrdinalIgnoreCase) &&
-                !r.Status.Equals("Quarantined", StringComparison.OrdinalIgnoreCase));
-            var currentStock = activeRolls.Any() ? activeRolls.Sum(r => r.CurrentQuantity) : 0m;
+            var (currentStock, burnRate) = GetLiveInventoryMetrics(material);
             var minStock = material.ReorderThreshold;
-            var burnRate = material.SkuCode.Contains("STEEL", StringComparison.OrdinalIgnoreCase) ? 80m :
-                           material.SkuCode.Contains("ALUM", StringComparison.OrdinalIgnoreCase) ? 25m : 180m;
             var daysRemaining = CalculateDaysRemaining(currentStock, burnRate);
 
             var isLow = currentStock <= minStock || daysRemaining <= 5m;
@@ -589,8 +586,19 @@ namespace backend.Services
 
         // ========== Student 1: Proxy AI Replenishment Trigger via ASP.NET Core ==========
 
-        public async Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto)
+        public async Task<object> TriggerAgentReplenishmentAsync(
+            TriggerReplenishmentDto dto,
+            string? authorizationHeader)
         {
+            if (string.IsNullOrWhiteSpace(dto.MaterialId))
+            {
+                throw new ArgumentException("Select a material before starting the AI workflow.");
+            }
+            if (dto.RequiredQuantity <= 0)
+            {
+                throw new ArgumentException("Requested quantity must be greater than zero.");
+            }
+
             var agentBaseUrl = _configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000";
             var objective = !string.IsNullOrWhiteSpace(dto.Objective)
                 ? dto.Objective
@@ -610,21 +618,21 @@ namespace backend.Services
             }
             if (material == null)
             {
-                material = await _context.RawMaterials.FirstOrDefaultAsync();
+                throw new ArgumentException("The selected material no longer exists. Refresh and choose it again.");
             }
 
-            var materialSku = material?.SkuCode ?? (!string.IsNullOrWhiteSpace(dto.MaterialId) ? dto.MaterialId : "RM-STEEL-001");
-            var materialName = material?.Name ?? "Cold Rolled Steel Sheet";
+            var materialSku = material.SkuCode;
+            var materialName = material.Name;
 
             string? wfId = null;
-            string? currentAgent = "Purchasing";
-            string? workflowStatus = "WaitingForApproval";
-            string? approvalStatus = "Pending";
-            bool requiresApproval = true;
-            decimal draftQty = dto.RequiredQuantity > 0 ? dto.RequiredQuantity : 2000m;
-            decimal draftUnitPrice = 4.50m;
-            string draftSupplierCode = "SUP-001";
-            string draftSupplierName = "Apex Industrial Metals";
+            string? currentAgent = null;
+            string? workflowStatus = null;
+            string? approvalStatus = null;
+            bool requiresApproval = false;
+            decimal draftQty = dto.RequiredQuantity;
+            decimal draftUnitPrice = 0m;
+            string? draftSupplierCode = null;
+            string? draftSupplierName = null;
             string? draftPoNumber = null;
             object? agentRawResult = null;
 
@@ -639,7 +647,18 @@ namespace backend.Services
                     required_quantity = (double)draftQty
                 };
 
-                var resp = await client.PostAsJsonAsync($"{agentBaseUrl}/api/workflows/trigger", payload);
+                using var agentRequest = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"{agentBaseUrl}/api/workflows/trigger")
+                {
+                    Content = JsonContent.Create(payload)
+                };
+                if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                {
+                    agentRequest.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+                }
+
+                var resp = await client.SendAsync(agentRequest);
                 if (resp.IsSuccessStatusCode)
                 {
                     var jsonDoc = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
@@ -674,23 +693,36 @@ namespace backend.Services
                 }
                 else
                 {
-                    _logger.LogWarning("Agent AI returned non-success code {StatusCode}", resp.StatusCode);
+                    var agentError = await resp.Content.ReadAsStringAsync();
+                    throw new HttpRequestException(
+                        $"The AI agent could not start the workflow ({(int)resp.StatusCode}). {agentError}".Trim());
                 }
+            }
+            catch (HttpRequestException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Agent AI microservice unavailable; operating in autonomous queue fallback");
+                _logger.LogWarning(ex, "Agent AI microservice is unavailable");
+                throw new HttpRequestException(
+                    "The AI agent is unavailable. Start the AI service and try again.", ex);
             }
 
-            // Fallback workflow ID if none returned
-            wfId ??= $"WF-AI-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+            if (string.IsNullOrWhiteSpace(wfId))
+            {
+                throw new HttpRequestException("The AI agent returned a workflow without an ID.");
+            }
 
             // 3. Create or Sync Purchase Order in ApplicationDbContext for Supply Chain Manager
             int? createdPoId = null;
             string? finalPoNumber = null;
             decimal totalAmount = draftQty * draftUnitPrice;
 
-            if (_appContext != null)
+            if (_appContext != null &&
+                !string.IsNullOrWhiteSpace(draftSupplierCode) &&
+                !string.IsNullOrWhiteSpace(draftSupplierName) &&
+                draftUnitPrice > 0)
             {
                 try
                 {
