@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,10 +17,14 @@ namespace backend.Controllers
     public class InventoryController : ControllerBase
     {
         private readonly IInventoryService _inventoryService;
+        private readonly IBarcodeService _barcodeService;
 
-        public InventoryController(IInventoryService inventoryService)
+        public InventoryController(
+            IInventoryService inventoryService,
+            IBarcodeService barcodeService)
         {
             _inventoryService = inventoryService;
+            _barcodeService = barcodeService;
         }
 
         // =========================================================================
@@ -301,7 +306,61 @@ namespace backend.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+<<<<<<< HEAD
             catch (System.Net.Http.HttpRequestException ex)
+=======
+
+            return Ok(item); // Returns a 200 OK with the item data
+        }
+
+        // GET: api/inventory/rolls/{rollIdentifier}/qr
+        // Flutter loads this authenticated API URL; it never receives a provider URL.
+        [HttpGet("rolls/{rollIdentifier}/qr")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        [Produces("image/png")]
+        public async Task<IActionResult> GetInventoryRollQrCode(
+            string rollIdentifier,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(rollIdentifier) ||
+                rollIdentifier.Length is < 2 or > 64 ||
+                !rollIdentifier.All(character =>
+                    char.IsLetterOrDigit(character) || character is '-' or '_'))
+            {
+                return BadRequest("Invalid inventory-roll identifier.");
+            }
+
+            var roll = await _inventoryService.GetInventoryRollByIdentifierAsync(rollIdentifier);
+            if (roll is null)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                var image = await _barcodeService.GenerateInventoryRollQrAsync(
+                    roll.RollIdentifier,
+                    cancellationToken);
+                return File(image.Bytes, image.ContentType);
+            }
+            catch (QrCodeProviderException)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status502BadGateway,
+                    title: "QR code provider is unavailable.");
+            }
+            catch (ArgumentException)
+            {
+                return BadRequest("Invalid inventory-roll identifier.");
+            }
+        }
+
+        // Student A - POST: api/inventory/rolls
+        [HttpPost("rolls")]
+        public async Task<ActionResult<InventoryRoll>> CreateRoll([FromBody] InventoryRoll roll)
+        {
+            if (!ModelState.IsValid)
+>>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
             {
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
             }

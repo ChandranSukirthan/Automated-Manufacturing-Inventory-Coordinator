@@ -18,6 +18,7 @@ namespace backend.Services
 {
     public class InventoryService : IInventoryService
     {
+<<<<<<< HEAD
         private readonly ManufacturingContext _context;
         private readonly ApplicationDbContext? _appContext;
         private readonly IBarcodeService _barcodeService;
@@ -36,6 +37,13 @@ namespace backend.Services
             _configuration = configuration;
             _logger = logger;
             _appContext = appContext;
+=======
+        private readonly ApplicationDbContext _context; // Changed to ApplicationDbContext
+
+        public InventoryService(ApplicationDbContext context)
+        {
+            _context = context;
+>>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
         }
 
         // ========== Legacy / Generic Inventory Items ==========
@@ -229,10 +237,62 @@ namespace backend.Services
 
         public async Task<RawMaterial?> GetRawMaterialByIdAsync(int id)
         {
+<<<<<<< HEAD
             return await _context.RawMaterials
                 .Include(r => r.InventoryRolls)
                 .Include(r => r.StockLevels)
                 .FirstOrDefaultAsync(r => r.Id == id);
+=======
+            var item = await _context.InventoryItems.FindAsync(id);
+            if (item == null)
+            {
+                return false;
+            }
+
+            _context.InventoryItems.Remove(item);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item)
+        {
+            _context.InventoryItems.Add(item);
+            await _context.SaveChangesAsync();
+            return item;
+        }
+
+        public async Task<InventoryItem> GetInventoryItemByIdAsync(int id)
+        {
+            return await _context.InventoryItems.FindAsync(id);
+        }
+
+        public async Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll)
+        {
+            if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
+            {
+                throw new ArgumentException("RollIdentifier is required.");
+            }
+
+            roll.RollIdentifier = roll.RollIdentifier.Trim();
+            roll.CreatedAt = DateTime.UtcNow;
+            roll.UpdatedAt = DateTime.UtcNow;
+
+            _context.InventoryRolls.Add(roll);
+            await _context.SaveChangesAsync();
+
+            // The app serves this image through its authenticated API endpoint.
+            // Do not store a third-party URL or make external calls on writes.
+            roll.BarcodeUrl = $"/api/inventory/rolls/{Uri.EscapeDataString(roll.RollIdentifier)}/qr";
+            await _context.SaveChangesAsync();
+            return roll;
+>>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
+        }
+
+        public async Task<InventoryRoll?> GetInventoryRollByIdentifierAsync(string rollIdentifier)
+        {
+            return await _context.InventoryRolls
+                .AsNoTracking()
+                .FirstOrDefaultAsync(roll => roll.RollIdentifier == rollIdentifier);
         }
 
         public async Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material)

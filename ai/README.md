@@ -13,7 +13,35 @@ The required AMIC agent architecture remains:
 3. Purchasing
 4. Validation/Safety
 
+<<<<<<< HEAD
 Quality is subordinate functionality used by the Validation/Safety layer. In the current repository, there is no complete team LangGraph graph containing those four agents. The implemented `quality_agent.py` is an AgentState-compatible Validation/Safety helper; it is not a fifth mandatory agent.
+=======
+## Data Extraction Agent (Student A)
+
+`agents/data_extraction_agent.py` is the inventory-focused LangGraph subgraph.
+It accepts a validated JSON object containing `product_type` (`BoxPouch`,
+`TeaBag`, `Can`, or `Bottle`), `batch_id`, and `material_sku`. The agent always
+calls only these two read-only tools:
+
+1. `query_production_db` - mock production history and upcoming schedules.
+2. `get_inventory_levels` - mock current, reserved, and reorder inventory.
+
+The returned JSON includes historical average burn-rate, current allocatable
+stock, upcoming material demand, shortfall/replenishment recommendation, the
+two tool calls, and any safe-failure errors. The mock dictionaries are clearly
+isolated in the agent module so they can be replaced by parameterised backend
+queries without changing its validated contract or graph.
+
+Run its focused tests with:
+
+```powershell
+pytest tests/test_data_extraction_agent.py -v
+```
+
+---
+
+## 🛠️ Setup & Installation
+>>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
 
 ```text
 Quality Inspector defect form
