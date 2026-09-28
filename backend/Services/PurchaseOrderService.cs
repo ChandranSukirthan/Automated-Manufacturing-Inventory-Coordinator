@@ -903,17 +903,18 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (activeQuarantines.Any())
             {
                 quarantinedRollsCount = activeQuarantines.Count;
-                qualitySafetyStatus = "QUARANTINE_REQUIRED";
+                qualitySafetyStatus = "QUARANTINE_ACTIVE";
+                isValid = false;
             }
 
             // 6. Impact Assessment
-            bool isHighImpact = po.TotalCost > 1000m || qualitySafetyStatus == "QUARANTINE_REQUIRED" || !isValid;
+            bool isHighImpact = po.TotalCost > 1000m || qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED" || !isValid;
             string? impactReason = null;
-            if (!isValid)
+            if (!isValid && !string.IsNullOrWhiteSpace(rejectionReason))
             {
                 impactReason = rejectionReason;
             }
-            else if (qualitySafetyStatus == "QUARANTINE_REQUIRED")
+            else if (qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED")
             {
                 impactReason = $"{quarantinedRollsCount} inventory roll(s) currently held in quarantine. Quality inspection required.";
             }
@@ -926,28 +927,42 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 impactReason = $"Procurement order (${po.TotalCost:N2}) within standard operational parameters.";
             }
 
-            // 7. Preserve existing manual resolution if present
+            // 7. Manual resolution state handling (strictly authoritative from current DB state)
             string? manualResolutionStatus = null;
             string? manualResolutionNote = null;
             string? resolvedBy = null;
             string? resolvedAt = null;
 
-            if (existingWf != null && !string.IsNullOrWhiteSpace(existingWf.ValidationResults))
+            if (activeQuarantines.Any())
             {
-                try
+                // Active blocking quarantine exists: resolution MUST be PENDING_REVIEW, never stale RESOLVED.
+                manualResolutionStatus = "PENDING_REVIEW";
+            }
+            else
+            {
+                // No active quarantines. If this specific workflow was previously resolved after quarantine release, preserve it.
+                if (existingWf != null && !string.IsNullOrWhiteSpace(existingWf.ValidationResults))
                 {
-                    using var doc = JsonDocument.Parse(existingWf.ValidationResults);
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("manualResolutionStatus", out var mrs) && mrs.ValueKind == JsonValueKind.String)
-                        manualResolutionStatus = mrs.GetString();
-                    if (root.TryGetProperty("manualResolutionNote", out var mrn) && mrn.ValueKind == JsonValueKind.String)
-                        manualResolutionNote = mrn.GetString();
-                    if (root.TryGetProperty("resolvedBy", out var rb) && rb.ValueKind == JsonValueKind.String)
-                        resolvedBy = rb.GetString();
-                    if (root.TryGetProperty("resolvedAt", out var ra) && ra.ValueKind == JsonValueKind.String)
-                        resolvedAt = ra.GetString();
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(existingWf.ValidationResults);
+                        var root = doc.RootElement;
+                        var prevStatus = root.TryGetProperty("manualResolutionStatus", out var mrs) ? mrs.GetString() : null;
+                        if (prevStatus == "RESOLVED")
+                        {
+                            manualResolutionStatus = "RESOLVED";
+                            if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                            if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                            if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                        }
+                    }
+                    catch { }
                 }
-                catch { }
+
+                if (manualResolutionStatus == null)
+                {
+                    manualResolutionStatus = isValid ? "NOT_REQUIRED" : "PENDING_REVIEW";
+                }
             }
 
             // 8. Build JSON

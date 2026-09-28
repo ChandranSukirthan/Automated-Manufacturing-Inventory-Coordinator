@@ -155,14 +155,51 @@ namespace ManufacturingCoordinator.Api.Services
                 quarantine.Reason = $"{quarantine.Reason} | Resolution: {resolutionNote.Trim()}";
             }
 
-            // Sync with any QA workflow requiring quarantine resolution
+            // Sync ONLY with workflows specifically associated with this quarantine / affected inventory / defect
             if (!string.IsNullOrWhiteSpace(resolutionNote))
             {
-                var workflows = await _db.AgentWorkflows
-                    .Where(w => w.WorkflowId.StartsWith("WF-QA-") || w.WorkflowId.StartsWith("WF-DEFECT-"))
-                    .ToListAsync();
+                var rollId = quarantine.InventoryRollId?.Trim();
+                var defectIdStr = quarantine.DefectReportId.ToString();
+                var quarantineIdStr = quarantine.Id.ToString();
+                var batchId = quarantine.DefectReport?.BatchId?.Trim();
 
-                foreach (var wf in workflows)
+                var allWorkflows = await _db.AgentWorkflows.ToListAsync();
+                var matchingWorkflows = allWorkflows.Where(wf =>
+                {
+                    if (string.IsNullOrWhiteSpace(wf.WorkflowId)) return false;
+
+                    // Match explicitly associated workflows (by Roll ID, Defect ID, Quarantine ID, or specific Batch ID)
+                    bool matchRoll = !string.IsNullOrEmpty(rollId) && (
+                        wf.WorkflowId.Contains(rollId, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(rollId, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(rollId, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchDefect = !string.IsNullOrEmpty(defectIdStr) && (
+                        wf.WorkflowId.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchQuarantine = (
+                        wf.WorkflowId.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchBatch = !string.IsNullOrEmpty(batchId) && (
+                        wf.WorkflowId.Equals($"WF-DEFECT-{batchId}", StringComparison.OrdinalIgnoreCase) ||
+                        wf.WorkflowId.Equals($"WF-{batchId}", StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && (
+                            wf.Objective.Contains($"Batch {batchId}", StringComparison.OrdinalIgnoreCase) ||
+                            wf.Objective.Contains($"batch {batchId}", StringComparison.OrdinalIgnoreCase)
+                        ))
+                    );
+
+                    return matchRoll || matchDefect || matchQuarantine || matchBatch;
+                }).ToList();
+
+                foreach (var wf in matchingWorkflows)
                 {
                     if (!string.IsNullOrWhiteSpace(wf.ValidationResults))
                     {
