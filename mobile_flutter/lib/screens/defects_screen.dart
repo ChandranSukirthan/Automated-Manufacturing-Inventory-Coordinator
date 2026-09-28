@@ -156,7 +156,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
         backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFF2A3958)),
+          side: const BorderSide(color: Color(0xFF1E293B)),
         ),
         title: const Text(
           'Delete Defect Report?',
@@ -761,17 +761,13 @@ class _DefectsScreenState extends State<DefectsScreen> {
   );
 
   BoxDecoration _cardBoxDecoration() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-    ),
+    color: const Color(0xFF0F172A),
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.25),
-        blurRadius: 10,
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
         offset: const Offset(0, 4),
       ),
     ],

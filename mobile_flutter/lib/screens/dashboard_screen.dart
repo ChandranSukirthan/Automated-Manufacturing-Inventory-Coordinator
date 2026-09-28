@@ -18,11 +18,13 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     required this.service,
     required this.appState,
+    this.onNavigateTab,
     super.key,
   });
 
   final QualityService service;
   final AppState appState;
+  final ValueChanged<int>? onNavigateTab;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -256,17 +258,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)],
+        colors: [Color(0xFF172554), Color(0xFF0C4A6E), Color(0xFF0F172A)],
       ),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(
-        color: AppColors.primary.withValues(alpha: 0.35),
+        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
         width: 1.2,
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.3),
-          blurRadius: 12,
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 14,
           offset: const Offset(0, 4),
         ),
       ],
@@ -280,25 +282,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.2),
+                color: const Color(0xFF2563EB).withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.4),
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
                 ),
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.shield_outlined,
-                    color: AppColors.primaryLight,
+                    Icons.verified_user_rounded,
+                    color: Color(0xFF93C5FD),
                     size: 13,
                   ),
                   SizedBox(width: 5),
                   Text(
                     'Quality Assurance · Student 3',
                     style: TextStyle(
-                      color: AppColors.primaryLight,
+                      color: Color(0xFF93C5FD),
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.6,
@@ -387,7 +389,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               label: const Text('Refresh'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.secondaryText,
-                side: const BorderSide(color: Color(0xFF2A3958)),
+                side: const BorderSide(color: Color(0xFF1E293B)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -456,16 +458,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           value: '$openCount',
           valueColor: AppColors.strongText,
           icon: Icons.fact_check_outlined,
-          iconColor: AppColors.primaryLight,
+          iconColor: const Color(0xFF60A5FA),
           footerLeft: '$totalCount total',
           footerRight: criticalCount > 0 ? '$criticalCount Crit' : null,
           footerRightColor: AppColors.error,
-          onTap: () => Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => DefectsScreen(service: widget.service),
-            ),
-          ).then((_) => _load()),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(2);
+            } else {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DefectsScreen(service: widget.service),
+                ),
+              ).then((_) => _load());
+            }
+          },
         ),
 
         // 2. Active Quarantines
@@ -478,12 +486,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           footerLeft: '$batchesHeldCount held',
           footerRight: '$releasedQuarantinesCount rel',
           footerRightColor: const Color(0xFF34D399),
-          onTap: () => Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => QuarantineScreen(service: widget.service),
-            ),
-          ).then((_) => _load()),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(3);
+            } else {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => QuarantineScreen(service: widget.service),
+                ),
+              ).then((_) => _load());
+            }
+          },
         ),
 
         // 3. Restricted Rolls
@@ -496,12 +510,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           footerLeft: 'Fabric rolls on hold',
           footerRight: '$clearedRollsCount clear',
           footerRightColor: const Color(0xFF38BDF8),
-          onTap: () => Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => QuarantineScreen(service: widget.service),
-            ),
-          ).then((_) => _load()),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(3);
+            } else {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => QuarantineScreen(service: widget.service),
+                ),
+              ).then((_) => _load());
+            }
+          },
         ),
 
         // 4. AI Safety Status
@@ -510,19 +530,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           value: aiStatus,
           valueColor: isAiClear ? const Color(0xFF34D399) : AppColors.error,
           icon: Icons.auto_awesome_outlined,
-          iconColor: isAiClear ? const Color(0xFF34D399) : AppColors.primaryLight,
+          iconColor: isAiClear ? const Color(0xFF34D399) : const Color(0xFF60A5FA),
           footerLeft: aiValidation?.workflowId ?? 'Agent safety',
           footerRight: 'Inspect →',
-          footerRightColor: AppColors.primaryLight,
-          onTap: () => Navigator.push<void>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => AiValidationScreen(
-                service: widget.service,
-                initialWorkflowId: aiValidation?.workflowId,
-              ),
-            ),
-          ).then((_) => _load()),
+          footerRightColor: const Color(0xFF60A5FA),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(1);
+            } else {
+              Navigator.push<void>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AiValidationScreen(
+                    service: widget.service,
+                    initialWorkflowId: aiValidation?.workflowId,
+                  ),
+                ),
+              ).then((_) => _load());
+            }
+          },
         ),
       ],
     );
@@ -675,15 +701,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               TextButton(
-                onPressed: () => Navigator.push<void>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DefectsScreen(service: widget.service),
-                  ),
-                ),
+                onPressed: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(2);
+                  } else {
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DefectsScreen(service: widget.service),
+                      ),
+                    ).then((_) => _load());
+                  }
+                },
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  foregroundColor: AppColors.primaryLight,
+                  foregroundColor: const Color(0xFF60A5FA),
                   padding: EdgeInsets.zero,
                 ),
                 child: const Text(
@@ -1392,51 +1424,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: 'AI Validation & Safety',
         subtitle: 'Authoritative rules & safety gates',
         icon: Icons.auto_awesome_outlined,
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AiValidationScreen(
-              service: widget.service,
-              initialWorkflowId: _aiValidation?.workflowId,
-            ),
-          ),
-        ).then((_) => _load()),
+        onTap: () {
+          if (widget.onNavigateTab != null) {
+            widget.onNavigateTab!(1);
+          } else {
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AiValidationScreen(
+                  service: widget.service,
+                  initialWorkflowId: _aiValidation?.workflowId,
+                ),
+              ),
+            ).then((_) => _load());
+          }
+        },
       ),
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Defect Reports',
         subtitle: 'Inspection, logging & defect matrix',
         icon: Icons.fact_check_outlined,
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DefectsScreen(service: widget.service),
-          ),
-        ).then((_) => _load()),
+        onTap: () {
+          if (widget.onNavigateTab != null) {
+            widget.onNavigateTab!(2);
+          } else {
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DefectsScreen(service: widget.service),
+              ),
+            ).then((_) => _load());
+          }
+        },
       ),
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Quarantine Control',
         subtitle: 'Active holds & release management',
         icon: Icons.shield_outlined,
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QuarantineScreen(service: widget.service),
-          ),
-        ).then((_) => _load()),
+        onTap: () {
+          if (widget.onNavigateTab != null) {
+            widget.onNavigateTab!(3);
+          } else {
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => QuarantineScreen(service: widget.service),
+              ),
+            ).then((_) => _load());
+          }
+        },
       ),
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Quarantine History',
         subtitle: 'Audit ledger & released dispositions',
         icon: Icons.history_rounded,
-        onTap: () => Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QuarantineHistoryScreen(service: widget.service),
-          ),
-        ).then((_) => _load()),
+        onTap: () {
+          if (widget.onNavigateTab != null) {
+            widget.onNavigateTab!(4);
+          } else {
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => QuarantineHistoryScreen(service: widget.service),
+              ),
+            ).then((_) => _load());
+          }
+        },
       ),
     ],
   );
@@ -1457,10 +1513,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.15),
+              color: const Color(0xFF2563EB).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AppColors.primaryLight, size: 18),
+            child: Icon(icon, color: const Color(0xFF60A5FA), size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1622,17 +1678,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   BoxDecoration _cardDecoration() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-    ),
-    borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    color: const Color(0xFF0F172A),
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.25),
-        blurRadius: 10,
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
         offset: const Offset(0, 4),
       ),
     ],

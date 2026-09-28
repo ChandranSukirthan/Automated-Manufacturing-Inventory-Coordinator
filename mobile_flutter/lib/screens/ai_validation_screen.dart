@@ -241,14 +241,17 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+        colors: [Color(0xFF172554), Color(0xFF0C4A6E), Color(0xFF0F172A)],
       ),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+      border: Border.all(
+        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+        width: 1.2,
+      ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.25),
-          blurRadius: 10,
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 14,
           offset: const Offset(0, 4),
         ),
       ],
@@ -261,7 +264,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
             const Text(
               'QUALITY CONTROL',
               style: TextStyle(
-                color: AppColors.primaryLight,
+                color: Color(0xFF93C5FD),
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
@@ -355,7 +358,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
               label: const Text('Refresh'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.secondaryText,
-                side: const BorderSide(color: Color(0xFF2A3958)),
+                side: const BorderSide(color: Color(0xFF1E293B)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1851,17 +1854,13 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
   }
 
   BoxDecoration _cardBoxDecoration() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-    ),
+    color: const Color(0xFF0F172A),
     borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.25),
-        blurRadius: 10,
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
         offset: const Offset(0, 4),
       ),
     ],
@@ -1949,7 +1948,7 @@ class _ResolveWorkflowDialogState extends State<_ResolveWorkflowDialog> {
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF2A3958), width: 1.4),
+        border: Border.all(color: const Color(0xFF1E293B), width: 1.4),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -2109,7 +2108,7 @@ class _AuditLedgerDialog extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF2A3958), width: 1.4),
+          border: Border.all(color: const Color(0xFF1E293B), width: 1.4),
         ),
         child: SingleChildScrollView(
           child: Column(

@@ -794,17 +794,13 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
   );
 
   BoxDecoration _cardBoxDecoration() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-    ),
+    color: const Color(0xFF0F172A),
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.25),
-        blurRadius: 10,
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
         offset: const Offset(0, 4),
       ),
     ],
@@ -873,7 +869,7 @@ class _ReleaseQuarantineModalState extends State<_ReleaseQuarantineModal> {
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF2A3958), width: 1.4),
+        border: Border.all(color: const Color(0xFF1E293B), width: 1.4),
       ),
       child: SingleChildScrollView(
         child: Column(

@@ -971,17 +971,13 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   }
 
   BoxDecoration _cardBoxDecoration() => BoxDecoration(
-    gradient: const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-    ),
+    color: const Color(0xFF0F172A),
     borderRadius: BorderRadius.circular(18),
-    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withValues(alpha: 0.25),
-        blurRadius: 10,
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
         offset: const Offset(0, 4),
       ),
     ],
@@ -998,9 +994,9 @@ class _FormFieldShell extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
     decoration: BoxDecoration(
-      color: const Color(0xFF0B0F19),
+      color: const Color(0xFF0B1120),
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+      border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1050,10 +1046,10 @@ class _FormSelect<T> extends StatelessWidget {
       labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       filled: true,
-      fillColor: const Color(0xFF0B0F19),
+      fillColor: const Color(0xFF0B1120),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2A3958), width: 1.2),
+        borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1085,10 +1081,10 @@ class _DescriptionField extends StatelessWidget {
       hintStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
       alignLabelWithHint: true,
       filled: true,
-      fillColor: const Color(0xFF0B0F19),
+      fillColor: const Color(0xFF0B1120),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF2A3958), width: 1.2),
+        borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1.2),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
