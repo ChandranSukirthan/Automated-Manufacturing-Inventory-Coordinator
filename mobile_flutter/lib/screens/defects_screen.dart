@@ -10,7 +10,11 @@ import 'defect_detail_screen.dart';
 import 'defect_form_screen.dart';
 
 class DefectsScreen extends StatefulWidget {
-  const DefectsScreen({required this.service, this.showAppBar = true, super.key});
+  const DefectsScreen({
+    required this.service,
+    this.showAppBar = true,
+    super.key,
+  });
 
   final QualityService service;
   final bool showAppBar;
@@ -43,401 +47,13 @@ class _DefectsScreenState extends State<DefectsScreen> {
     _load();
   }
 
-  Widget _pageHeader() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'QUALITY ASSURANCE  •  CONTROL CENTER',
-        style: TextStyle(
-          color: AppColors.primaryLight,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.1,
-        ),
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'Defect reports',
-        style: TextStyle(
-          color: AppColors.strongText,
-          fontSize: 28,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
-        ),
-      ),
-      const SizedBox(height: 6),
-      const Text(
-        'Monitor and review reported quality issues.',
-        style: TextStyle(color: AppColors.mutedText, fontSize: 14),
-      ),
-      const SizedBox(height: 20),
-      SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: FilledButton.icon(
-          onPressed: _create,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text(
-            'Create Defect',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.strongText,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-
-  Widget _filterToolbar() {
-    final hasFilters =
-        _severity != null || _status != null || _query.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          TextField(
-            onChanged: (value) => setState(() {
-              _query = value;
-              _page = 1;
-            }),
-            style: const TextStyle(color: AppColors.strongText),
-            decoration: InputDecoration(
-              hintText: 'Search inventory roll, description...',
-              hintStyle: const TextStyle(color: AppColors.mutedText),
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(
-                      onPressed: () => setState(() {
-                        _query = '';
-                        _page = 1;
-                      }),
-                      icon: const Icon(Icons.clear),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _inlineDropdown(
-                  'All Severities',
-                  _severity,
-                  _severities,
-                  (value) => setState(() {
-                    _severity = value;
-                    _page = 1;
-                  }),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _inlineDropdown(
-                  'All Statuses',
-                  _status,
-                  _statuses,
-                  (value) => setState(() {
-                    _status = value;
-                    _page = 1;
-                  }),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Text(
-                'Sort By: ',
-                style: TextStyle(color: AppColors.mutedText, fontSize: 12),
-              ),
-              Text(
-                _sort.label,
-                style: const TextStyle(
-                  color: AppColors.secondaryText,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              IconButton(
-                onPressed: _showSortMenu,
-                icon: const Icon(Icons.swap_vert_rounded, size: 18),
-                tooltip: 'Change sort',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              if (hasFilters)
-                IconButton(
-                  onPressed: () => setState(() {
-                    _query = '';
-                    _severity = null;
-                    _status = null;
-                    _page = 1;
-                  }),
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
-                  tooltip: 'Reset filters',
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.only(left: 8),
-                  constraints: const BoxConstraints(),
-                ),
-              const Spacer(),
-              Flexible(
-                child: Text(
-                  '${_filtered.length} defect report${_filtered.length == 1 ? '' : 's'} found',
-                  textAlign: TextAlign.right,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.mutedText,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _inlineDropdown(
-    String label,
-    String? value,
-    List<String> values,
-    ValueChanged<String?> onChanged,
-  ) => DropdownButtonFormField<String?>(
-    initialValue: value,
-    isExpanded: true,
-    decoration: InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-    ),
-    items: [
-      DropdownMenuItem<String?>(value: null, child: Text(label)),
-      ...values.map(
-        (item) => DropdownMenuItem<String?>(value: item, child: Text(item)),
-      ),
-    ],
-    onChanged: onChanged,
-  );
-
-  Future<void> _showSortMenu() async {
-    final value = await showModalBottomSheet<_DefectSort>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _DefectSort.values
-              .map(
-                (item) => ListTile(
-                  title: Text(item.label),
-                  trailing: item == _sort ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.pop(context, item),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    );
-    if (value != null && mounted) {
-      setState(() {
-        _ascending = _sort == value ? !_ascending : true;
-        _sort = value;
-        _page = 1;
-      });
-    }
-  }
-
-  Widget _errorBanner() => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: AppColors.error.withValues(alpha: 0.12),
-      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            _error!,
-            style: const TextStyle(color: AppColors.errorText),
-          ),
-        ),
-        TextButton(onPressed: _load, child: const Text('Retry')),
-      ],
-    ),
-  );
-
-  Widget _defectField(String label, Widget value) => Padding(
-    padding: const EdgeInsets.only(top: 5, bottom: 5),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 122,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.mutedText,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Expanded(
-          child: DefaultTextStyle(
-            style: const TextStyle(
-              color: AppColors.strongText,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-            child: value,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _defectTable(List<DefectReport> defects) => Column(
-    children: defects.map((defect) {
-      final affected = _inventoryFor(defect);
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    _inventoryLabel(defect),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.strongText,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _CardAction(
-                      icon: Icons.visibility_outlined,
-                      tooltip: 'View',
-                      onPressed: () => _open(defect),
-                    ),
-                    _CardAction(
-                      icon: Icons.edit_outlined,
-                      tooltip: 'Edit',
-                      onPressed: () => _edit(defect),
-                    ),
-                    _CardAction(
-                      icon: Icons.delete_outline_rounded,
-                      tooltip: 'Delete',
-                      onPressed: () => _delete(defect),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
-            const SizedBox(height: 5),
-            _defectField(
-              'Severity',
-              _ReportBadge(
-                label: defect.severity,
-                color: defect.severity.toLowerCase() == 'high'
-                    ? AppColors.error
-                    : AppColors.warning,
-              ),
-            ),
-            _defectField(
-              'Status',
-              _ReportBadge(label: defect.status, color: AppColors.primary),
-            ),
-            _defectField(
-              'Reported By',
-              Text(
-                defect.reportedByUserId ?? 'System',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            _defectField(
-              'Affected Inventory',
-              Text(
-                affected.isEmpty ? '—' : affected.join(', '),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            _defectField(
-              'Created',
-              Text(
-                _formatDate(defect.createdAt),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      );
-    }).toList(),
-  );
-
   Future<void> _load() async {
     setState(() => _error = null);
     try {
       final results = await Future.wait([
         widget.service.getDefects(),
-        widget.service.getQuarantines(),
-        InventoryApiService().fetchOwnedRolls(),
+        widget.service.getQuarantines().catchError((_) => <QuarantineRecord>[]),
+        InventoryApiService().fetchOwnedRolls().catchError((_) => <InventoryRollModel>[]),
       ]);
       if (!mounted) return;
       setState(() {
@@ -457,31 +73,35 @@ class _DefectsScreenState extends State<DefectsScreen> {
     final roll = _rolls.where((item) => ids.contains(item.id)).firstOrNull;
     return roll?.rollIdentifier.isNotEmpty == true
         ? roll!.rollIdentifier
-        : ids.firstOrNull ?? 'Unavailable';
+        : ids.firstOrNull ?? defect.skuCode ?? 'Unavailable';
   }
 
   List<String> _inventoryFor(DefectReport defect) =>
       defect.affectedInventory.isNotEmpty
-      ? defect.affectedInventory
-      : _quarantines
-            .where((record) => record.defectReportId == defect.id)
-            .map((record) => record.inventoryRollId)
-            .toList();
+          ? defect.affectedInventory
+          : _quarantines
+              .where((record) => record.defectReportId == defect.id)
+              .map((record) => record.inventoryRollId)
+              .toList();
 
   List<DefectReport> get _filtered {
     final query = _query.trim().toLowerCase();
     final values = (_defects ?? []).where((defect) {
       final text = [
         _inventoryLabel(defect),
+        defect.skuCode ?? '',
         defect.severity,
         defect.status,
         defect.description,
         ..._inventoryFor(defect),
       ].join(' ').toLowerCase();
       return (query.isEmpty || text.contains(query)) &&
-          (_severity == null || defect.severity == _severity) &&
-          (_status == null || defect.status == _status);
+          (_severity == null ||
+              defect.severity.toLowerCase() == _severity!.toLowerCase()) &&
+          (_status == null ||
+              defect.status.toLowerCase() == _status!.toLowerCase());
     }).toList();
+
     values.sort((left, right) {
       final comparison = switch (_sort) {
         _DefectSort.date => left.createdAt.compareTo(right.createdAt),
@@ -494,14 +114,6 @@ class _DefectsScreenState extends State<DefectsScreen> {
       return _ascending ? comparison : -comparison;
     });
     return values;
-  }
-
-  int get _pageCount => (_filtered.length / _pageSize).ceil().clamp(1, 999999);
-
-  List<DefectReport> get _visible {
-    final page = _page.clamp(1, _pageCount);
-    final start = (page - 1) * _pageSize;
-    return _filtered.skip(start).take(_pageSize).toList();
   }
 
   Future<void> _create() async {
@@ -539,10 +151,20 @@ class _DefectsScreenState extends State<DefectsScreen> {
   Future<void> _delete(DefectReport defect) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.75),
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete defect report?'),
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: Color(0xFF2A3958)),
+        ),
+        title: const Text(
+          'Delete Defect Report?',
+          style: TextStyle(color: AppColors.strongText, fontSize: 16, fontWeight: FontWeight.w800),
+        ),
         content: const Text(
-          'This permanently removes the selected defect report.',
+          'This action permanently deletes this defect record. Cannot be undone.',
+          style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -551,6 +173,10 @@ class _DefectsScreenState extends State<DefectsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -568,23 +194,29 @@ class _DefectsScreenState extends State<DefectsScreen> {
     }
   }
 
-  Future<void> _filters() async {
-    final result = await showModalBottomSheet<List<String?>>(
-      context: context,
-      builder: (context) =>
-          _DefectFilterSheet(severity: _severity, status: _status),
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _severity = result[0];
-      _status = result[1];
-      _page = 1;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final defects = _visible;
+    final allDefects = _defects ?? [];
+    final openDefects = allDefects
+        .where((d) => ['open', 'inreview'].contains(d.status.toLowerCase()))
+        .toList();
+    final criticalHighCount = allDefects
+        .where((d) => ['critical', 'high'].contains(d.severity.toLowerCase()))
+        .length;
+    final mediumCount = allDefects
+        .where((d) => d.severity.toLowerCase() == 'medium')
+        .length;
+    final resolvedCount = allDefects
+        .where((d) => ['resolved', 'closed'].contains(d.status.toLowerCase()))
+        .length;
+
+    final filtered = _filtered;
+    final totalPages = (filtered.length / _pageSize).ceil().clamp(1, 999999);
+    final visibleDefects = filtered
+        .skip((_page - 1).clamp(0, totalPages - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
+
     if (_error != null && _defects == null) {
       return Scaffold(
         body: StateMessage(
@@ -597,6 +229,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
     if (_defects == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
     return Scaffold(
       appBar: widget.showAppBar
           ? AppBar(
@@ -607,68 +240,43 @@ class _DefectsScreenState extends State<DefectsScreen> {
                   icon: const Icon(Icons.add_circle_outline),
                   tooltip: 'Create defect',
                 ),
-                IconButton(
-                  onPressed: _filters,
-                  icon: Badge(
-                    isLabelVisible: _severity != null || _status != null,
-                    child: const Icon(Icons.tune),
-                  ),
-                  tooltip: 'Filters',
-                ),
-                PopupMenuButton<_DefectSort>(
-                  icon: const Icon(Icons.sort),
-                  onSelected: (value) => setState(() {
-                    if (_sort == value) {
-                      _ascending = !_ascending;
-                    } else {
-                      _sort = value;
-                      _ascending = true;
-                    }
-                    _page = 1;
-                  }),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
-                      value: _DefectSort.date,
-                      child: Text('Sort by date'),
-                    ),
-                    PopupMenuItem(
-                      value: _DefectSort.inventory,
-                      child: Text('Sort by inventory roll'),
-                    ),
-                    PopupMenuItem(
-                      value: _DefectSort.severity,
-                      child: Text('Sort by severity'),
-                    ),
-                    PopupMenuItem(
-                      value: _DefectSort.status,
-                      child: Text('Sort by status'),
-                    ),
-                  ],
-                ),
               ],
             )
           : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 36),
           children: [
             _pageHeader(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // Top 4 Metric Summary Cards
+            _buildTopMetrics(
+              openCount: openDefects.length,
+              criticalHighCount: criticalHighCount,
+              mediumCount: mediumCount,
+              resolvedCount: resolvedCount,
+            ),
+            const SizedBox(height: 16),
+
             _filterToolbar(),
             const SizedBox(height: 16),
+
             if (_error != null) _errorBanner(),
-            if (defects.isEmpty)
+
+            if (filtered.isEmpty)
               const Padding(
-                padding: EdgeInsets.only(top: 80),
+                padding: EdgeInsets.only(top: 60),
                 child: StateMessage(
                   message: 'No defect reports match these filters.',
                   icon: Icons.fact_check_outlined,
                 ),
               )
             else
-              _defectTable(defects),
-            if (_pageCount > 1) ...[
+              _defectList(visibleDefects),
+
+            if (totalPages > 1) ...[
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -679,9 +287,9 @@ class _DefectsScreenState extends State<DefectsScreen> {
                         : () => setState(() => _page--),
                     icon: const Icon(Icons.chevron_left),
                   ),
-                  Text('Page ${_page.clamp(1, _pageCount)} of $_pageCount'),
+                  Text('Page ${_page.clamp(1, totalPages)} of $totalPages'),
                   IconButton(
-                    onPressed: _page >= _pageCount
+                    onPressed: _page >= totalPages
                         ? null
                         : () => setState(() => _page++),
                     icon: const Icon(Icons.chevron_right),
@@ -694,137 +302,484 @@ class _DefectsScreenState extends State<DefectsScreen> {
       ),
     );
   }
-}
 
-class _CardAction extends StatelessWidget {
-  const _CardAction({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    onPressed: onPressed,
-    icon: Icon(icon, size: 19),
-    tooltip: tooltip,
-    color: AppColors.mutedText,
-    visualDensity: VisualDensity.compact,
-    padding: const EdgeInsets.all(6),
-    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-  );
-}
-
-class _ReportBadge extends StatelessWidget {
-  const _ReportBadge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(7),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: color,
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 0.3,
+  Widget _pageHeader() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'QUALITY ASSURANCE',
+        style: TextStyle(
+          color: AppColors.primaryLight,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.1,
+        ),
       ),
-    ),
-  );
-}
-
-class _DefectFilterSheet extends StatefulWidget {
-  const _DefectFilterSheet({this.severity, this.status});
-  final String? severity;
-  final String? status;
-  @override
-  State<_DefectFilterSheet> createState() => _DefectFilterSheetState();
-}
-
-class _DefectFilterSheetState extends State<_DefectFilterSheet> {
-  late String? severity = widget.severity;
-  late String? status = widget.status;
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      const SizedBox(height: 6),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          DropdownButtonFormField<String?>(
-            initialValue: severity,
-            decoration: const InputDecoration(labelText: 'Severity'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All')),
-              ..._DefectsScreenState._severities.map(
-                (value) => DropdownMenuItem(value: value, child: Text(value)),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Defect Reports',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Track, investigate and manage manufacturing quality defects',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: _create,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Log Defect'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
-            onChanged: (value) => setState(() => severity = value),
-          ),
-          DropdownButtonFormField<String?>(
-            initialValue: status,
-            decoration: const InputDecoration(labelText: 'Status'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All')),
-              ..._DefectsScreenState._statuses.map(
-                (value) => DropdownMenuItem(value: value, child: Text(value)),
-              ),
-            ],
-            onChanged: (value) => setState(() => status = value),
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, [severity, status]),
-            child: const Text('Apply filters'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, [null, null]),
-            child: const Text('Reset filters'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
+    ],
+  );
+
+  Widget _buildTopMetrics({
+    required int openCount,
+    required int criticalHighCount,
+    required int mediumCount,
+    required int resolvedCount,
+  }) => GridView.count(
+    crossAxisCount: 2,
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    crossAxisSpacing: 10,
+    mainAxisSpacing: 10,
+    childAspectRatio: 1.6,
+    children: [
+      _metricCard('TOTAL OPEN', '$openCount', AppColors.strongText, Icons.fact_check_outlined, 'Active investigation'),
+      _metricCard('CRITICAL / HIGH', '$criticalHighCount', AppColors.error, Icons.warning_amber_rounded, 'Priority containment'),
+      _metricCard('MEDIUM', '$mediumCount', const Color(0xFFFBBF24), Icons.layers_outlined, 'Standard inspection'),
+      _metricCard('RESOLVED', '$resolvedCount', const Color(0xFF34D399), Icons.check_circle_outline, 'Cleared or closed'),
+    ],
+  );
+
+  Widget _metricCard(
+    String label,
+    String value,
+    Color valueColor,
+    IconData icon,
+    String subtitle,
+  ) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: _cardBoxDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.mutedText,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+              ),
+            ),
+            Icon(icon, color: valueColor, size: 16),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            fontFamily: 'monospace',
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          subtitle,
+          style: const TextStyle(color: AppColors.mutedText, fontSize: 8),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     ),
   );
-}
 
-extension on _DefectSort {
-  String get label => switch (this) {
-    _DefectSort.date => 'Date',
-    _DefectSort.inventory => 'Inventory Roll',
-    _DefectSort.severity => 'Severity',
-    _DefectSort.status => 'Status',
-  };
-}
+  Widget _filterToolbar() {
+    final hasFilters =
+        _query.isNotEmpty || _severity != null || _status != null;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _cardBoxDecoration(),
+      child: Column(
+        children: [
+          TextField(
+            onChanged: (value) => setState(() {
+              _query = value;
+              _page = 1;
+            }),
+            style: const TextStyle(color: AppColors.strongText, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search SKU, roll, defect description...',
+              hintStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+              prefixIcon: const Icon(Icons.search, size: 18),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () => setState(() {
+                        _query = '';
+                        _page = 1;
+                      }),
+                      icon: const Icon(Icons.clear, size: 16),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _dropdown(
+                  'All Severities',
+                  _severity,
+                  _severities,
+                  (v) => setState(() {
+                    _severity = v;
+                    _page = 1;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _dropdown(
+                  'All Statuses',
+                  _status,
+                  _statuses,
+                  (v) => setState(() {
+                    _status = v;
+                    _page = 1;
+                  }),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_filtered.length} defect reports found',
+                style: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+              ),
+              Row(
+                children: [
+                  PopupMenuButton<_DefectSort>(
+                    tooltip: 'Sort by',
+                    icon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _ascending ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 14,
+                          color: AppColors.mutedText,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _sort.name.toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    color: const Color(0xFF0F172A),
+                    onSelected: (sort) {
+                      setState(() {
+                        if (_sort == sort) {
+                          _ascending = !_ascending;
+                        } else {
+                          _sort = sort;
+                          _ascending = false;
+                        }
+                      });
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: _DefectSort.date,
+                        child: Text('Date', style: TextStyle(fontSize: 12)),
+                      ),
+                      PopupMenuItem(
+                        value: _DefectSort.severity,
+                        child: Text('Severity', style: TextStyle(fontSize: 12)),
+                      ),
+                      PopupMenuItem(
+                        value: _DefectSort.status,
+                        child: Text('Status', style: TextStyle(fontSize: 12)),
+                      ),
+                      PopupMenuItem(
+                        value: _DefectSort.inventory,
+                        child: Text('Inventory', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  if (hasFilters)
+                    TextButton.icon(
+                      onPressed: () => setState(() {
+                        _query = '';
+                        _severity = null;
+                        _status = null;
+                        _sort = _DefectSort.date;
+                        _ascending = false;
+                        _page = 1;
+                      }),
+                      icon: const Icon(Icons.refresh_rounded, size: 14),
+                      label: const Text('Reset'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: AppColors.primaryLight,
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-String _formatDate(DateTime value) {
-  final local = value.toLocal();
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
-  final minute = local.minute.toString().padLeft(2, '0');
-  return '${months[local.month - 1]} ${local.day}, $hour:$minute ${local.hour >= 12 ? 'PM' : 'AM'}';
+  Widget _dropdown(
+    String label,
+    String? value,
+    List<String> values,
+    ValueChanged<String?> onChanged,
+  ) => DropdownButtonFormField<String?>(
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    ),
+    style: const TextStyle(color: AppColors.strongText, fontSize: 12),
+    dropdownColor: const Color(0xFF0F172A),
+    items: [
+      DropdownMenuItem<String?>(
+        value: null,
+        child: Text(label, style: const TextStyle(fontSize: 12)),
+      ),
+      ...values.map(
+        (item) => DropdownMenuItem<String?>(
+          value: item,
+          child: Text(item, style: const TextStyle(fontSize: 12)),
+        ),
+      ),
+    ],
+    onChanged: onChanged,
+  );
+
+  Widget _errorBanner() => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.error.withValues(alpha: 0.12),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            _error!,
+            style: const TextStyle(color: AppColors.errorText, fontSize: 12),
+          ),
+        ),
+        TextButton(onPressed: _load, child: const Text('Retry')),
+      ],
+    ),
+  );
+
+  Widget _defectList(List<DefectReport> defects) => ListView.separated(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: defects.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 10),
+    itemBuilder: (context, index) {
+      final d = defects[index];
+      final shortId = d.id.length > 8 ? d.id.substring(0, 8) : d.id;
+      final isCritical = d.severity.toLowerCase() == 'critical' || d.severity.toLowerCase() == 'high';
+
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: _cardBoxDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '#$shortId',
+                  style: const TextStyle(
+                    color: AppColors.primaryLight,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF111827),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF1F2937)),
+                  ),
+                  child: Text(
+                    d.status,
+                    style: const TextStyle(
+                      color: AppColors.secondaryText,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _inventoryLabel(d),
+                    style: const TextStyle(
+                      color: Color(0xFF67E8F9),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isCritical ? AppColors.error.withValues(alpha: 0.15) : const Color(0xFFFBBF24).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: isCritical ? AppColors.error.withValues(alpha: 0.35) : const Color(0xFFFBBF24).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    d.severity.toUpperCase(),
+                    style: TextStyle(
+                      color: isCritical ? AppColors.error : const Color(0xFFFBBF24),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              d.description.isNotEmpty ? d.description : '—',
+              style: const TextStyle(
+                color: AppColors.secondaryText,
+                fontSize: 12,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _formatDate(d.createdAt),
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => _open(d),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      color: const Color(0xFF67E8F9),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'View Detail',
+                    ),
+                    IconButton(
+                      onPressed: () => _edit(d),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      color: AppColors.primaryLight,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Edit',
+                    ),
+                    IconButton(
+                      onPressed: () => _delete(d),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      color: AppColors.error,
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Delete',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  BoxDecoration _cardBoxDecoration() => BoxDecoration(
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+    ),
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.25),
+        blurRadius: 10,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.month}/${two(local.day)}/${local.year}';
+  }
 }

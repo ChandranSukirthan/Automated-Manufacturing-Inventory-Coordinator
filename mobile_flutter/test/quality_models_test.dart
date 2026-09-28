@@ -55,4 +55,31 @@ void main() {
     expect(updated.totalDefects, 1);
     expect(updated.releasedInventory, 2);
   });
+
+  test('AiValidationData parses and exposes dual assessment properties correctly', () {
+    final aiData = AiValidationData.fromJson({
+      'workflowId': 'WF-QA-PO-2026-0033',
+      'poNumber': 'PO-2026-0033',
+      'status': 'INVALID',
+      'isValid': false,
+      'qualitySafetyStatus': 'QUARANTINE_ACTIVE',
+      'manualResolutionStatus': 'PENDING_REVIEW',
+      'inspectorNotes': 'Pending inspector review',
+      'supplierValidation': 'VALID',
+      'budgetCheck': 'VALID',
+      'poMathematicalCheck': 'VALID',
+      'materialValidation': 'INVALID',
+      'quarantinedRollsCount': 2,
+    });
+
+    expect(aiData.workflowId, 'WF-QA-PO-2026-0033');
+    expect(aiData.origAiOutcome, 'INVALID');
+    expect(aiData.origSafetyStatus, 'QUARANTINE_ACTIVE');
+    expect(aiData.safetyGateState, 'BLOCKED');
+    expect(aiData.currentManualResolution, 'PENDING REVIEW');
+    expect(aiData.currentQuarantineDisposition, 'ACTIVE');
+    expect(aiData.automatedCheckItems.length, 4);
+    expect(aiData.passedChecks.length, 3);
+    expect(aiData.automatedSummary, '3 / 4 PASSED');
+  });
 }
