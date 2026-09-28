@@ -431,33 +431,36 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                           else
                             ...rolls.map((roll) {
                               final selected = _selectedRolls.contains(roll.id);
-                              return CheckboxListTile(
-                                value: selected,
-                                activeColor: AppColors.primary,
-                                onChanged: (val) => setState(() {
-                                  if (val == true) {
-                                    _selectedRolls.add(roll.id);
-                                  } else {
-                                    _selectedRolls.remove(roll.id);
-                                  }
-                                }),
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(
-                                  roll.rollIdentifier.isNotEmpty
-                                      ? roll.rollIdentifier
-                                      : roll.id,
-                                  style: const TextStyle(
-                                    color: Color(0xFF67E8F9),
-                                    fontFamily: 'monospace',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
+                              return Material(
+                                color: Colors.transparent,
+                                child: CheckboxListTile(
+                                  value: selected,
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) => setState(() {
+                                    if (val == true) {
+                                      _selectedRolls.add(roll.id);
+                                    } else {
+                                      _selectedRolls.remove(roll.id);
+                                    }
+                                  }),
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    roll.rollIdentifier.isNotEmpty
+                                        ? roll.rollIdentifier
+                                        : roll.id,
+                                    style: const TextStyle(
+                                      color: Color(0xFF67E8F9),
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
                                   ),
-                                ),
-                                subtitle: Text(
-                                  'Raw Material: ${selectedMaterial?.name ?? ''} · ${roll.currentQuantity} / ${roll.initialQuantity} units — ${roll.status}',
-                                  style: const TextStyle(
-                                    color: AppColors.mutedText,
-                                    fontSize: 11,
+                                  subtitle: Text(
+                                    'Raw Material: ${selectedMaterial?.name ?? ''} · ${roll.currentQuantity} / ${roll.initialQuantity} units — ${roll.status}',
+                                    style: const TextStyle(
+                                      color: AppColors.mutedText,
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ),
                               );

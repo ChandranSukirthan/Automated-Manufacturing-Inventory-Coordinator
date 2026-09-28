@@ -234,10 +234,14 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Showing $count released records',
-              style: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+            Expanded(
+              child: Text(
+                'Showing $count released records',
+                style: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+            const SizedBox(width: 8),
             PopupMenuButton<_HistorySort>(
               icon: const Row(
                 mainAxisSize: MainAxisSize.min,

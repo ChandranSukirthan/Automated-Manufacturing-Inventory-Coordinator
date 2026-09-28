@@ -491,14 +491,19 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${_visibleRecords.length} records found',
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 11,
+              Expanded(
+                child: Text(
+                  '${_visibleRecords.length} records found',
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   PopupMenuButton<_QuarantineSort>(
                     tooltip: 'Sort by',

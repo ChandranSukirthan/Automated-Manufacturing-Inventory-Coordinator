@@ -489,11 +489,16 @@ class _DefectsScreenState extends State<DefectsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${_filtered.length} defect reports found',
-                style: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+              Expanded(
+                child: Text(
+                  '${_filtered.length} defect reports found',
+                  style: const TextStyle(color: AppColors.mutedText, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   PopupMenuButton<_DefectSort>(
                     tooltip: 'Sort by',

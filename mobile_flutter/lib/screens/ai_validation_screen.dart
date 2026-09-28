@@ -706,51 +706,58 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.4),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.4),
+                        ),
                       ),
-                    ),
-                    child: const Text(
-                      '1',
-                      style: TextStyle(
-                        color: AppColors.primaryLight,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Automated Verification',
+                      child: const Text(
+                        '1',
                         style: TextStyle(
-                          color: AppColors.strongText,
-                          fontSize: 13,
+                          color: AppColors.primaryLight,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      Text(
-                        'Multi-agent mathematical & policy rules',
-                        style: TextStyle(
-                          color: AppColors.mutedText,
-                          fontSize: 10,
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Automated Verification',
+                            style: TextStyle(
+                              color: AppColors.strongText,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Multi-agent mathematical & policy rules',
+                            style: TextStyle(
+                              color: AppColors.mutedText,
+                              fontSize: 10,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -785,7 +792,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
-            childAspectRatio: 2.2,
+            childAspectRatio: 2.0,
             children: wf.automatedCheckItems.map((c) {
               return Container(
                 padding: const EdgeInsets.all(8),
@@ -812,6 +819,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 4),
                         _buildCheckBadge(c),
                       ],
                     ),
@@ -897,51 +905,58 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: gateColor.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: gateColor.withValues(alpha: 0.4),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: gateColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: gateColor.withValues(alpha: 0.4),
+                        ),
                       ),
-                    ),
-                    child: const Text(
-                      '2',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Safety Gate',
+                      child: const Text(
+                        '2',
                         style: TextStyle(
-                          color: AppColors.strongText,
-                          fontSize: 13,
+                          color: Colors.white,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      Text(
-                        'Physical quarantine containment & roll gate',
-                        style: TextStyle(
-                          color: AppColors.mutedText,
-                          fontSize: 10,
-                        ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Safety Gate',
+                            style: TextStyle(
+                              color: AppColors.strongText,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Physical quarantine containment & roll gate',
+                            style: TextStyle(
+                              color: AppColors.mutedText,
+                              fontSize: 10,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -1037,51 +1052,58 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.4),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.4),
+                            ),
                           ),
-                        ),
-                        child: const Text(
-                          '3',
-                          style: TextStyle(
-                            color: AppColors.primaryLight,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Original AI Assessment',
+                          child: const Text(
+                            '3',
                             style: TextStyle(
-                              color: AppColors.strongText,
-                              fontSize: 13,
+                              color: AppColors.primaryLight,
+                              fontSize: 11,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          Text(
-                            'Strictly preserved historical determination',
-                            style: TextStyle(
-                              color: AppColors.mutedText,
-                              fontSize: 10,
-                            ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Original AI Assessment',
+                                style: TextStyle(
+                                  color: AppColors.strongText,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Strictly preserved historical determination',
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 10,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
@@ -1110,7 +1132,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
-                childAspectRatio: 2.1,
+                childAspectRatio: 1.85,
                 children: [
                   _buildStatTile(
                     'Validation Outcome',
@@ -1169,51 +1191,58 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.4),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.4),
+                            ),
                           ),
-                        ),
-                        child: const Text(
-                          '4',
-                          style: TextStyle(
-                            color: AppColors.primaryLight,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Current QA Resolution',
+                          child: const Text(
+                            '4',
                             style: TextStyle(
-                              color: AppColors.strongText,
-                              fontSize: 13,
+                              color: AppColors.primaryLight,
+                              fontSize: 11,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                          Text(
-                            'Live manual inspector disposition & release',
-                            style: TextStyle(
-                              color: AppColors.mutedText,
-                              fontSize: 10,
-                            ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Current QA Resolution',
+                                style: TextStyle(
+                                  color: AppColors.strongText,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                'Live manual inspector disposition & release',
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 10,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1258,7 +1287,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  childAspectRatio: 2.1,
+                  childAspectRatio: 1.85,
                   children: [
                     _buildStatTile(
                       'Manual Resolution',
@@ -1518,24 +1547,28 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Validation & Safety Audit History',
-                  style: TextStyle(
-                    color: AppColors.strongText,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Validation & Safety Audit History',
+                    style: TextStyle(
+                      color: AppColors.strongText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Persisted audit ledger tracking Original AI vs. QA Resolutions',
-                  style: TextStyle(color: AppColors.mutedText, fontSize: 11),
-                ),
-              ],
+                  SizedBox(height: 2),
+                  Text(
+                    'Persisted audit ledger tracking Original AI vs. QA Resolutions',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
@@ -1671,6 +1704,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                               fontSize: 11,
                               fontFamily: 'monospace',
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Expanded(
@@ -1686,6 +1720,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                               fontWeight: FontWeight.w700,
                               fontFamily: 'monospace',
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -1701,6 +1736,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                               fontSize: 11,
                               fontFamily: 'monospace',
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Expanded(
@@ -1716,13 +1752,17 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         Text(
                           item.resolvedAt != null
@@ -1735,6 +1775,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                           ),
                         ),
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             if (item.needsReview) ...[
                               TextButton(
@@ -2037,23 +2078,26 @@ class _ResolveWorkflowDialogState extends State<_ResolveWorkflowDialog> {
               ),
             ),
             const SizedBox(height: 14),
-            CheckboxListTile(
-              value: _releaseQuarantine,
-              onChanged: (val) =>
-                  setState(() => _releaseQuarantine = val ?? true),
-              contentPadding: EdgeInsets.zero,
-              activeColor: AppColors.primary,
-              title: const Text(
-                'Release Quarantined Fabric Rolls',
-                style: TextStyle(
-                  color: AppColors.strongText,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+            Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                value: _releaseQuarantine,
+                onChanged: (val) =>
+                    setState(() => _releaseQuarantine = val ?? true),
+                contentPadding: EdgeInsets.zero,
+                activeColor: AppColors.primary,
+                title: const Text(
+                  'Release Quarantined Fabric Rolls',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              subtitle: const Text(
-                'Automatically unblock affected inventory rolls linked to this workflow.',
-                style: TextStyle(color: AppColors.mutedText, fontSize: 11),
+                subtitle: const Text(
+                  'Automatically unblock affected inventory rolls linked to this workflow.',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 11),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -2153,13 +2197,17 @@ class _AuditLedgerDialog extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        c.name,
-                        style: const TextStyle(
-                          color: AppColors.mutedText,
-                          fontSize: 12,
+                      Expanded(
+                        child: Text(
+                          c.name,
+                          style: const TextStyle(
+                            color: AppColors.mutedText,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         c.displayLabel,
                         style: TextStyle(
@@ -2283,17 +2331,24 @@ class _AuditLedgerDialog extends StatelessWidget {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          k,
-          style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+        Expanded(
+          child: Text(
+            k,
+            style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        Text(
-          v,
-          style: const TextStyle(
-            color: AppColors.strongText,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            fontFamily: 'monospace',
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            v,
+            style: const TextStyle(
+              color: AppColors.strongText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'monospace',
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
