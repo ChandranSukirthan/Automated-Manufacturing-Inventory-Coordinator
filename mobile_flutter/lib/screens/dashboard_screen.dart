@@ -253,14 +253,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeaderBanner() => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [Color(0xFF172554), Color(0xFF0C4A6E), Color(0xFF0F172A)],
       ),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
       border: Border.all(
         color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
         width: 1.2,
@@ -276,8 +276,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -298,7 +301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   SizedBox(width: 5),
                   Text(
-                    'Quality Assurance · Student 3',
+                    'Quality Assurance',
                     style: TextStyle(
                       color: Color(0xFF93C5FD),
                       fontSize: 10,
@@ -310,6 +313,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 7,
@@ -332,26 +336,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         const Text(
           'Quality Control',
           style: TextStyle(
             color: AppColors.strongText,
-            fontSize: 26,
+            fontSize: 22,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.4,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         const Text(
           'Manufacturing quality, safety, defect and quarantine monitoring console. Real-time factory floor telemetry, AI compliance checks, and containment management.',
           style: TextStyle(
             color: AppColors.mutedText,
             fontSize: 12,
-            height: 1.4,
+            height: 1.35,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -362,40 +366,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     builder: (_) => DefectFormScreen(service: widget.service),
                   ),
                 ).then((_) => _load()),
-                icon: const Icon(Icons.add_circle_outline, size: 17),
+                icon: const Icon(Icons.add_circle_outline, size: 16),
                 label: const Text(
                   'Log Defect',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _refreshing ? null : _load,
               icon: _refreshing
                   ? const SizedBox.square(
-                      dimension: 14,
+                      dimension: 13,
                       child: CircularProgressIndicator(strokeWidth: 1.8),
                     )
-                  : const Icon(Icons.refresh_rounded, size: 17),
-              label: const Text('Refresh'),
+                  : const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Refresh', style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.secondaryText,
                 side: const BorderSide(color: Color(0xFF1E293B)),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
+                  horizontal: 12,
+                  vertical: 9,
                 ),
               ),
             ),
@@ -448,9 +452,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 1.15,
+      crossAxisSpacing: 8,
+      mainAxisSpacing: 8,
+      childAspectRatio: 1.1,
       children: [
         // 1. Open Defects
         _buildKpiCard(
@@ -566,9 +570,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     VoidCallback? onTap,
   }) => InkWell(
     onTap: onTap,
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: BorderRadius.circular(14),
     child: Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: _cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,23 +581,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(icon, color: iconColor, size: 18),
+              const SizedBox(width: 4),
+              Icon(icon, color: iconColor, size: 16),
             ],
           ),
           Text(
             value,
             style: TextStyle(
               color: valueColor,
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w900,
               fontFamily: 'monospace',
             ),
@@ -601,7 +610,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             overflow: TextOverflow.ellipsis,
           ),
           Container(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.only(top: 5),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Color(0xFF1E293B))),
             ),
@@ -613,20 +622,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     footerLeft,
                     style: const TextStyle(
                       color: AppColors.mutedText,
-                      fontSize: 10,
+                      fontSize: 9.5,
                     ),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (footerRight != null)
+                if (footerRight != null) ...[
+                  const SizedBox(width: 4),
                   Text(
                     footerRight,
                     style: TextStyle(
                       color: footerRightColor ?? AppColors.secondaryText,
-                      fontSize: 10,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                     ),
+                    maxLines: 1,
                   ),
+                ],
               ],
             ),
           ),
