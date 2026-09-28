@@ -344,7 +344,7 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Batch: ${r.batchId} • Released: ${_formatDate(r.releasedAt ?? r.createdAt)}',
+              'Released: ${_formatDate(r.releasedAt ?? r.createdAt)}',
               style: const TextStyle(color: AppColors.mutedText, fontSize: 11, fontFamily: 'monospace'),
             ),
             const SizedBox(height: 4),

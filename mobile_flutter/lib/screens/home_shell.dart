@@ -52,6 +52,17 @@ class _HomeShellState extends State<HomeShell> {
     final user = widget.appState.session!.user;
     final isQualityInspector = user.isQualityInspector;
 
+    final qaTitles = const [
+      ('QA Operations', 'Quality Overview & Health'),
+      ('AI Validation & Safety', 'Multi-Agent Quality Gates'),
+      ('Defect Management', 'Active Quality Reports'),
+      ('Quarantine Control', 'Lot Containment & Safety'),
+      ('Quarantine History', 'Archived Dispositions'),
+    ];
+    final currentQaTitle = isQualityInspector
+        ? qaTitles[_selectedIndex.clamp(0, qaTitles.length - 1)]
+        : ('Floor Operations', 'Manufacturing Inventory');
+
     final screens = isQualityInspector
         ? [
             DashboardScreen(
@@ -59,7 +70,10 @@ class _HomeShellState extends State<HomeShell> {
               appState: widget.appState,
               onNavigateTab: _onTabSelect,
             ),
-            AiValidationScreen(service: widget.qualityService),
+            AiValidationScreen(
+              service: widget.qualityService,
+              showAppBar: false,
+            ),
             DefectsScreen(service: widget.qualityService, showAppBar: false),
             QuarantineScreen(service: widget.qualityService),
             QuarantineHistoryScreen(
@@ -71,168 +85,171 @@ class _HomeShellState extends State<HomeShell> {
             RoleDashboardScreen(
               service: widget.qualityService,
               role: user.role,
+              appState: widget.appState,
             ),
           ];
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(62),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF070B14),
-            border: Border(
-              bottom: BorderSide(
-                color: const Color(0xFF1E293B).withValues(alpha: 0.8),
-                width: 1,
-              ),
-            ),
-          ),
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Brand Header matching React QALayout
-                  Expanded(
+      appBar: isQualityInspector
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(62),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF070B14),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: const Color(0xFF1E293B).withValues(alpha: 0.8),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.verified_user_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
+                        // Dynamic Title Header
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          child: Row(
                             children: [
-                              const Text(
-                                'QUALITY CONTROL',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.6,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF10B981),
-                                      shape: BoxShape.circle,
-                                    ),
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   ),
-                                  const SizedBox(width: 5),
-                                  const Expanded(
-                                    child: Text(
-                                      'Manufacturing QA',
-                                      style: TextStyle(
-                                        color: Color(0xFF60A5FA),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.verified_user_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      currentQaTitle.$1,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w900,
                                         letterSpacing: 0.4,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                ],
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF10B981),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Expanded(
+                                          child: Text(
+                                            currentQaTitle.$2,
+                                            style: const TextStyle(
+                                              color: Color(0xFF60A5FA),
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 0.3,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Profile Avatar Button
+                        InkWell(
+                          onTap: _showProfilePopup,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF1E293B)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 24,
+                                  height: 24,
+                                  alignment: Alignment.center,
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    user.fullName.isNotEmpty
+                                        ? user.fullName[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 5),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 80),
+                                  child: Text(
+                                    user.fullName.split(' ').first,
+                                    style: const TextStyle(
+                                      color: AppColors.primaryText,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-
-                  // Profile Avatar Button
-                  InkWell(
-                    onTap: _showProfilePopup,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF1E293B)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 24,
-                            height: 24,
-                            alignment: Alignment.center,
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              user.fullName.isNotEmpty
-                                  ? user.fullName[0].toUpperCase()
-                                  : 'U',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 80),
-                            child: Text(
-                              user.fullName.split(' ').first,
-                              style: const TextStyle(
-                                color: AppColors.primaryText,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
-      ),
+            )
+          : null,
       body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: isQualityInspector
           ? Container(

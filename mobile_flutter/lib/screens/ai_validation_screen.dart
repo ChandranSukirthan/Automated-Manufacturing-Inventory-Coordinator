@@ -10,27 +10,19 @@ class AiValidationScreen extends StatefulWidget {
   const AiValidationScreen({
     required this.service,
     this.initialWorkflowId,
+    this.showAppBar = true,
     super.key,
   });
 
   final QualityService service;
   final String? initialWorkflowId;
+  final bool showAppBar;
 
   @override
   State<AiValidationScreen> createState() => _AiValidationScreenState();
 }
 
 class _AiValidationScreenState extends State<AiValidationScreen> {
-  static const _agentSteps = [
-    'Agent Activated',
-    'Preparing Assessment',
-    'Checking PO',
-    'Checking Supplier',
-    'Checking Quality & Safety',
-    'Checking Quarantine',
-    'Assessment Complete',
-  ];
-
   AiValidationData? _latestValidation;
   List<AiValidationData> _history = [];
   bool _loadingLatest = true;
@@ -39,11 +31,6 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
   String? _historyError;
   String? _successMessage;
 
-  // Agent Activation Progress state
-  bool _activatingAgent = false;
-  int _activeStepIndex = 0;
-  Timer? _stepTimer;
-
   // Filter for history
   String _historyFilter = 'ALL'; // ALL, BLOCKED, CLEAR, HIGH_IMPACT
 
@@ -51,12 +38,6 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
   void initState() {
     super.initState();
     _loadAll();
-  }
-
-  @override
-  void dispose() {
-    _stepTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -119,32 +100,6 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
     }
   }
 
-  void _handleActivateAgent() {
-    setState(() {
-      _activatingAgent = true;
-      _activeStepIndex = 0;
-    });
-
-    _stepTimer?.cancel();
-    _stepTimer = Timer.periodic(const Duration(milliseconds: 400), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_activeStepIndex < _agentSteps.length - 1) {
-        setState(() => _activeStepIndex++);
-      } else {
-        timer.cancel();
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            setState(() => _activatingAgent = false);
-            _loadAll();
-          }
-        });
-      }
-    });
-  }
-
   void _openResolveDialog(AiValidationData wf) {
     showDialog<bool>(
       context: context,
@@ -187,35 +142,31 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
     final filteredHistory = _filterHistoryList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Validation & Safety'),
-        leading: BackButton(onPressed: () => Navigator.pop(context)),
-        actions: [
-          IconButton(
-            onPressed: _loadingLatest || _loadingHistory ? null : _loadAll,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('AI Validation & Safety'),
+              leading: BackButton(onPressed: () => Navigator.pop(context)),
+              actions: [
+                IconButton(
+                  onPressed: _loadingLatest || _loadingHistory ? null : _loadAll,
+                  icon: const Icon(Icons.refresh_rounded),
+                  tooltip: 'Refresh',
+                ),
+              ],
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: _loadAll,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
           children: [
-            // 1. Single Page Header
+            // 1. Single Responsive Ledger Card
             _buildPageHeader(),
             const SizedBox(height: 16),
 
             // Success banner
             if (_successMessage != null) ...[
               _buildSuccessBanner(_successMessage!),
-              const SizedBox(height: 16),
-            ],
-
-            // Stepped progress indicator during agent activation
-            if (_activatingAgent) ...[
-              _buildAgentProgressStepper(),
               const SizedBox(height: 16),
             ],
 
@@ -236,23 +187,23 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
   }
 
   Widget _buildPageHeader() => Container(
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF172554), Color(0xFF0C4A6E), Color(0xFF0F172A)],
+        colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
       ),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(
-        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+        color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
         width: 1.2,
       ),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.35),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
+          color: Colors.black.withValues(alpha: 0.3),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
         ),
       ],
     ),
@@ -260,115 +211,101 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'QUALITY CONTROL',
-              style: TextStyle(
-                color: Color(0xFF93C5FD),
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: Color(0xFF38BDF8), size: 18),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'AI Safety Ledger',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
             Container(
-              width: 4,
-              height: 4,
-              decoration: const BoxDecoration(
-                color: AppColors.mutedText,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              width: 8,
-              height: 8,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _activatingAgent || _loadingLatest
-                    ? AppColors.warning
-                    : const Color(0xFF10B981),
-                shape: BoxShape.circle,
+                color: (_loadingLatest || _loadingHistory)
+                    ? AppColors.warning.withValues(alpha: 0.15)
+                    : const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: (_loadingLatest || _loadingHistory)
+                      ? AppColors.warning.withValues(alpha: 0.35)
+                      : const Color(0xFF10B981).withValues(alpha: 0.35),
+                ),
               ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              _activatingAgent || _loadingLatest ? 'Processing' : 'Agent Ready',
-              style: const TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: (_loadingLatest || _loadingHistory)
+                          ? AppColors.warning
+                          : const Color(0xFF10B981),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    (_loadingLatest || _loadingHistory) ? 'Syncing...' : 'Live Gate Active',
+                    style: TextStyle(
+                      color: (_loadingLatest || _loadingHistory)
+                          ? AppColors.warning
+                          : const Color(0xFF34D399),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         const Text(
-          'AI Validation & Safety',
-          style: TextStyle(
-            color: AppColors.strongText,
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Authoritative quality assurance ledger: Multi-agent validation rules and physical quarantine safety gates.',
+          'Authoritative QA ledger: Autonomous replenishment safety gates and multi-agent compliance rules.',
           style: TextStyle(
             color: AppColors.mutedText,
-            fontSize: 13,
+            fontSize: 11.5,
             height: 1.4,
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _activatingAgent || _loadingLatest
-                    ? null
-                    : _handleActivateAgent,
-                icon: _activatingAgent
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.smart_toy_outlined, size: 18),
-                label: const Text(
-                  'Activate Agent',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: _loadingLatest || _loadingHistory ? null : _loadAll,
+            icon: _loadingLatest || _loadingHistory
+                ? const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.mutedText),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 14),
+            label: const Text('Refresh Ledger', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF38BDF8),
+              side: const BorderSide(color: Color(0xFF1E293B)),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            const SizedBox(width: 10),
-            OutlinedButton.icon(
-              onPressed: _loadingLatest || _loadingHistory ? null : _loadAll,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Refresh'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.secondaryText,
-                side: const BorderSide(color: Color(0xFF1E293B)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     ),
@@ -399,72 +336,6 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildAgentProgressStepper() => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF0F172A),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: AppColors.primary.withValues(alpha: 0.5),
-        width: 1.5,
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Row(
-              children: [
-                Icon(
-                  Icons.smart_toy_rounded,
-                  color: AppColors.primaryLight,
-                  size: 18,
-                ),
-                SizedBox(width: 8),
-                Text(
-                  'Pipeline Executing',
-                  style: TextStyle(
-                    color: AppColors.strongText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            Text(
-              'Step ${_activeStepIndex + 1} of ${_agentSteps.length}',
-              style: const TextStyle(
-                color: AppColors.primaryLight,
-                fontSize: 11,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        LinearProgressIndicator(
-          value: (_activeStepIndex + 1) / _agentSteps.length,
-          backgroundColor: const Color(0xFF1E293B),
-          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-          minHeight: 6,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          _agentSteps[_activeStepIndex],
-          style: const TextStyle(
-            color: AppColors.primaryLight,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -565,7 +436,10 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 2,
                       children: [
                         const Text(
                           'AUTHORITATIVE RECORD',
@@ -576,7 +450,6 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                             letterSpacing: 1.1,
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Container(
                           width: 3,
                           height: 3,
@@ -585,18 +458,15 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'PO: ${wf.poReference}',
-                            style: const TextStyle(
-                              color: AppColors.strongText,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              fontFamily: 'monospace',
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        Text(
+                          'PO: ${wf.poReference}',
+                          style: const TextStyle(
+                            color: AppColors.strongText,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'monospace',
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -1467,9 +1337,9 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
     crossAxisCount: 2,
     shrinkWrap: true,
     physics: const NeverScrollableScrollPhysics(),
-    crossAxisSpacing: 10,
-    mainAxisSpacing: 10,
-    childAspectRatio: 1.7,
+    crossAxisSpacing: 8,
+    mainAxisSpacing: 8,
+    childAspectRatio: 1.55,
     children: [
       _buildSummaryCard(
         'Persisted Runs',
@@ -1504,7 +1374,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
     Color countColor,
     String subtitle,
   ) => Container(
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.all(10),
     decoration: _cardBoxDecoration(),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1514,21 +1384,23 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
           label.toUpperCase(),
           style: const TextStyle(
             color: AppColors.mutedText,
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: FontWeight.w700,
           ),
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Text(
           count,
           style: TextStyle(
             color: countColor,
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: FontWeight.w900,
             fontFamily: 'monospace',
           ),
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         Text(
           subtitle,
           style: const TextStyle(color: AppColors.mutedText, fontSize: 9),

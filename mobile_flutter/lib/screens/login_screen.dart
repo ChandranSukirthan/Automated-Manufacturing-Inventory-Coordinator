@@ -170,26 +170,44 @@ class _LoginScreenState extends State<LoginScreen> {
                             : null,
                       ),
                       const SizedBox(height: 26),
-                      SizedBox(
+                      Container(
                         height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF19B5C5).withValues(alpha: 0.28),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
                         child: FilledButton.icon(
                           onPressed: widget.appState.isLoading ? null : _submit,
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF19B5C5),
                             foregroundColor: const Color(0xFF07111E),
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           icon: widget.appState.isLoading
                               ? const SizedBox.square(
                                   dimension: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: Color(0xFF07111E),
+                                  ),
                                 )
-                              : const Icon(Icons.login),
+                              : const Icon(Icons.login_rounded, size: 20),
                           label: Text(
                             widget.appState.isLoading ? 'Signing in...' : 'Sign in',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
                       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
 import 'worker_dashboard_screen.dart';
@@ -9,11 +10,13 @@ class RoleDashboardScreen extends StatefulWidget {
   const RoleDashboardScreen({
     required this.service,
     required this.role,
+    this.appState,
     super.key,
   });
 
   final QualityService service;
   final String role;
+  final AppState? appState;
 
   @override
   State<RoleDashboardScreen> createState() => _RoleDashboardScreenState();
@@ -45,7 +48,10 @@ class _RoleDashboardScreenState extends State<RoleDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (widget.role == 'FloorWorker') {
-      return WorkerDashboardScreen(qualityService: widget.service);
+      return WorkerDashboardScreen(
+        qualityService: widget.service,
+        appState: widget.appState,
+      );
     }
 
     if (_error != null) {

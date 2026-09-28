@@ -670,72 +670,69 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? AppColors.error.withValues(alpha: 0.15)
-                        : const Color(0xFF10B981).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isActive
-                          ? AppColors.error.withValues(alpha: 0.35)
-                          : const Color(0xFF10B981).withValues(alpha: 0.35),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: severity.toLowerCase() == 'critical' ||
+                                  severity.toLowerCase() == 'high'
+                              ? AppColors.error.withValues(alpha: 0.35)
+                              : const Color(0xFFFBBF24).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Text(
+                        severity.toUpperCase(),
+                        style: TextStyle(
+                          color: severity.toLowerCase() == 'critical' ||
+                                  severity.toLowerCase() == 'high'
+                              ? AppColors.error
+                              : const Color(0xFFFBBF24),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    r.status,
-                    style: TextStyle(
-                      color: isActive
-                          ? AppColors.error
-                          : const Color(0xFF34D399),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? AppColors.error.withValues(alpha: 0.15)
+                            : const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isActive
+                              ? AppColors.error.withValues(alpha: 0.35)
+                              : const Color(0xFF10B981).withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Text(
+                        r.status,
+                        style: TextStyle(
+                          color: isActive
+                              ? AppColors.error
+                              : const Color(0xFF34D399),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Batch: ${r.batchId}',
-                    style: const TextStyle(
-                      color: AppColors.mutedText,
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    severity.toUpperCase(),
-                    style: TextStyle(
-                      color: severity.toLowerCase() == 'critical' ||
-                              severity.toLowerCase() == 'high'
-                          ? AppColors.error
-                          : const Color(0xFFFBBF24),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 6),
             Text(
               r.reason,
@@ -935,7 +932,7 @@ class _ReleaseQuarantineModalState extends State<_ReleaseQuarantineModal> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Batch: ${widget.record.batchId} • Severity: ${widget.severity}',
+                    'Severity: ${widget.severity}',
                     style: const TextStyle(
                       color: AppColors.mutedText,
                       fontSize: 11,

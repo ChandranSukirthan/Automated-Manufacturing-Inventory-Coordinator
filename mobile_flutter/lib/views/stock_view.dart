@@ -84,7 +84,6 @@ class _StockViewState extends State<StockView> {
   }
 
   Future<void> _showRegisterRollForm() async {
-    final identifier = TextEditingController();
     final quantity = TextEditingController(text: '1');
     final formKey = GlobalKey<FormState>();
     final ownedSkus = _inventoryItems
@@ -114,7 +113,26 @@ class _StockViewState extends State<StockView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _textField(identifier, 'Roll Identifier', required: true),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0x268B5CF6),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.auto_awesome, color: Color(0xFFC4B5FD), size: 16),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Barcode ID: Auto-generated upon registration',
+                                style: TextStyle(color: Color(0xFFC4B5FD), fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       _numberField(quantity, 'Roll Quantity', decimal: true),
                       const Align(
                         alignment: Alignment.centerLeft,
@@ -169,7 +187,7 @@ class _StockViewState extends State<StockView> {
                   if (!formKey.currentState!.validate()) return;
                   try {
                     await _apiService.createRoll(
-                      rollIdentifier: identifier.text.trim(),
+                      rollIdentifier: '',
                       quantity: double.parse(quantity.text),
                       rawMaterialId: selectedMaterial!,
                     );
@@ -192,7 +210,6 @@ class _StockViewState extends State<StockView> {
       );
       if (saved == true && mounted) await _fetchData();
     } finally {
-      identifier.dispose();
       quantity.dispose();
     }
   }
