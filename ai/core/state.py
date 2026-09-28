@@ -25,12 +25,8 @@ class ApprovalStatus(StrEnum):
 class AgentState(TypedDict, total=False):
     workflow_id: str
     objective: str
-<<<<<<< HEAD
+    data_extraction_request: dict[str, str]
     plan: list[str]
-=======
-    data_extraction_request: Dict[str, str]
-    plan: List[str]
->>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
     current_agent: str
     status: WorkflowStatus
     approval_status: ApprovalStatus

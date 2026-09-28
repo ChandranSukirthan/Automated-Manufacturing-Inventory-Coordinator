@@ -13,7 +13,6 @@ namespace backend.Services
         Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item);
         Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item);
         Task<bool> DeleteInventoryItemAsync(int id);
-<<<<<<< HEAD
 
         // Stock Alerts
         Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync();
@@ -23,12 +22,6 @@ namespace backend.Services
         // Student 1: Raw Material CRUD
         Task<IEnumerable<RawMaterial>> GetRawMaterialsAsync();
         Task<RawMaterial?> GetRawMaterialByIdAsync(int id);
-=======
-        
-        // Student A - New Method for Inventory Roll and Raw Material
-        Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
-        Task<InventoryRoll?> GetInventoryRollByIdentifierAsync(string rollIdentifier);
->>>>>>> 9bbffc7c0e8ef0f0d675fc80a20b283c792a350e
         Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material);
         Task<bool> UpdateRawMaterialAsync(int id, RawMaterial material);
         Task<bool> DeleteRawMaterialAsync(int id);
@@ -36,6 +29,7 @@ namespace backend.Services
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();
         Task<InventoryRoll?> GetInventoryRollByIdAsync(int id);
+        Task<InventoryRoll?> GetInventoryRollByIdentifierAsync(string rollIdentifier);
         Task<QrLookupResultDto?> GetInventoryRollByQrAsync(string qrCode);
         Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
         Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll);
