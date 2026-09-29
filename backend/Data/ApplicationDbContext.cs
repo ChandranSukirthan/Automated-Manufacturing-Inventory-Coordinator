@@ -240,6 +240,10 @@ namespace ManufacturingCoordinator.Data
 
             modelBuilder.Entity<ManufacturingCoordinator.Models.Inventory.InventoryRoll>(entity =>
             {
+                // Student A's stock rolls already use the InventoryRolls table.
+                // Quality-control rolls have a different shape, so keep them in
+                // their own table instead of colliding with inventory tracking.
+                entity.ToTable("QualityInventoryRolls");
                 entity.HasKey(i => i.Id);
                 entity.Property(i => i.Id).HasMaxLength(120);
                 entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);

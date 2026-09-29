@@ -9,20 +9,32 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
     public class StripeService : IStripeService
     {
         private readonly ILogger<StripeService> _logger;
+        private readonly string? _apiKey;
 
         public StripeService(IConfiguration configuration, ILogger<StripeService> logger)
         {
             _logger = logger;
-            // Set the Stripe API key from config/env
-            StripeConfiguration.ApiKey = configuration["StripeSettings:SecretKey"]
-                ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY")
-                ?? throw new InvalidOperationException("Stripe SecretKey is not configured.");
+            _apiKey = configuration["StripeSettings:SecretKey"]
+                ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
         }
 
         public async Task<StripePaymentResult> CreatePaymentIntentAsync(
             decimal amount, string currency, string description)
         {
-            var apiKey = StripeConfiguration.ApiKey;
+            if (string.IsNullOrWhiteSpace(_apiKey))
+            {
+                _logger.LogWarning(
+                    "A payment was requested while Stripe SecretKey is not configured.");
+                return new StripePaymentResult(
+                    Success: false,
+                    PaymentIntentId: null,
+                    Status: "unavailable",
+                    ErrorMessage: "Payment processing is unavailable until Stripe is configured."
+                );
+            }
+
+            StripeConfiguration.ApiKey = _apiKey;
+            var apiKey = _apiKey;
             var isPlaceholder = string.IsNullOrWhiteSpace(apiKey) ||
                                 apiKey.Contains("placeholder", StringComparison.OrdinalIgnoreCase) ||
                                 apiKey.StartsWith("sk_test_placeholder", StringComparison.OrdinalIgnoreCase);

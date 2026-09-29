@@ -70,6 +70,8 @@ builder.Services.AddDbContext<ManufacturingContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
 
+builder.Services.AddMemoryCache();
+
 // Register Inventory & Agent Services (Student 1)
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IBarcodeService, BarcodeService>();
@@ -186,17 +188,10 @@ using (var scope = app.Services.CreateScope())
 {
     try
     {
-        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
-        mfgContext?.Database.EnsureCreated();
-        if (mfgContext != null)
-        {
-            await StudentAInventorySeeder.SeedAsync(mfgContext);
-        }
-
         var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        // EnsureCreated only works on a brand-new database. Apply the EF
-        // migrations so an existing development database also receives the
-        // purchase-order tables used by the Floor Worker delivery screen.
+        // The application migrations own the shared schema. Do this before
+        // seeding so the Floor Worker delivery screen has its purchase-order
+        // tables on both fresh and existing development databases.
         await appContext.Database.MigrateAsync();
         await appContext.Database.ExecuteSqlRawAsync(@"
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""EmployeeId"" character varying(16);
@@ -204,6 +199,13 @@ using (var scope = app.Services.CreateScope())
                 ON ""Users"" (""EmployeeId"")
                 WHERE ""EmployeeId"" IS NOT NULL;
         ");
+
+        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
+        if (mfgContext != null)
+        {
+            await StudentAInventorySeeder.SeedAsync(mfgContext);
+        }
+
         await DbInitializer.SeedAsync(app.Services);
     }
     catch (Exception ex)
