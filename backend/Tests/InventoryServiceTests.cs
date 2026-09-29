@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,10 +24,18 @@ namespace backend.Tests
 
         private InventoryService CreateService(ManufacturingContext context)
         {
-            var barcodeService = new BarcodeService();
+            var barcodeService = new TestBarcodeService();
             var config = new ConfigurationBuilder().Build();
             var logger = NullLogger<InventoryService>.Instance;
             return new InventoryService(context, barcodeService, config, logger);
+        }
+
+        private sealed class TestBarcodeService : IBarcodeService
+        {
+            public Task<QrCodeImage> GenerateInventoryRollQrAsync(
+                string rollIdentifier,
+                CancellationToken cancellationToken = default) =>
+                Task.FromResult(new QrCodeImage(Array.Empty<byte>(), "image/png"));
         }
 
         [Fact]

@@ -1,4 +1,4 @@
-name: AMIC Continuous Integration (Student A)
+name: AMIC Continuous Integration
 
 on:
   push:

@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using backend.Data;
 using backend.Models;
@@ -26,9 +27,17 @@ public class InventoryBusinessLogicTests
 
     private static InventoryService CreateService(ManufacturingContext context) => new(
         context,
-        new BarcodeService(),
+        new TestBarcodeService(),
         new ConfigurationBuilder().Build(),
         NullLogger<InventoryService>.Instance);
+
+    private sealed class TestBarcodeService : IBarcodeService
+    {
+        public Task<QrCodeImage> GenerateInventoryRollQrAsync(
+            string rollIdentifier,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new QrCodeImage(Array.Empty<byte>(), "image/png"));
+    }
 
     [Fact]
     public void BurnRateCalculation_DividesConsumptionByRecordedDays()
