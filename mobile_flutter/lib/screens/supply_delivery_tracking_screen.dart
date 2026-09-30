@@ -116,7 +116,7 @@ class _SupplyDeliveryTrackingScreenState
         '${delivery.supplierName}\nDispatched: ${_formatDeliveryTime(delivery.updatedAt)}',
       ),
       isThreeLine: true,
-      trailing: const Chip(label: Text('In transit')),
+      trailing: Chip(label: Text(delivery.status)),
     ),
   );
 }

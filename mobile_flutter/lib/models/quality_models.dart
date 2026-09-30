@@ -136,6 +136,7 @@ class InventoryRoll {
 class DefectReport {
   const DefectReport({
     required this.id,
+    this.skuCode = '',
     required this.batchId,
     required this.productType,
     required this.severity,
@@ -147,6 +148,7 @@ class DefectReport {
   });
 
   final String id;
+  final String skuCode;
   final String batchId;
   final String productType;
   final String severity;
@@ -158,6 +160,7 @@ class DefectReport {
 
   factory DefectReport.fromJson(Map<String, dynamic> json) => DefectReport(
     id: json['id']?.toString() ?? '',
+    skuCode: json['skuCode'] as String? ?? '',
     batchId: json['batchId'] as String? ?? '',
     productType: json['productType'] as String? ?? '',
     severity: json['severity'] as String? ?? '',
@@ -174,6 +177,7 @@ class DefectReport {
 
 extension DefectReportCopy on DefectReport {
   DefectReport copyWith({
+    String? skuCode,
     String? batchId,
     String? productType,
     String? severity,
@@ -183,6 +187,7 @@ extension DefectReportCopy on DefectReport {
     List<String>? affectedInventory,
   }) => DefectReport(
     id: id,
+    skuCode: skuCode ?? this.skuCode,
     batchId: batchId ?? this.batchId,
     productType: productType ?? this.productType,
     severity: severity ?? this.severity,

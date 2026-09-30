@@ -10,10 +10,16 @@ import 'defect_detail_screen.dart';
 import 'defect_form_screen.dart';
 
 class DefectsScreen extends StatefulWidget {
-  const DefectsScreen({required this.service, this.showAppBar = true, super.key});
+  const DefectsScreen({
+    required this.service,
+    this.showAppBar = true,
+    this.readOnly = false,
+    super.key,
+  });
 
   final QualityService service;
   final bool showAppBar;
+  final bool readOnly;
 
   @override
   State<DefectsScreen> createState() => _DefectsScreenState();
@@ -71,25 +77,26 @@ class _DefectsScreenState extends State<DefectsScreen> {
         style: TextStyle(color: AppColors.mutedText, fontSize: 14),
       ),
       const SizedBox(height: 20),
-      SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: FilledButton.icon(
-          onPressed: _create,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text(
-            'Create Defect',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.strongText,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+      if (!widget.readOnly)
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: _create,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              'Create Defect',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.strongText,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
         ),
-      ),
     ],
   );
 
@@ -371,16 +378,18 @@ class _DefectsScreenState extends State<DefectsScreen> {
                       tooltip: 'View',
                       onPressed: () => _open(defect),
                     ),
-                    _CardAction(
-                      icon: Icons.edit_outlined,
-                      tooltip: 'Edit',
-                      onPressed: () => _edit(defect),
-                    ),
-                    _CardAction(
-                      icon: Icons.delete_outline_rounded,
-                      tooltip: 'Delete',
-                      onPressed: () => _delete(defect),
-                    ),
+                    if (!widget.readOnly) ...[
+                      _CardAction(
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Edit',
+                        onPressed: () => _edit(defect),
+                      ),
+                      _CardAction(
+                        icon: Icons.delete_outline_rounded,
+                        tooltip: 'Delete',
+                        onPressed: () => _delete(defect),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -453,6 +462,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
   }
 
   String _inventoryLabel(DefectReport defect) {
+    if (defect.skuCode.isNotEmpty) return defect.skuCode;
     final ids = _inventoryFor(defect);
     final roll = _rolls.where((item) => ids.contains(item.id)).firstOrNull;
     return roll?.rollIdentifier.isNotEmpty == true
@@ -602,11 +612,12 @@ class _DefectsScreenState extends State<DefectsScreen> {
           ? AppBar(
               title: const Text('Defect Reports'),
               actions: [
-                IconButton(
-                  onPressed: _create,
-                  icon: const Icon(Icons.add_circle_outline),
-                  tooltip: 'Create defect',
-                ),
+                if (!widget.readOnly)
+                  IconButton(
+                    onPressed: _create,
+                    icon: const Icon(Icons.add_circle_outline),
+                    tooltip: 'Create defect',
+                  ),
                 IconButton(
                   onPressed: _filters,
                   icon: Badge(

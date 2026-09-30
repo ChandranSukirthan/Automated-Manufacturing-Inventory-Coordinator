@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
 import '../views/scanner_view.dart';
 import '../controllers/inventory_controller.dart';
 import '../views/stock_view.dart';
+import '../widgets/catalog_sku_fields.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
   const WorkerDashboardScreen({
@@ -30,6 +32,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   List<InventoryItemModel> _items = [];
   List<InventoryRollModel> _rolls = [];
   List<RawMaterialModel> _materials = [];
+  List<PackagingTypeModel> _packagingTypes = [];
   List<Map<String, dynamic>> _levels = [];
   List<StockAlertModel> _alerts = [];
   List<Map<String, dynamic>> _history = [];
@@ -105,6 +108,11 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       const <StockAlertModel>[],
       failures,
     );
+    final packagingTypes = await _loadSection(
+      _inventory.fetchPackagingTypes,
+      const <PackagingTypeModel>[],
+      failures,
+    );
     if (!mounted) return;
     final selectedHistoryId =
         _selectedHistoryMaterialId != null &&
@@ -117,6 +125,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       _items = items;
       _rolls = rolls;
       _materials = materials;
+      _packagingTypes = packagingTypes;
       _levels = levels;
       _alerts = alerts;
       _selectedMaterial ??= _levels.isNotEmpty
@@ -154,6 +163,14 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       _analysis = null;
       _index = 5;
     });
+  }
+
+  Future<void> _openScanner() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => ScannerView(controller: _controller)),
+    );
+    if (mounted) await _load();
   }
 
   Future<void> _runDataExtraction() async {
@@ -214,12 +231,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           IconButton(
             tooltip: 'Scan inventory roll',
             icon: const Icon(Icons.qr_code_scanner),
-            onPressed: () => Navigator.push<void>(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ScannerView(controller: _controller),
-              ),
-            ),
+            onPressed: _openScanner,
           ),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
@@ -284,28 +296,77 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
     onTriggerAi: _openDataExtraction,
   );
 
-  Widget _rollsTab() => _rolls.isEmpty
-      ? const Center(child: Text('No rolls created for this account.'))
-      : ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _rolls.length,
-          itemBuilder: (_, index) {
-            final roll = _rolls[index];
-            final material = _materials
-                .where((item) => item.id == roll.rawMaterialId)
-                .firstOrNull;
-            return Card(
-              child: ListTile(
-                leading: const Icon(Icons.qr_code_2),
-                title: Text(roll.rollIdentifier),
-                subtitle: Text(
-                  '${material?.skuCode ?? 'Unknown SKU'} • ${roll.currentQuantity} / ${roll.initialQuantity} units',
+  Widget _rollsTab() => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161B2E),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF2A3958)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.qr_code_scanner, color: AppColors.primaryLight),
+                SizedBox(width: 10),
+                Text(
+                  'QR roll scanner',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
-                trailing: Text(roll.status),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Scan a material roll to identify its SKU and update the worker workspace.',
+              style: TextStyle(color: AppColors.mutedText),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _openScanner,
+                icon: const Icon(Icons.camera_alt_outlined),
+                label: const Text('Open QR scanner'),
               ),
-            );
-          },
-        );
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      Text(
+        'Registered rolls (${_rolls.length})',
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 8),
+      if (_rolls.isEmpty)
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(18),
+            child: Text('No rolls are registered yet. Scan or register a roll from the Inventory tab.'),
+          ),
+        )
+      else
+        ..._rolls.map((roll) {
+          final material = _materials
+              .where((item) => item.id == roll.rawMaterialId)
+              .firstOrNull;
+          return Card(
+            child: ListTile(
+              leading: const Icon(Icons.qr_code_2),
+              title: Text(roll.rollIdentifier),
+              subtitle: Text(
+                '${material?.skuCode ?? 'Unknown SKU'} • ${roll.currentQuantity} / ${roll.initialQuantity} units',
+              ),
+              trailing: Text(roll.status),
+            ),
+          );
+        }),
+    ],
+  );
 
   Widget _levelsTab() => _levels.isEmpty
       ? const Center(child: Text('No stock level data'))
@@ -599,18 +660,18 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   );
 
   Future<void> _showAlertForm() async {
-    final sku = TextEditingController(
-      text: _items.isEmpty ? '' : _items.first.sku,
-    );
-    final packaging = TextEditingController(
-      text: _items.isEmpty ? 'Standard Roll' : _items.first.category,
-    );
+    final skuNumber = TextEditingController();
     final quantity = TextEditingController(text: '500');
     final formKey = GlobalKey<FormState>();
+    int? packagingTypeId = _packagingTypes.firstOrNull?.id;
+    int? rawMaterialId = materialOptionsFor(packagingTypeId, _materials)
+        .firstOrNull
+        ?.id;
     try {
       final saved = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
           title: const Text('Log Low Stock Alert'),
           content: Form(
             key: formKey,
@@ -618,24 +679,27 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextFormField(
-                    controller: sku,
-                    decoration: const InputDecoration(
-                      labelText: 'Material SKU',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Material SKU is required.'
-                        : null,
+                  CatalogSkuFields(
+                    packagingTypes: _packagingTypes,
+                    rawMaterials: _materials,
+                    packagingTypeId: packagingTypeId,
+                    rawMaterialId: rawMaterialId,
+                    skuNumberController: skuNumber,
+                    onPackagingTypeChanged: (value) => setDialogState(() {
+                      packagingTypeId = value;
+                      rawMaterialId = materialOptionsFor(
+                        value,
+                        _materials,
+                      ).firstOrNull?.id;
+                      skuNumber.clear();
+                    }),
+                    onRawMaterialChanged: (value) => setDialogState(() {
+                      rawMaterialId = value;
+                      skuNumber.clear();
+                    }),
+                    onSkuNumberChanged: (_) => setDialogState(() {}),
                   ),
-                  TextFormField(
-                    controller: packaging,
-                    decoration: const InputDecoration(
-                      labelText: 'Packaging Type',
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Packaging Type is required.'
-                        : null,
-                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: quantity,
                     keyboardType: TextInputType.number,
@@ -660,7 +724,10 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
             FilledButton(
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
-                final normalizedSku = sku.text.trim().toLowerCase();
+                final packaging = packagingById(_packagingTypes, packagingTypeId)!;
+                final material = materialById(_materials, rawMaterialId)!;
+                final fullSku = buildSku(packaging, material, skuNumber.text);
+                final normalizedSku = fullSku.toLowerCase();
                 final duplicate = _alerts
                     .where(
                       (alert) =>
@@ -677,7 +744,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                     ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'An active alert (${duplicate.status}) already exists for ${sku.text.trim()}.',
+                          'An active alert (${duplicate.status}) already exists for $fullSku.',
                         ),
                       ),
                     );
@@ -686,9 +753,12 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 }
                 try {
                   await _inventory.createAlert(
-                    sku: sku.text.trim(),
-                    packagingType: packaging.text.trim(),
+                    sku: fullSku,
+                    packagingType: packaging.name,
                     quantityRequested: int.parse(quantity.text),
+                    packagingTypeId: packagingTypeId,
+                    rawMaterialId: rawMaterialId,
+                    skuNumber: int.parse(skuNumber.text),
                   );
                   if (dialogContext.mounted) Navigator.pop(dialogContext, true);
                 } on ApiException catch (exception) {
@@ -702,12 +772,16 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               child: const Text('Log Alert'),
             ),
           ],
+          ),
         ),
       );
       if (saved == true && mounted) await _load();
     } finally {
-      sku.dispose();
-      packaging.dispose();
+      // Dialog routes finish their exit animation after showDialog completes.
+      // Delay disposal so Cancel cannot rebuild a field with a disposed
+      // controller during that animation.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      skuNumber.dispose();
       quantity.dispose();
     }
   }

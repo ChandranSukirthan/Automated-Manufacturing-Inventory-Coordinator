@@ -42,45 +42,24 @@ namespace backend.Services
 
         public async Task<IEnumerable<InventoryItemDto>> GetInventoryItemsAsync()
         {
-            var items = await _context.InventoryItems.ToListAsync();
-            var skuCodes = items
-                .Where(item => !string.IsNullOrWhiteSpace(item.Sku))
-                .Select(item => item.Sku.Trim())
-                .ToList();
-            var existingSkus = await _context.RawMaterials
-                .Where(material => skuCodes.Contains(material.SkuCode))
-                .Select(material => material.SkuCode)
-                .ToListAsync();
-            var missingMaterials = items
-                .Where(item => !string.IsNullOrWhiteSpace(item.Sku) && !existingSkus.Contains(item.Sku.Trim()))
-                .GroupBy(item => item.Sku.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .Select(item => new RawMaterial
-                {
-                    SkuCode = item.Sku.Trim(),
-                    Name = item.Name,
-                    Category = item.Category,
-                    UnitOfMeasure = "UNITS",
-                    ReorderThreshold = item.ReorderThreshold
-                })
-                .ToList();
-            if (missingMaterials.Count > 0)
-            {
-                _context.RawMaterials.AddRange(missingMaterials);
-                await _context.SaveChangesAsync();
-            }
-
-            return items
+            // Inventory records are now created from the material catalogue.
+            // Do not infer new raw materials from arbitrary legacy item text.
+            return await _context.InventoryItems
+                .AsNoTracking()
+                .OrderBy(item => item.Sku)
                 .Select(item => new InventoryItemDto
                 {
                     Id = item.Id,
                     Sku = item.Sku,
                     Name = item.Name,
                     Category = item.Category,
+                    PackagingTypeId = item.PackagingTypeId,
+                    RawMaterialId = item.RawMaterialId,
+                    SkuNumber = item.SkuNumber,
                     StockLevel = item.StockLevel,
                     ReorderThreshold = item.ReorderThreshold
                 })
-                .ToList();
+                .ToListAsync();
         }
 
         public async Task<InventoryItem?> GetInventoryItemByIdAsync(int id)
@@ -92,35 +71,86 @@ namespace backend.Services
         {
             _context.InventoryItems.Add(item);
             await _context.SaveChangesAsync();
-            if (!string.IsNullOrWhiteSpace(item.Sku) && !await _context.RawMaterials.AnyAsync(material => material.SkuCode == item.Sku.Trim()))
+            return item;
+        }
+
+        public async Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request)
+        {
+            var packagingType = await _context.PackagingTypes
+                .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId && type.IsActive);
+            if (packagingType == null)
             {
-                _context.RawMaterials.Add(new RawMaterial
+                throw new InvalidOperationException("The selected packaging type was not found.");
+            }
+
+            var materialTemplate = await _context.RawMaterials
+                .FirstOrDefaultAsync(material => material.Id == request.RawMaterialId);
+            if (materialTemplate == null || materialTemplate.PackagingTypeId != packagingType.Id)
+            {
+                throw new InvalidOperationException("The selected raw material is not available for that packaging type.");
+            }
+
+            var sku = BuildSku(packagingType.ShortCode, materialTemplate.MaterialCode, request.SkuNumber);
+            if (await _context.InventoryItems.AnyAsync(item => item.Sku == sku))
+            {
+                throw new InvalidOperationException($"SKU {sku} already exists. Enter the next sequence number.");
+            }
+
+            // A raw-material row represents a traceable, purchasable material
+            // SKU. Reuse a seeded row when the requested SKU exists; otherwise
+            // clone only its catalogue metadata and let the server set the SKU.
+            var materialSku = await _context.RawMaterials
+                .FirstOrDefaultAsync(material => material.SkuCode == sku);
+            if (materialSku == null)
+            {
+                materialSku = new RawMaterial
                 {
-                    SkuCode = item.Sku.Trim(),
-                    Name = item.Name,
-                    Category = item.Category,
-                    UnitOfMeasure = "UNITS",
-                    ReorderThreshold = item.ReorderThreshold
-                });
+                    SkuCode = sku,
+                    Name = materialTemplate.Name,
+                    Description = materialTemplate.Description,
+                    Category = packagingType.Name,
+                    MaterialCode = materialTemplate.MaterialCode,
+                    PackagingTypeId = packagingType.Id,
+                    UnitOfMeasure = materialTemplate.UnitOfMeasure,
+                    ReorderThreshold = request.ReorderThreshold > 0
+                        ? request.ReorderThreshold
+                        : materialTemplate.ReorderThreshold,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                };
+                _context.RawMaterials.Add(materialSku);
                 await _context.SaveChangesAsync();
             }
+
+            var item = new InventoryItem
+            {
+                Sku = sku,
+                Name = materialSku.Name,
+                Category = packagingType.Name,
+                PackagingTypeId = packagingType.Id,
+                RawMaterialId = materialSku.Id,
+                SkuNumber = request.SkuNumber,
+                StockLevel = request.StockLevel,
+                ReorderThreshold = request.ReorderThreshold,
+            };
+            _context.InventoryItems.Add(item);
+            await _context.SaveChangesAsync();
             return item;
         }
 
         public async Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item)
         {
             if (id != item.Id) return false;
-            _context.Entry(item).State = EntityState.Modified;
-            try
-            {
-                await _context.SaveChangesAsync();
-                return true;
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.InventoryItems.Any(e => e.Id == id)) return false;
-                throw;
-            }
+            var existing = await _context.InventoryItems.FindAsync(id);
+            if (existing == null) return false;
+
+            // Packaging type, raw material and the server-generated SKU are
+            // immutable after creation. Stock counts are the only editable
+            // values on an existing material SKU.
+            existing.StockLevel = item.StockLevel;
+            existing.ReorderThreshold = item.ReorderThreshold;
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<bool> DeleteInventoryItemAsync(int id)
@@ -162,6 +192,10 @@ namespace backend.Services
 
         public async Task<StockAlertResponseDto> CreateStockAlertAsync(CreateStockAlertDto alertDto)
         {
+            var resolved = await ResolveCatalogueSkuAsync(alertDto);
+            alertDto.Sku = resolved.Sku;
+            alertDto.PackagingType = resolved.PackagingType;
+
             var existingPending = await _context.StockAlerts
                 .FirstOrDefaultAsync(a => a.Sku == alertDto.Sku && (a.Status == "Pending" || a.Status == "Processing" || a.Status == "Acknowledged"));
 
@@ -223,7 +257,18 @@ namespace backend.Services
                 // duplicate rows (or fail under warning-as-error settings).
                 // Detail endpoints load related data only when it is needed.
                 .AsNoTracking()
-                .OrderBy(r => r.Id)
+                .OrderBy(r => r.PackagingTypeId)
+                .ThenBy(r => r.MaterialCode)
+                .ThenBy(r => r.SkuCode)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<PackagingType>> GetPackagingTypesAsync()
+        {
+            return await _context.PackagingTypes
+                .AsNoTracking()
+                .Where(type => type.IsActive)
+                .OrderBy(type => type.Name)
                 .ToListAsync();
         }
 
@@ -261,6 +306,8 @@ namespace backend.Services
             existing.SkuCode = material.SkuCode;
             existing.Description = material.Description;
             existing.Category = material.Category;
+            existing.MaterialCode = material.MaterialCode;
+            existing.PackagingTypeId = material.PackagingTypeId;
             existing.UnitOfMeasure = material.UnitOfMeasure;
             existing.ReorderThreshold = material.ReorderThreshold;
             existing.UpdatedAt = DateTime.UtcNow;
@@ -278,6 +325,54 @@ namespace backend.Services
             await _context.SaveChangesAsync();
             return true;
         }
+
+        private async Task<(string Sku, string PackagingType)> ResolveCatalogueSkuAsync(CreateStockAlertDto alertDto)
+        {
+            RawMaterial? material;
+            PackagingType? packagingType;
+
+            if (alertDto.PackagingTypeId.HasValue &&
+                alertDto.RawMaterialId.HasValue &&
+                alertDto.SkuNumber.HasValue)
+            {
+                packagingType = await _context.PackagingTypes
+                    .FirstOrDefaultAsync(type => type.Id == alertDto.PackagingTypeId.Value && type.IsActive);
+                material = await _context.RawMaterials
+                    .FirstOrDefaultAsync(rawMaterial => rawMaterial.Id == alertDto.RawMaterialId.Value);
+
+                if (packagingType == null || material == null || material.PackagingTypeId != packagingType.Id)
+                {
+                    throw new InvalidOperationException("The selected packaging type and raw material do not match.");
+                }
+
+                var generatedSku = BuildSku(packagingType.ShortCode, material.MaterialCode, alertDto.SkuNumber.Value);
+                material = await _context.RawMaterials
+                    .FirstOrDefaultAsync(rawMaterial => rawMaterial.SkuCode == generatedSku);
+                if (material == null || !await _context.InventoryItems.AnyAsync(item => item.Sku == generatedSku))
+                {
+                    throw new InvalidOperationException($"SKU {generatedSku} is not an inventory item. Add it to stock before reporting low stock.");
+                }
+                return (generatedSku, packagingType.Name);
+            }
+
+            material = await _context.RawMaterials
+                .FirstOrDefaultAsync(rawMaterial => rawMaterial.SkuCode == alertDto.Sku.Trim());
+            if (material == null)
+            {
+                throw new InvalidOperationException("Select an SKU from the inventory catalogue.");
+            }
+
+            packagingType = await _context.PackagingTypes
+                .FirstOrDefaultAsync(type => type.Id == material.PackagingTypeId && type.IsActive);
+            if (packagingType == null || !await _context.InventoryItems.AnyAsync(item => item.Sku == material.SkuCode))
+            {
+                throw new InvalidOperationException("The selected SKU is not an active inventory item.");
+            }
+            return (material.SkuCode, packagingType.Name);
+        }
+
+        private static string BuildSku(string packagingCode, string materialCode, int sequence) =>
+            $"{packagingCode.Trim().ToUpperInvariant()}-{materialCode.Trim().ToUpperInvariant()}-{sequence:D3}";
 
         // ========== Student 1: Inventory Roll CRUD & QR Lookup ==========
 
@@ -824,7 +919,7 @@ namespace backend.Services
                             _context.StockAlerts.Add(new StockAlert
                             {
                                 Sku = materialSku,
-                                PackagingType = "Standard Roll",
+                                PackagingType = material!.Category,
                                 QuantityRequested = (int)draftQty,
                                 Status = "Processing",
                                 WorkerId = "Auto-Replenish-Bot",

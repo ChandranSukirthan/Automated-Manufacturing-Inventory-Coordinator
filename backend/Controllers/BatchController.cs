@@ -10,7 +10,7 @@ namespace ManufacturingCoordinator.Api.Controllers
 {
     [ApiController]
     [Route("api/batches")]
-    [Authorize(Roles = "QualityInspector")]
+    [Authorize(Roles = "QualityInspector,SupplyChainManager,ITAdmin")]
     public class BatchController : ControllerBase
     {
         private readonly ApplicationDbContext _db;

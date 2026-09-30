@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../controllers/inventory_controller.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
+import '../widgets/catalog_sku_fields.dart';
 
 class ScannerView extends StatefulWidget {
   final InventoryController controller;
@@ -283,38 +284,32 @@ class _ScannerViewState extends State<ScannerView> {
   }
 
   Future<void> _showManualSkuEntry() async {
-    final skuController = TextEditingController(text: widget.controller.sku);
-    String? enteredSku;
+    List<PackagingTypeModel> packagingTypes = const [];
+    List<RawMaterialModel> materials = const [];
     try {
-      enteredSku = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Enter material SKU'),
-          content: TextField(
-            controller: skuController,
-            autofocus: true,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              labelText: 'Material SKU',
-              hintText: 'e.g. CR-001',
-            ),
-            onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, skuController.text),
-              child: const Text('Use SKU'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      skuController.dispose();
+      final catalogue = await Future.wait([
+        _inventoryApi.fetchPackagingTypes(),
+        _inventoryApi.fetchRawMaterials(),
+      ]);
+      packagingTypes = catalogue[0] as List<PackagingTypeModel>;
+      materials = catalogue[1] as List<RawMaterialModel>;
+    } on ApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
+      }
+      return;
     }
+    if (!mounted) return;
+
+    final enteredSku = await showDialog<String>(
+      context: context,
+      builder: (_) => _ManualSkuDialog(
+        packagingTypes: packagingTypes,
+        materials: materials,
+      ),
+    );
 
     final sku = enteredSku?.trim();
     if (sku == null || sku.isEmpty || !mounted) return;
@@ -323,7 +318,6 @@ class _ScannerViewState extends State<ScannerView> {
     // catalogue.  This prevents arbitrary text such as "Testsku" from being
     // carried into a low-stock alert as though it were an inventory item.
     try {
-      final materials = await _inventoryApi.fetchRawMaterials();
       final normalizedSku = _normalizeSku(sku);
       final matchingMaterial = materials.where(
         (material) => _normalizeSku(material.skuCode) == normalizedSku,
@@ -368,4 +362,88 @@ class _ScannerViewState extends State<ScannerView> {
       .toUpperCase()
       .replaceAll('-', '')
       .replaceAll(' ', '');
+}
+
+/// Owns the field controller for the manual-SKU route.  This ensures Flutter
+/// disposes it only after the dialog subtree is detached; disposing it as soon
+/// as Navigator.pop completed caused the Cancel assertion seen on device.
+class _ManualSkuDialog extends StatefulWidget {
+  const _ManualSkuDialog({
+    required this.packagingTypes,
+    required this.materials,
+  });
+
+  final List<PackagingTypeModel> packagingTypes;
+  final List<RawMaterialModel> materials;
+
+  @override
+  State<_ManualSkuDialog> createState() => _ManualSkuDialogState();
+}
+
+class _ManualSkuDialogState extends State<_ManualSkuDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _skuNumber = TextEditingController();
+  int? _packagingTypeId;
+  int? _rawMaterialId;
+
+  @override
+  void initState() {
+    super.initState();
+    _packagingTypeId = widget.packagingTypes.firstOrNull?.id;
+    _rawMaterialId = materialOptionsFor(
+      _packagingTypeId,
+      widget.materials,
+    ).firstOrNull?.id;
+  }
+
+  @override
+  void dispose() {
+    _skuNumber.dispose();
+    super.dispose();
+  }
+
+  void _useSku() {
+    if (!_formKey.currentState!.validate()) return;
+    final packaging = packagingById(
+      widget.packagingTypes,
+      _packagingTypeId,
+    );
+    final material = materialById(widget.materials, _rawMaterialId);
+    if (packaging == null || material == null) return;
+    Navigator.pop(context, buildSku(packaging, material, _skuNumber.text));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Select material SKU'),
+    content: Form(
+      key: _formKey,
+      child: CatalogSkuFields(
+        packagingTypes: widget.packagingTypes,
+        rawMaterials: widget.materials,
+        packagingTypeId: _packagingTypeId,
+        rawMaterialId: _rawMaterialId,
+        skuNumberController: _skuNumber,
+        onPackagingTypeChanged: (value) => setState(() {
+          _packagingTypeId = value;
+          _rawMaterialId = materialOptionsFor(value, widget.materials)
+              .firstOrNull
+              ?.id;
+          _skuNumber.clear();
+        }),
+        onRawMaterialChanged: (value) => setState(() {
+          _rawMaterialId = value;
+          _skuNumber.clear();
+        }),
+        onSkuNumberChanged: (_) => setState(() {}),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _useSku, child: const Text('Use SKU')),
+    ],
+  );
 }

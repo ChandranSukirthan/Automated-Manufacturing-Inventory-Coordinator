@@ -50,11 +50,18 @@ namespace backend.Controllers
 
         // POST: api/inventory
         [HttpPost]
-        public async Task<ActionResult<InventoryItem>> CreateItem([FromBody] InventoryItem item)
+        public async Task<ActionResult<InventoryItem>> CreateItem([FromBody] CreateInventoryItemRequest request)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var created = await _inventoryService.CreateInventoryItemAsync(item);
-            return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
+            try
+            {
+                var created = await _inventoryService.CreateInventoryItemFromSkuAsync(request);
+                return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         // PUT: api/inventory/{id}
@@ -86,6 +93,14 @@ namespace backend.Controllers
         {
             var materials = await _inventoryService.GetRawMaterialsAsync();
             return Ok(materials);
+        }
+
+        // GET: api/inventory/packaging-types
+        [HttpGet("packaging-types")]
+        public async Task<ActionResult<IEnumerable<PackagingType>>> GetPackagingTypes()
+        {
+            var packagingTypes = await _inventoryService.GetPackagingTypesAsync();
+            return Ok(packagingTypes);
         }
 
         // GET: api/inventory/rawmaterials/{id}

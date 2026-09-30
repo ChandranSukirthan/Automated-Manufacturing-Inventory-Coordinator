@@ -5,6 +5,8 @@ import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
 import '../views/scanner_view.dart';
+import '../widgets/catalog_sku_fields.dart';
+import 'defect_form_screen.dart';
 import 'production_status_screen.dart';
 import 'supply_delivery_tracking_screen.dart';
 import 'worker_dashboard_screen.dart';
@@ -32,16 +34,6 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   static const _background = Color(0xFF121212);
   static const _surface = Color(0xFF1E1E1E);
   static const _input = Color(0xFF262626);
-  static const _packagingOptions = [
-    'BoxPouch',
-    'BiscuitPackaging',
-    'TeaBag',
-    'Bag',
-    'Can',
-    'Bottle',
-    'Standard Roll',
-  ];
-
   final _controller = InventoryController();
   final _inventory = InventoryApiService();
   late final TextEditingController _skuController;
@@ -52,6 +44,10 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   String? _loadError;
   List<StockAlertModel> _alerts = const [];
   List<Map<String, dynamic>> _stockLevels = const [];
+  List<PackagingTypeModel> _packagingTypes = const [];
+  List<RawMaterialModel> _rawMaterials = const [];
+  int? _packagingTypeId;
+  int? _rawMaterialId;
 
   @override
   void initState() {
@@ -81,11 +77,20 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
       final results = await Future.wait([
         _inventory.fetchAlerts(),
         _inventory.fetchStockLevels(),
+        _inventory.fetchPackagingTypes(),
+        _inventory.fetchRawMaterials(),
       ]);
       if (!mounted) return;
       setState(() {
         _alerts = results[0] as List<StockAlertModel>;
         _stockLevels = results[1] as List<Map<String, dynamic>>;
+        _packagingTypes = results[2] as List<PackagingTypeModel>;
+        _rawMaterials = results[3] as List<RawMaterialModel>;
+        _packagingTypeId ??= _packagingTypes.firstOrNull?.id;
+        _rawMaterialId ??= materialOptionsFor(
+          _packagingTypeId,
+          _rawMaterials,
+        ).firstOrNull?.id;
         _loadError = null;
         _loading = false;
       });
@@ -112,7 +117,24 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
       MaterialPageRoute(builder: (_) => ScannerView(controller: _controller)),
     );
     if (mounted) {
-      _skuController.text = _controller.sku;
+      final parts = _controller.sku.split('-');
+      if (parts.length == 3) {
+        final packaging = _packagingTypes
+            .where((type) => type.shortCode == parts[0])
+            .firstOrNull;
+        final material = _rawMaterials
+            .where(
+              (item) =>
+                  item.packagingTypeId == packaging?.id &&
+                  item.materialCode == parts[1],
+            )
+            .firstOrNull;
+        setState(() {
+          _packagingTypeId = packaging?.id;
+          _rawMaterialId = material?.id;
+          _skuController.text = int.tryParse(parts[2])?.toString() ?? '';
+        });
+      }
       await _refresh();
     }
   }
@@ -145,8 +167,19 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   }
 
   Future<void> _submitLowStockAlert() async {
+    final packaging = packagingById(_packagingTypes, _packagingTypeId);
+    final material = materialById(_rawMaterials, _rawMaterialId);
+    final skuNumber = int.tryParse(_skuController.text.trim());
+    if (packaging == null || material == null || skuNumber == null || skuNumber < 1) {
+      _showMessage(
+        'Select a packaging type and raw material, then enter a valid SKU number.',
+        isError: true,
+      );
+      return;
+    }
     _controller
-      ..setSku(_skuController.text.trim())
+      ..setPackagingType(packaging.name)
+      ..setSku(buildSku(packaging, material, _skuController.text))
       ..clearMessages();
 
     setState(() => _submitting = true);
@@ -169,6 +202,13 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
       ..setSku('')
       ..setQuantityRequested(0);
     _skuController.clear();
+    setState(() {
+      _packagingTypeId = _packagingTypes.firstOrNull?.id;
+      _rawMaterialId = materialOptionsFor(
+        _packagingTypeId,
+        _rawMaterials,
+      ).firstOrNull?.id;
+    });
     _quantityController.clear();
 
     try {
@@ -314,7 +354,19 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
             _openWorkspace(0);
             break;
           case 3:
-            _openWorkspace(3);
+            Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DefectFormScreen(service: widget.qualityService),
+              ),
+            ).then((submitted) {
+              if (!mounted || submitted != true) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Defect report submitted to managers and admins.'),
+                ),
+              );
+            });
             break;
         }
       },
@@ -333,8 +385,8 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
           label: 'Inventory',
         ),
         NavigationDestination(
-          icon: Icon(Icons.timeline_outlined),
-          label: 'Activity',
+          icon: Icon(Icons.assignment_outlined),
+          label: 'Report',
         ),
       ],
     ),
@@ -533,48 +585,27 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
-            'PACKAGING TYPE',
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: .8,
-            ),
-          ),
-          const SizedBox(height: 7),
-          DropdownButtonFormField<String>(
-            key: ValueKey(_controller.packagingType ?? '__no_type_selected__'),
-            initialValue: _controller.packagingType,
-            hint: const Text('Select type'),
-            dropdownColor: _input,
-            style: const TextStyle(color: Colors.white),
-            decoration: _inputDecoration(),
-            items: _packagingOptions
-                .map(
-                  (value) => DropdownMenuItem(value: value, child: Text(value)),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) _controller.setPackagingType(value);
-            },
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'MATERIAL SKU',
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: .8,
-            ),
-          ),
-          const SizedBox(height: 7),
-          TextField(
-            controller: _skuController,
-            style: const TextStyle(color: Colors.white),
-            textCapitalization: TextCapitalization.characters,
-            decoration: _inputDecoration(hint: 'e.g. RM-PLASTIC-502'),
+          CatalogSkuFields(
+            packagingTypes: _packagingTypes,
+            rawMaterials: _rawMaterials,
+            packagingTypeId: _packagingTypeId,
+            rawMaterialId: _rawMaterialId,
+            skuNumberController: _skuController,
+            dark: true,
+            enabled: !_submitting && !_loading,
+            onPackagingTypeChanged: (value) => setState(() {
+              _packagingTypeId = value;
+              _rawMaterialId = materialOptionsFor(
+                value,
+                _rawMaterials,
+              ).firstOrNull?.id;
+              _skuController.clear();
+            }),
+            onRawMaterialChanged: (value) => setState(() {
+              _rawMaterialId = value;
+              _skuController.clear();
+            }),
+            onSkuNumberChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           const Text(

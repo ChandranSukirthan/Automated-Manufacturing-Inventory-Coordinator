@@ -13,6 +13,7 @@ namespace backend.Services
         Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item);
         Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item);
         Task<bool> DeleteInventoryItemAsync(int id);
+        Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request);
 
         // Stock Alerts
         Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync();
@@ -25,6 +26,7 @@ namespace backend.Services
         Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material);
         Task<bool> UpdateRawMaterialAsync(int id, RawMaterial material);
         Task<bool> DeleteRawMaterialAsync(int id);
+        Task<IEnumerable<PackagingType>> GetPackagingTypesAsync();
 
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();

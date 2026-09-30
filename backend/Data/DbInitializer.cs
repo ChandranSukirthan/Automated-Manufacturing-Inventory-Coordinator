@@ -132,10 +132,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-001",
-                        Name = "Apex Industrial Metals",
-                        ContactEmail = "orders@apeximetals.com",
+                        Name = "Lanka Flexible Packaging Supplies",
+                        ContactEmail = "orders@lankaflexible.example",
                         ContactPhone = "+1-555-0192",
-                        Address = "100 Industrial Parkway, Chicago, IL",
+                        Address = "Colombo Export Processing Zone, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 7,
                         IsActive = true,
@@ -145,10 +145,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-002",
-                        Name = "Global Precision Fasteners",
-                        ContactEmail = "procurement@globalfasteners.com",
+                        Name = "Ceylon Food-Pack Materials",
+                        ContactEmail = "procurement@ceylonfoodpack.example",
                         ContactPhone = "+1-555-0283",
-                        Address = "450 Logistics Way, Detroit, MI",
+                        Address = "Colombo Logistics Park, Sri Lanka",
                         PaymentTerms = "Net 60",
                         LeadTimeDays = 14,
                         IsActive = true,
@@ -158,10 +158,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-003",
-                        Name = "Polymer & Composites Direct",
-                        ContactEmail = "sales@polymerdirect.com",
+                        Name = "Island Polymer & Paper Mills",
+                        ContactEmail = "sales@islandpolymer.example",
                         ContactPhone = "+1-555-0374",
-                        Address = "78 Polymer Row, Akron, OH",
+                        Address = "Kelaniya Industrial Estate, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 10,
                         IsActive = true,
@@ -193,7 +193,7 @@ namespace ManufacturingCoordinator.Data
                         ApprovalThreshold = 5000m,
                         RequiresApproval = true,
                         TotalCost = 6750m,
-                        Notes = "Q1 replenishment order",
+                        Notes = "Packaging-material replenishment order",
                         StripePaymentIntentId = "pi_mock_seed_001",
                         StripePaymentStatus = "succeeded",
                         EmailStatus = "Sent",
@@ -205,7 +205,7 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "Batch 1 Steel Sheets",
+                                Description = "Laminated barrier film replenishment",
                                 Quantity = 1500m,
                                 UnitPrice = 4.50m,
                                 TotalPrice = 6750m,
@@ -252,7 +252,7 @@ namespace ManufacturingCoordinator.Data
                         ApprovalThreshold = 5000m,
                         RequiresApproval = true,
                         TotalCost = 9000m,
-                        Notes = "AI Recommended: High burn rate forecast requires urgent steel coils.",
+                        Notes = "AI Recommended: high burn rate forecast requires urgent packaging material replenishment.",
                         CreatedAt = DateTime.UtcNow.AddHours(-2),
                         UpdatedAt = DateTime.UtcNow.AddHours(-1),
                         OrderLines = new List<OrderLine>
@@ -260,7 +260,7 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "High-volume steel coil replenishment",
+                                Description = "High-volume flexible packaging material replenishment",
                                 Quantity = 2000m,
                                 UnitPrice = 4.50m,
                                 TotalPrice = 9000m,

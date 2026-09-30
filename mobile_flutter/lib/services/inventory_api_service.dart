@@ -9,6 +9,9 @@ class InventoryItemModel {
   final String sku;
   final String name;
   final String category;
+  final int? packagingTypeId;
+  final int? rawMaterialId;
+  final int? skuNumber;
   final int stockLevel;
   final int reorderThreshold;
 
@@ -17,6 +20,9 @@ class InventoryItemModel {
     required this.sku,
     required this.name,
     required this.category,
+    this.packagingTypeId,
+    this.rawMaterialId,
+    this.skuNumber,
     required this.stockLevel,
     required this.reorderThreshold,
   });
@@ -27,6 +33,15 @@ class InventoryItemModel {
             sku: json['sku'] as String? ?? '',
             name: json['name'] as String? ?? '',
             category: json['category'] as String? ?? '',
+            packagingTypeId: json['packagingTypeId'] == null
+                ? null
+                : _toInt(json['packagingTypeId']),
+            rawMaterialId: json['rawMaterialId'] == null
+                ? null
+                : _toInt(json['rawMaterialId']),
+            skuNumber: json['skuNumber'] == null
+                ? null
+                : _toInt(json['skuNumber']),
             stockLevel: _toInt(json['stockLevel']),
             reorderThreshold: _toInt(json['reorderThreshold']),
         );
@@ -69,6 +84,8 @@ class RawMaterialModel {
   final String skuCode;
   final String name;
   final String category;
+  final int packagingTypeId;
+  final String materialCode;
   final String unitOfMeasure;
   final num reorderThreshold;
 
@@ -77,6 +94,8 @@ class RawMaterialModel {
     required this.skuCode,
     required this.name,
     required this.category,
+    required this.packagingTypeId,
+    required this.materialCode,
     required this.unitOfMeasure,
     required this.reorderThreshold,
   });
@@ -87,8 +106,29 @@ class RawMaterialModel {
         skuCode: json['skuCode']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
         category: json['category']?.toString() ?? '',
+        packagingTypeId: _toInt(json['packagingTypeId']),
+        materialCode: json['materialCode']?.toString() ?? '',
         unitOfMeasure: json['unitOfMeasure']?.toString() ?? '',
         reorderThreshold: _toNum(json['reorderThreshold']),
+      );
+}
+
+class PackagingTypeModel {
+  const PackagingTypeModel({
+    required this.id,
+    required this.name,
+    required this.shortCode,
+  });
+
+  final int id;
+  final String name;
+  final String shortCode;
+
+  factory PackagingTypeModel.fromJson(Map<String, dynamic> json) =>
+      PackagingTypeModel(
+        id: _toInt(json['id']),
+        name: json['name']?.toString() ?? '',
+        shortCode: json['shortCode']?.toString() ?? '',
       );
 }
 
@@ -155,6 +195,15 @@ class InventoryApiService {
         .toList();
   }
 
+  Future<List<PackagingTypeModel>> fetchPackagingTypes() async {
+    final data = await _api.get('/inventory/packaging-types') as List<dynamic>;
+    return data
+        .map(
+          (item) => PackagingTypeModel.fromJson(item as Map<String, dynamic>),
+        )
+        .toList();
+  }
+
   Future<List<Map<String, dynamic>>> fetchStockLevels() async {
     final data = await _api.get('/inventory/stock-levels') as List<dynamic>;
     return data.cast<Map<String, dynamic>>();
@@ -173,25 +222,31 @@ class InventoryApiService {
     required String sku,
     required String packagingType,
     required int quantityRequested,
+    int? packagingTypeId,
+    int? rawMaterialId,
+    int? skuNumber,
   }) async {
     await _api.post('/inventory/alerts', {
       'sku': sku,
       'packagingType': packagingType,
       'quantityRequested': quantityRequested,
+      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
+      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
+      if (skuNumber != null) 'skuNumber': skuNumber,
     });
   }
 
   Future<void> createItem({
-    required String sku,
-    required String name,
-    required String category,
+    required int packagingTypeId,
+    required int rawMaterialId,
+    required int skuNumber,
     required int stockLevel,
     required int reorderThreshold,
   }) async {
     await _api.post('/inventory', {
-      'sku': sku,
-      'name': name,
-      'category': category,
+      'packagingTypeId': packagingTypeId,
+      'rawMaterialId': rawMaterialId,
+      'skuNumber': skuNumber,
       'stockLevel': stockLevel,
       'reorderThreshold': reorderThreshold,
     });
@@ -203,6 +258,9 @@ class InventoryApiService {
       'sku': item.sku,
       'name': item.name,
       'category': item.category,
+      'packagingTypeId': item.packagingTypeId,
+      'rawMaterialId': item.rawMaterialId,
+      'skuNumber': item.skuNumber,
       'stockLevel': item.stockLevel,
       'reorderThreshold': item.reorderThreshold,
     });

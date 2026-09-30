@@ -23,7 +23,7 @@ class ApiClient {
           (baseUrl ??
                   const String.fromEnvironment(
                     'API_BASE_URL',
-                    defaultValue: 'http://10.0.2.2:5070/api',
+                    defaultValue: 'http://172.20.10.6:5070/api',
                   ))
               .replaceAll(RegExp(r'/$'), '');
 

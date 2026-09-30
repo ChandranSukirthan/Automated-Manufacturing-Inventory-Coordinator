@@ -66,18 +66,7 @@ class IncomingDelivery {
 int _asInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
-String _shiftStatus(dynamic value) {
-  if (value is num) {
-    return switch (value.toInt()) {
-      0 => 'Planned',
-      1 => 'Active',
-      2 => 'Completed',
-      3 => 'Cancelled',
-      _ => 'Unknown',
-    };
-  }
-  return value?.toString() ?? 'Unknown';
-}
+String _shiftStatus(dynamic value) => value?.toString() ?? 'Unknown';
 
 /// Read-only operations used by the Floor Worker dashboard.
 class FloorWorkerOperationsService {
@@ -100,7 +89,6 @@ class FloorWorkerOperationsService {
     final response = await _api.get('/purchase-orders') as List<dynamic>;
     return response
         .map((item) => IncomingDelivery.fromJson(item as Map<String, dynamic>))
-        .where((delivery) => delivery.status.toLowerCase() == 'sent')
         .toList();
   }
 }

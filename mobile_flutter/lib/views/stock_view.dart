@@ -5,6 +5,7 @@ import '../controllers/inventory_controller.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/catalog_sku_fields.dart';
 
 class StockView extends StatefulWidget {
   final InventoryController controller;
@@ -31,6 +32,7 @@ class _StockViewState extends State<StockView> {
   List<InventoryItemModel> _inventoryItems = [];
   List<StockAlertModel> _alerts = [];
   List<RawMaterialModel> _rawMaterials = [];
+  List<PackagingTypeModel> _packagingTypes = [];
   List<InventoryRollModel> _rolls = [];
   bool _isLoading = true;
   String? _error;
@@ -57,6 +59,7 @@ class _StockViewState extends State<StockView> {
         _apiService.fetchAlerts(),
         _apiService.fetchRawMaterials(),
         _apiService.fetchOwnedRolls(),
+        _apiService.fetchPackagingTypes(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -64,6 +67,7 @@ class _StockViewState extends State<StockView> {
         _alerts = results[1] as List<StockAlertModel>;
         _rawMaterials = results[2] as List<RawMaterialModel>;
         _rolls = results[3] as List<InventoryRollModel>;
+        _packagingTypes = results[4] as List<PackagingTypeModel>;
         _isLoading = false;
       });
     } on ApiException catch (exception) {
@@ -84,11 +88,12 @@ class _StockViewState extends State<StockView> {
   Future<void> _showRegisterRollForm() async {
     final identifier = TextEditingController();
     final quantity = TextEditingController();
+    final skuNumber = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final availableMaterials = _rollRegistrableMaterials();
-    int? selectedMaterial = availableMaterials.isEmpty
-        ? null
-        : availableMaterials.first.id;
+    int? packagingTypeId = _packagingTypes.firstOrNull?.id;
+    int? rawMaterialId = materialOptionsFor(packagingTypeId, _rawMaterials)
+        .firstOrNull
+        ?.id;
     String? submissionError;
 
     try {
@@ -96,9 +101,17 @@ class _StockViewState extends State<StockView> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) {
-            final selected = availableMaterials
-                .where((material) => material.id == selectedMaterial)
-                .firstOrNull;
+            final packaging = packagingById(_packagingTypes, packagingTypeId);
+            final selectedTemplate = materialById(_rawMaterials, rawMaterialId);
+            final selected = packaging == null || selectedTemplate == null
+                ? null
+                : _rawMaterials
+                    .where(
+                      (material) =>
+                          material.skuCode ==
+                          buildSku(packaging, selectedTemplate, skuNumber.text),
+                    )
+                    .firstOrNull;
             final remainingStock = selected == null
                 ? 0.0
                 : _remainingStockFor(selected);
@@ -117,6 +130,31 @@ class _StockViewState extends State<StockView> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _textField(identifier, 'Roll Identifier', required: true),
+                      CatalogSkuFields(
+                        packagingTypes: _packagingTypes,
+                        rawMaterials: _rawMaterials,
+                        packagingTypeId: packagingTypeId,
+                        rawMaterialId: rawMaterialId,
+                        skuNumberController: skuNumber,
+                        onPackagingTypeChanged: (value) => setDialogState(() {
+                          packagingTypeId = value;
+                          rawMaterialId = materialOptionsFor(
+                            value,
+                            _rawMaterials,
+                          ).firstOrNull?.id;
+                          skuNumber.clear();
+                          submissionError = null;
+                        }),
+                        onRawMaterialChanged: (value) => setDialogState(() {
+                          rawMaterialId = value;
+                          skuNumber.clear();
+                          submissionError = null;
+                        }),
+                        onSkuNumberChanged: (_) => setDialogState(() {
+                          submissionError = null;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: TextFormField(
@@ -140,50 +178,18 @@ class _StockViewState extends State<StockView> {
                           },
                         ),
                       ),
-                      if (availableMaterials.isEmpty)
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'No material has stock available for a roll yet.',
-                          ),
-                        )
-                      else ...[
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedMaterial,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Raw Material',
-                          ),
-                          items: availableMaterials
-                              .map(
-                                (material) => DropdownMenuItem<int>(
-                                  value: material.id,
-                                  child: Text(
-                                    '${material.skuCode} - ${material.name}',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) => setDialogState(() {
-                            selectedMaterial = value;
-                            submissionError = null;
-                          }),
-                          validator: (value) =>
-                              value == null ? 'Select a raw material.' : null,
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Available: $remainingStock units',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.mutedText,
-                            ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          selected == null
+                              ? 'Enter an existing SKU number with available stock.'
+                              : 'Available: $remainingStock units',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.mutedText,
                           ),
                         ),
-                      ],
+                      ),
                       if (submissionError != null) ...[
                         const SizedBox(height: 12),
                         Align(
@@ -204,15 +210,18 @@ class _StockViewState extends State<StockView> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: availableMaterials.isEmpty
-                      ? null
-                      : () async {
+                  onPressed: () async {
                           if (!formKey.currentState!.validate()) return;
+                          if (selected == null || remainingStock <= 0) {
+                            setDialogState(() => submissionError =
+                                'This SKU is not available for roll registration.');
+                            return;
+                          }
                           try {
                             await _apiService.createRoll(
                               rollIdentifier: identifier.text.trim(),
                               quantity: double.parse(quantity.text),
-                              rawMaterialId: selectedMaterial!,
+                              rawMaterialId: selected.id,
                             );
                             if (dialogContext.mounted) {
                               Navigator.pop(dialogContext, true);
@@ -237,6 +246,7 @@ class _StockViewState extends State<StockView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         identifier.dispose();
         quantity.dispose();
+        skuNumber.dispose();
       });
     }
   }
@@ -350,9 +360,9 @@ class _StockViewState extends State<StockView> {
   }
 
   Future<void> _showItemForm([InventoryItemModel? item]) async {
-    final sku = TextEditingController(text: item?.sku ?? '');
-    final name = TextEditingController(text: item?.name ?? '');
-    final category = TextEditingController(text: item?.category ?? '');
+    final skuNumber = TextEditingController(
+      text: item?.skuNumber?.toString() ?? '',
+    );
     final stock = TextEditingController(
       text: item == null ? '' : item.stockLevel.toString(),
     );
@@ -360,82 +370,100 @@ class _StockViewState extends State<StockView> {
       text: item == null ? '' : item.reorderThreshold.toString(),
     );
     final formKey = GlobalKey<FormState>();
+    int? packagingTypeId = item?.packagingTypeId;
+    int? rawMaterialId = item?.rawMaterialId;
 
     try {
       final saved = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          scrollable: true,
-          title: Text(item == null ? 'Add Stock Item' : 'Edit Stock Item'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _textField(sku, 'SKU Code', required: true),
-                _textField(name, 'Item Name', required: true),
-                _textField(category, 'Category', hintText: 'Enter category'),
-                _numberField(
-                  stock,
-                  'Current Stock',
-                  hintText: 'Enter current stock',
-                ),
-                _numberField(
-                  reorder,
-                  'Reorder Level',
-                  hintText: 'Enter reorder level',
-                ),
-              ],
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            scrollable: true,
+            title: Text(item == null ? 'Add Stock Item' : 'Edit Stock Item'),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (item == null)
+                    CatalogSkuFields(
+                      packagingTypes: _packagingTypes,
+                      rawMaterials: _rawMaterials,
+                      packagingTypeId: packagingTypeId,
+                      rawMaterialId: rawMaterialId,
+                      skuNumberController: skuNumber,
+                      onPackagingTypeChanged: (value) => setDialogState(() {
+                        packagingTypeId = value;
+                        rawMaterialId = null;
+                        skuNumber.clear();
+                      }),
+                      onRawMaterialChanged: (value) => setDialogState(() {
+                        rawMaterialId = value;
+                        skuNumber.clear();
+                      }),
+                      onSkuNumberChanged: (_) => setDialogState(() {}),
+                    )
+                  else
+                    _catalogueSummary(item),
+                  const SizedBox(height: 12),
+                  _numberField(
+                    stock,
+                    'Current Stock',
+                    hintText: 'Enter current stock',
+                  ),
+                  _numberField(
+                    reorder,
+                    'Reorder Level',
+                    hintText: 'Enter reorder level',
+                  ),
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  try {
+                    if (item == null) {
+                      await _apiService.createItem(
+                        packagingTypeId: packagingTypeId!,
+                        rawMaterialId: rawMaterialId!,
+                        skuNumber: int.parse(skuNumber.text.trim()),
+                        stockLevel: int.parse(stock.text),
+                        reorderThreshold: int.parse(reorder.text),
+                      );
+                    } else {
+                      await _apiService.updateItem(
+                        InventoryItemModel(
+                          id: item.id,
+                          sku: item.sku,
+                          name: item.name,
+                          category: item.category,
+                          packagingTypeId: item.packagingTypeId,
+                          rawMaterialId: item.rawMaterialId,
+                          skuNumber: item.skuNumber,
+                          stockLevel: int.parse(stock.text),
+                          reorderThreshold: int.parse(reorder.text),
+                        ),
+                      );
+                    }
+                    if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                  } on ApiException catch (exception) {
+                    if (dialogContext.mounted) {
+                      ScaffoldMessenger.of(
+                        dialogContext,
+                      ).showSnackBar(SnackBar(content: Text(exception.message)));
+                    }
+                  }
+                },
+                child: Text(item == null ? 'Create Item' : 'Save Changes'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                try {
-                  final values = (
-                    sku: sku.text.trim(),
-                    name: name.text.trim(),
-                    category: category.text.trim(),
-                    stock: int.parse(stock.text),
-                    reorder: int.parse(reorder.text),
-                  );
-                  if (item == null) {
-                    await _apiService.createItem(
-                      sku: values.sku,
-                      name: values.name,
-                      category: values.category,
-                      stockLevel: values.stock,
-                      reorderThreshold: values.reorder,
-                    );
-                  } else {
-                    await _apiService.updateItem(
-                      InventoryItemModel(
-                        id: item.id,
-                        sku: values.sku,
-                        name: values.name,
-                        category: values.category,
-                        stockLevel: values.stock,
-                        reorderThreshold: values.reorder,
-                      ),
-                    );
-                  }
-                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-                } on ApiException catch (exception) {
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(
-                      dialogContext,
-                    ).showSnackBar(SnackBar(content: Text(exception.message)));
-                  }
-                }
-              },
-              child: Text(item == null ? 'Create Item' : 'Save Changes'),
-            ),
-          ],
         ),
       );
       if (saved == true && mounted) await _fetchData();
@@ -444,13 +472,24 @@ class _StockViewState extends State<StockView> {
       // controllers now causes Flutter to rebuild those fields with disposed
       // controllers when the dialog is dismissed (including via Cancel).
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        sku.dispose();
-        name.dispose();
-        category.dispose();
+        skuNumber.dispose();
         stock.dispose();
         reorder.dispose();
       });
     }
+  }
+
+  Widget _catalogueSummary(InventoryItemModel item) {
+    final packaging = packagingById(_packagingTypes, item.packagingTypeId);
+    final material = materialById(_rawMaterials, item.rawMaterialId);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.inventory_2_outlined),
+      title: Text(item.sku),
+      subtitle: Text(
+        '${packaging?.name ?? item.category} • ${material?.name ?? item.name}',
+      ),
+    );
   }
 
   Widget _textField(

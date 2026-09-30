@@ -27,6 +27,7 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
         public DbSet<OrderLine> OrderLines { get; set; } = null!;
         public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
+        public DbSet<PackagingType> PackagingTypes { get; set; } = null!;
         public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
@@ -197,6 +198,12 @@ namespace ManufacturingCoordinator.Data
             modelBuilder.Entity<DefectReport>(entity =>
             {
                 entity.HasKey(d => d.Id);
+
+                entity.Property(d => d.SkuCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(d => d.SkuCode);
 
                 entity.Property(d => d.BatchId)
                     .IsRequired()
@@ -608,6 +615,22 @@ namespace ManufacturingCoordinator.Data
                 entity.HasKey(rm => rm.Id);
                 entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
                 entity.HasIndex(rm => rm.SkuCode).IsUnique();
+                entity.Property(rm => rm.MaterialCode).IsRequired().HasMaxLength(20);
+                entity.HasIndex(rm => new { rm.PackagingTypeId, rm.MaterialCode });
+                entity.HasOne(rm => rm.PackagingType)
+                    .WithMany(pt => pt.RawMaterials)
+                    .HasForeignKey(rm => rm.PackagingTypeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PackagingType>(entity =>
+            {
+                entity.ToTable("PackagingTypes");
+                entity.HasKey(pt => pt.Id);
+                entity.Property(pt => pt.Name).IsRequired().HasMaxLength(100);
+                entity.Property(pt => pt.ShortCode).IsRequired().HasMaxLength(12);
+                entity.HasIndex(pt => pt.Name).IsUnique();
+                entity.HasIndex(pt => pt.ShortCode).IsUnique();
             });
 
             // ---- AuditLog (Student 4) ----
