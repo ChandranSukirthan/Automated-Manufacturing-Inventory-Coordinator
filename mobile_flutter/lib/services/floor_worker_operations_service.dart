@@ -66,7 +66,32 @@ class IncomingDelivery {
 int _asInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
-String _shiftStatus(dynamic value) => value?.toString() ?? 'Unknown';
+/// The API serializes [ShiftStatus] as its integer enum value. Keep that
+/// transport detail out of the UI, while also accepting named values if the
+/// server switches to string-enum serialization later.
+String _shiftStatus(dynamic value) {
+  final numericStatus = value is num
+      ? value.toInt()
+      : int.tryParse(value?.toString() ?? '');
+  if (numericStatus != null) {
+    return const {0: 'Planned', 1: 'Active', 2: 'Completed'}[numericStatus] ??
+        'Unknown';
+  }
+
+  final status = value?.toString().trim() ?? '';
+  switch (status.toLowerCase()) {
+    case 'inprogress':
+    case 'in_progress':
+    case 'active':
+      return 'Active';
+    case 'planned':
+      return 'Planned';
+    case 'completed':
+      return 'Completed';
+    default:
+      return status.isEmpty ? 'Unknown' : status;
+  }
+}
 
 /// Read-only operations used by the Floor Worker dashboard.
 class FloorWorkerOperationsService {

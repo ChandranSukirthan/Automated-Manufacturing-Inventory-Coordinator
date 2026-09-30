@@ -23,6 +23,16 @@ void main() {
     },
   );
 
+  test('normalizes every API shift-status enum value for the dashboard', () {
+    final cases = {0: 'Planned', 1: 'Active', 2: 'Completed'};
+
+    for (final entry in cases.entries) {
+      final shift = ProductionShiftSummary.fromJson({'status': entry.key});
+
+      expect(shift.status, entry.value);
+    }
+  });
+
   test('maps an incoming delivery from the purchase-order API contract', () {
     final delivery = IncomingDelivery.fromJson({
       'id': 11,

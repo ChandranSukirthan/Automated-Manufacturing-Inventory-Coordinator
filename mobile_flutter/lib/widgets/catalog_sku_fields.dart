@@ -51,7 +51,7 @@ class CatalogSkuFields extends StatelessWidget {
     return Column(
       children: [
         DropdownButtonFormField<int>(
-          value: packagingTypes.any((type) => type.id == packagingTypeId)
+          initialValue: packagingTypes.any((type) => type.id == packagingTypeId)
               ? packagingTypeId
               : null,
           isExpanded: true,
@@ -65,11 +65,13 @@ class CatalogSkuFields extends StatelessWidget {
               )
               .toList(),
           onChanged: enabled ? onPackagingTypeChanged : null,
-          validator: (value) => value == null ? 'Select a packaging type.' : null,
+          validator: (value) =>
+              value == null ? 'Select a packaging type.' : null,
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
-          value: materials.any((material) => material.id == rawMaterialId)
+          initialValue:
+              materials.any((material) => material.id == rawMaterialId)
               ? rawMaterialId
               : null,
           isExpanded: true,
@@ -158,12 +160,8 @@ String buildSku(
   return '${packagingType.shortCode}-${rawMaterial.materialCode}-$suffix';
 }
 
-PackagingTypeModel? packagingById(
-  List<PackagingTypeModel> types,
-  int? id,
-) => types.where((type) => type.id == id).firstOrNull;
+PackagingTypeModel? packagingById(List<PackagingTypeModel> types, int? id) =>
+    types.where((type) => type.id == id).firstOrNull;
 
-RawMaterialModel? materialById(
-  List<RawMaterialModel> materials,
-  int? id,
-) => materials.where((material) => material.id == id).firstOrNull;
+RawMaterialModel? materialById(List<RawMaterialModel> materials, int? id) =>
+    materials.where((material) => material.id == id).firstOrNull;

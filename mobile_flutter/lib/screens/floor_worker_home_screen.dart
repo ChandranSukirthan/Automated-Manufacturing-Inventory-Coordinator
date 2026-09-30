@@ -170,7 +170,10 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
     final packaging = packagingById(_packagingTypes, _packagingTypeId);
     final material = materialById(_rawMaterials, _rawMaterialId);
     final skuNumber = int.tryParse(_skuController.text.trim());
-    if (packaging == null || material == null || skuNumber == null || skuNumber < 1) {
+    if (packaging == null ||
+        material == null ||
+        skuNumber == null ||
+        skuNumber < 1) {
       _showMessage(
         'Select a packaging type and raw material, then enter a valid SKU number.',
         isError: true,
@@ -354,16 +357,20 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
             _openWorkspace(0);
             break;
           case 3:
+            final messenger = ScaffoldMessenger.of(context);
             Navigator.push<bool>(
               context,
               MaterialPageRoute(
-                builder: (_) => DefectFormScreen(service: widget.qualityService),
+                builder: (_) =>
+                    DefectFormScreen(service: widget.qualityService),
               ),
             ).then((submitted) {
               if (!mounted || submitted != true) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 const SnackBar(
-                  content: Text('Defect report submitted to managers and admins.'),
+                  content: Text(
+                    'Defect report submitted to managers and admins.',
+                  ),
                 ),
               );
             });
@@ -697,22 +704,6 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
           ),
         ],
       ),
-    ),
-  );
-
-  InputDecoration _inputDecoration({String? hint}) => InputDecoration(
-    hintText: hint,
-    hintStyle: const TextStyle(color: Colors.white38),
-    filled: true,
-    fillColor: _input,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Colors.white12),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: _yellow, width: 1.4),
     ),
   );
 

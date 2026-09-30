@@ -1,7 +1,8 @@
 import 'api_client.dart';
 import 'session_storage.dart';
 
-int _toInt(dynamic value) => value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+int _toInt(dynamic value) =>
+    value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 num _toNum(dynamic value) => value is num ? value : num.tryParse('$value') ?? 0;
 
 class InventoryItemModel {
@@ -27,25 +28,22 @@ class InventoryItemModel {
     required this.reorderThreshold,
   });
 
-    factory InventoryItemModel.fromJson(Map<String, dynamic> json) =>
-        InventoryItemModel(
-            id: _toInt(json['id']),
-            sku: json['sku'] as String? ?? '',
-            name: json['name'] as String? ?? '',
-            category: json['category'] as String? ?? '',
-            packagingTypeId: json['packagingTypeId'] == null
-                ? null
-                : _toInt(json['packagingTypeId']),
-            rawMaterialId: json['rawMaterialId'] == null
-                ? null
-                : _toInt(json['rawMaterialId']),
-            skuNumber: json['skuNumber'] == null
-                ? null
-                : _toInt(json['skuNumber']),
-            stockLevel: _toInt(json['stockLevel']),
-            reorderThreshold: _toInt(json['reorderThreshold']),
-        );
-  
+  factory InventoryItemModel.fromJson(Map<String, dynamic> json) =>
+      InventoryItemModel(
+        id: _toInt(json['id']),
+        sku: json['sku'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        category: json['category'] as String? ?? '',
+        packagingTypeId: json['packagingTypeId'] == null
+            ? null
+            : _toInt(json['packagingTypeId']),
+        rawMaterialId: json['rawMaterialId'] == null
+            ? null
+            : _toInt(json['rawMaterialId']),
+        skuNumber: json['skuNumber'] == null ? null : _toInt(json['skuNumber']),
+        stockLevel: _toInt(json['stockLevel']),
+        reorderThreshold: _toInt(json['reorderThreshold']),
+      );
 }
 
 class InventoryRollModel {
@@ -149,7 +147,8 @@ class StockAlertModel {
     required this.workerId,
   });
 
-  factory StockAlertModel.fromJson(Map<String, dynamic> json) => StockAlertModel(
+  factory StockAlertModel.fromJson(Map<String, dynamic> json) =>
+      StockAlertModel(
         id: _toInt(json['id']),
         sku: json['sku'] as String? ?? '',
         packagingType: json['packagingType'] as String? ?? '',
@@ -161,14 +160,16 @@ class StockAlertModel {
 
 class InventoryApiService {
   InventoryApiService({ApiClient? api})
-      : _api = api ?? ApiClient(storage: SessionStorage());
+    : _api = api ?? ApiClient(storage: SessionStorage());
 
   final ApiClient _api;
 
   Future<List<InventoryItemModel>> fetchInventory() async {
     final data = await _api.get('/inventory') as List<dynamic>;
     return data
-        .map((item) => InventoryItemModel.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) => InventoryItemModel.fromJson(item as Map<String, dynamic>),
+        )
         .toList();
   }
 
@@ -184,7 +185,9 @@ class InventoryApiService {
   Future<List<InventoryRollModel>> fetchOwnedRolls() async {
     final data = await _api.get('/inventory/rolls') as List<dynamic>;
     return data
-        .map((item) => InventoryRollModel.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) => InventoryRollModel.fromJson(item as Map<String, dynamic>),
+        )
         .toList();
   }
 
@@ -230,9 +233,9 @@ class InventoryApiService {
       'sku': sku,
       'packagingType': packagingType,
       'quantityRequested': quantityRequested,
-      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
-      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
-      if (skuNumber != null) 'skuNumber': skuNumber,
+      'packagingTypeId': ?packagingTypeId,
+      'rawMaterialId': ?rawMaterialId,
+      'skuNumber': ?skuNumber,
     });
   }
 
@@ -284,5 +287,4 @@ class InventoryApiService {
   Future<Map<String, dynamic>> lookupRoll(String qrCode) async =>
       await _api.get('/inventory/roll/qr/${Uri.encodeComponent(qrCode)}')
           as Map<String, dynamic>;
-
 }
