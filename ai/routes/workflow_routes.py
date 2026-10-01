@@ -24,6 +24,7 @@ tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 
 # ── Request / Response Schemas ─────────────────────────────────────────────────
 
+class RunWorkflowRequest(BaseModel):
     """
     Procurement workflow trigger from ASP.NET Core and direct API callers.
     Supports both camelCase and snake_case formats.
