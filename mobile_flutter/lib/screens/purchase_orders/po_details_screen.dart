@@ -213,6 +213,107 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
                           const SizedBox(height: 16),
 
+                          // Payment & Settlement Receipt Card (when paid/sent or when bank slip/Stripe info exists)
+                          if (_po!.bankSlipUrl != null ||
+                              _po!.bankReferenceNumber != null ||
+                              _po!.stripePaymentIntentId != null ||
+                              _po!.status.toLowerCase() == 'sent' ||
+                              _po!.status.toLowerCase() == 'payment') ...[
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: cardBg,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.35)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Row(
+                                        children: [
+                                          Icon(Icons.verified_outlined, color: Color(0xFF10B981), size: 18),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Payment & Settlement Receipt',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          _po!.bankSlipStatus ?? 'Settled & Verified',
+                                          style: const TextStyle(
+                                            color: Color(0xFF10B981),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildReceiptRow(
+                                    label: 'Payment Gateway',
+                                    value: _po!.bankReferenceNumber != null
+                                        ? 'Bank Transfer (Slip Verified)'
+                                        : 'Stripe Online Checkout',
+                                    icon: _po!.bankReferenceNumber != null
+                                        ? Icons.account_balance
+                                        : Icons.credit_card,
+                                  ),
+                                  const Divider(color: Colors.white10, height: 16),
+                                  _buildReceiptRow(
+                                    label: 'Transaction Reference',
+                                    value: _po!.bankReferenceNumber ?? _po!.stripePaymentIntentId ?? 'SETTLED-${_po!.id}',
+                                    icon: Icons.tag,
+                                  ),
+                                  if (_po!.bankSlipUrl != null) ...[
+                                    const Divider(color: Colors.white10, height: 16),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Verified Bank Voucher',
+                                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                                        ),
+                                        InkWell(
+                                          onTap: () => _showVoucherDialog(_po!),
+                                          child: const Row(
+                                            children: [
+                                              Icon(Icons.receipt_long, color: cyanAccent, size: 15),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'View Slip Voucher',
+                                                style: TextStyle(
+                                                  color: cyanAccent,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
                           // Order Lines (Material, Quantity, Unit Price, Total)
                           Container(
                             padding: const EdgeInsets.all(16),
@@ -410,17 +511,17 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           children: [
             const Row(
               children: [
-                Icon(Icons.payment_rounded, color: Color(0xFF8B5CF6), size: 20),
+                Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF8B5CF6), size: 20),
                 SizedBox(width: 8),
                 Text(
-                  'Financial Settlement & Dispatch',
+                  'Payment Gateway & Financial Settlement',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             const Text(
-              'Order is authorized! Settle payment via Stripe gateway or trigger instant dispatch.',
+              'Order is approved! Choose Stripe Credit Card or Bank Transfer Slip to settle invoice and notify supplier.',
               style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 14),
@@ -436,21 +537,21 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     icon: const Icon(Icons.credit_card, size: 16),
-                    label: const Text('Stripe Payment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text('Stripe Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _handleDirectPayment(po.id),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF5CC8F8),
-                      side: const BorderSide(color: Color(0xFF5CC8F8)),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showBankSlipDialog(po),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    icon: const Icon(Icons.send_rounded, size: 16),
-                    label: const Text('Instant Dispatch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                    label: const Text('Bank Slip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
               ],
@@ -653,22 +754,14 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                   style: const TextStyle(color: Color(0xFF5CC8F8), fontSize: 12),
                 ),
               const SizedBox(height: 14),
-              const Text('Complete payment via browser checkout or proceed with simulated payment dispatch below.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const Text('Complete secure payment via Stripe hosted checkout.', style: TextStyle(color: Colors.white54, fontSize: 11)),
             ],
           ),
           actions: [
-            TextButton(
+            ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close', style: TextStyle(color: Colors.white54)),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _handleDirectPayment(poId);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-              icon: const Icon(Icons.check_circle_outline, size: 16),
-              label: const Text('Simulate Paid Success'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+              child: const Text('Done'),
             ),
           ],
         ),
@@ -701,6 +794,247 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showBankSlipDialog(PurchaseOrderDetail po) async {
+    final bankNameController = TextEditingController(text: 'Commercial Bank of Ceylon');
+    final refController = TextEditingController(text: 'TXN-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}');
+    final notesController = TextEditingController(text: 'Bank Wire Transfer completed via corporate online portal.');
+    bool submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F1B2B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.account_balance, color: Color(0xFF10B981), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Bank Transfer Slip Gateway',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Supplier:', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                              Text(po.supplierName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Payable Total:', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                              Text('${po.currency} \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Bank / Institution Name', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: bankNameController,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        hintText: 'e.g. Chase Bank, HSBC, Commercial Bank',
+                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Transaction Reference Number *', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: refController,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        hintText: 'e.g. TXN-9988231',
+                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Verification / Slip Notes', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: notesController,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.05),
+                        hintText: 'Notes regarding wire transfer or branch deposit...',
+                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting ? null : () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final ref = refController.text.trim();
+                          if (ref.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter a Transaction Reference Number.'), backgroundColor: Colors.orange),
+                            );
+                            return;
+                          }
+                          setDialogState(() => submitting = true);
+                          try {
+                            await widget.service.uploadBankSlip(
+                              po.id,
+                              referenceNumber: ref,
+                              bankName: bankNameController.text.trim(),
+                              notes: notesController.text.trim(),
+                            );
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Bank Slip verified & Order Dispatched to Supplier!'),
+                                  backgroundColor: Color(0xFF10B981),
+                                ),
+                              );
+                              _fetchDetails();
+                            }
+                          } catch (err) {
+                            if (ctx.mounted) {
+                              setDialogState(() => submitting = false);
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Bank slip submission failed: $err'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: submitting
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_circle_outline, size: 16),
+                  label: Text(submitting ? 'Verifying...' : 'Verify & Settle'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReceiptRow({required String label, required String value, required IconData icon}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: Colors.white38),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+          ],
+        ),
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  void _showVoucherDialog(PurchaseOrderDetail po) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1B2B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.receipt_long, color: Color(0xFF10B981)),
+            SizedBox(width: 8),
+            Text('Bank Slip Voucher', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('PO Number: ${po.poNumber}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text('Reference: ${po.bankReferenceNumber ?? 'N/A'}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text('Total Amount: ${po.currency} \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 12),
+            const Text('Slip Voucher URL on server:', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const SizedBox(height: 4),
+            SelectableText(
+              'http://localhost:5070${po.bankSlipUrl}',
+              style: const TextStyle(color: Color(0xFF5CC8F8), fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMetaColumn(String label, String value, IconData icon) {

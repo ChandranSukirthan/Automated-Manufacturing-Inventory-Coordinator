@@ -418,7 +418,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Operations & Workflow Actions',
+                'Operations & Quick Actions',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
               ),
               Icon(Icons.bolt, color: Color(0xFF5CC8F8), size: 18),

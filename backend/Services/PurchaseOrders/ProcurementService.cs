@@ -20,7 +20,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         private readonly IPurchaseOrderService _poService;
         private readonly IConfiguration _configuration;
         private readonly ILogger<ProcurementService> _logger;
-        private readonly backend.Services.IInventoryService _inventoryService;
+        private readonly backend.Services.IInventoryService? _inventoryService;
 
         public ProcurementService(
             ApplicationDbContext context,
@@ -28,7 +28,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             IPurchaseOrderService poService,
             IConfiguration configuration,
             ILogger<ProcurementService> logger,
-            backend.Services.IInventoryService inventoryService)
+            backend.Services.IInventoryService? inventoryService = null)
         {
             _context = context;
             _agentService = agentService;
@@ -739,7 +739,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var createdPo = await _poService.CreateAsync(poDto, userId ?? request.CreatedById);
 
             // Automatically resolve active alerts for this raw material
-            await _inventoryService.ResolveAlertsForMaterialsAsync(new List<int> { request.RawMaterialId });
+            if (_inventoryService != null)
+            {
+                await _inventoryService.ResolveAlertsForMaterialsAsync(new List<int> { request.RawMaterialId });
+            }
 
             // Record structured outcome telemetry for future learning dataset (Requirement 12)
             try

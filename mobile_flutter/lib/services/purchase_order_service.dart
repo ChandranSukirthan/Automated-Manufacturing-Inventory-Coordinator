@@ -308,6 +308,39 @@ class PurchaseOrderService {
     }
     return null;
   }
+
+  /// POST /api/purchase-orders/{id}/bank-slip
+  Future<PurchaseOrderDetail> uploadBankSlip(
+    int id, {
+    required String referenceNumber,
+    String? bankName,
+    String? notes,
+    List<int>? fileBytes,
+    String? fileName,
+  }) async {
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      final fields = <String, String>{
+        'bankReferenceNumber': referenceNumber,
+      };
+      if (notes != null && notes.isNotEmpty) {
+        fields['notes'] = notes;
+      }
+      final response = await _api.postMultipart(
+        '/purchase-orders/$id/bank-slip',
+        fields,
+        fileBytes: fileBytes,
+        fileName: fileName ?? 'bank_slip.png',
+      );
+      return PurchaseOrderDetail.fromJson(response as Map<String, dynamic>);
+    } else {
+      final response = await _api.post('/purchase-orders/$id/bank-slip-json', {
+        'bankReferenceNumber': referenceNumber,
+        if (bankName != null && bankName.isNotEmpty) 'bankName': bankName,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      });
+      return PurchaseOrderDetail.fromJson(response as Map<String, dynamic>);
+    }
+  }
 }
 
 

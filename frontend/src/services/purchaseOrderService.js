@@ -63,6 +63,11 @@ export const purchaseOrderService = {
     return response.data;
   },
 
+  async uploadBankSlipJson(id, data) {
+    const response = await api.post(`/purchase-orders/${id}/bank-slip-json`, data);
+    return response.data;
+  },
+
   async getTracking(id) {
     const response = await api.get(`/purchase-orders/${id}/tracking`);
     return response.data;

@@ -93,12 +93,6 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
       path: '/purchase-orders/analytics',
       icon: <BarChart3 className="w-5 h-5" />,
       active: location.pathname === '/purchase-orders/analytics' || location.pathname === '/supplier-analytics'
-    },
-    {
-      label: 'Workflow Monitoring',
-      path: '/agent-workflows',
-      icon: <UserCheck className="w-5 h-5" />,
-      active: location.pathname === '/agent-workflows'
     }
   ];
 

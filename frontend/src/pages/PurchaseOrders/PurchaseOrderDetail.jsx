@@ -206,10 +206,6 @@ export default function PurchaseOrderDetail() {
   // Upload Bank Transfer Slip & Verify Settlement
   const handleBankSlipUpload = async (e) => {
     e.preventDefault();
-    if (!bankSlipFile) {
-      setError('Please select a bank deposit slip or transfer receipt file.');
-      return;
-    }
     if (!bankReferenceNumber.trim()) {
       setError('Please enter the bank transaction reference number.');
       return;
@@ -221,19 +217,28 @@ export default function PurchaseOrderDetail() {
     setSlipSuccessMessage('');
 
     try {
-      const formData = new FormData();
-      formData.append('bankSlipFile', bankSlipFile);
-      formData.append('bankReferenceNumber', bankReferenceNumber.trim());
-      if (bankNotes.trim()) {
-        formData.append('notes', bankNotes.trim());
+      let updated;
+      if (bankSlipFile) {
+        const formData = new FormData();
+        formData.append('bankSlipFile', bankSlipFile);
+        formData.append('bankReferenceNumber', bankReferenceNumber.trim());
+        if (bankNotes.trim()) {
+          formData.append('notes', bankNotes.trim());
+        }
+        updated = await purchaseOrderService.uploadBankSlip(id, formData);
+      } else {
+        updated = await purchaseOrderService.uploadBankSlipJson(id, {
+          bankReferenceNumber: bankReferenceNumber.trim(),
+          bankName: 'Direct Bank Wire',
+          notes: bankNotes.trim() || 'Electronic bank transfer settlement.'
+        });
       }
 
-      const updated = await purchaseOrderService.uploadBankSlip(id, formData);
       setPo(updated);
       setBankSlipFile(null);
       setBankReferenceNumber('');
       setBankNotes('');
-      setSlipSuccessMessage('Bank slip uploaded successfully! Payment verified and purchase order dispatched.');
+      setSlipSuccessMessage('Bank transfer verified successfully! Payment recorded and purchase order dispatched.');
       await fetchPoDetails();
       await fetchTrackingDetails();
     } catch (err) {
@@ -634,18 +639,18 @@ export default function PurchaseOrderDetail() {
               </div>
 
               {isManager && (
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-end gap-3">
                   <button
                     onClick={handleProcessPayment}
                     disabled={actionLoading}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-blue-600/30 transition-all disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-sm shadow-lg shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-50"
                   >
                     {actionLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <CreditCard className="w-4 h-4" />
                     )}
-                    <span>Authorize & Settle via Stripe (${po.totalCost?.toFixed(2)})</span>
+                    <span>Launch Stripe Hosted Checkout (${po.totalCost?.toFixed(2)})</span>
                   </button>
                 </div>
               )}
@@ -692,7 +697,7 @@ export default function PurchaseOrderDetail() {
                 {/* File Upload Area */}
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Upload Slip Receipt (PDF, PNG, JPG - max 10MB) <span className="text-rose-400">*</span>
+                    Upload Slip Receipt (PDF, PNG, JPG - max 10MB, Optional)
                   </label>
                   <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-800 hover:border-brand-500/50 rounded-xl bg-slate-900/50 cursor-pointer transition-all">
                     <UploadCloud className="w-8 h-8 text-brand-400 mb-2" />
@@ -708,7 +713,7 @@ export default function PurchaseOrderDetail() {
                         <span className="text-xs font-semibold text-slate-300 block">
                           Click to browse or drop transfer slip here
                         </span>
-                        <span className="text-[10px] text-slate-500">PDF, PNG, JPG up to 10MB</span>
+                        <span className="text-[10px] text-slate-500">PDF, PNG, JPG up to 10MB (or submit reference number directly)</span>
                       </div>
                     )}
                     <input
@@ -729,7 +734,7 @@ export default function PurchaseOrderDetail() {
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={actionLoading || !bankSlipFile || !bankReferenceNumber.trim()}
+                    disabled={actionLoading || !bankReferenceNumber.trim()}
                     className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all disabled:opacity-50"
                   >
                     {actionLoading ? (
@@ -772,7 +777,7 @@ export default function PurchaseOrderDetail() {
             <div className="flex items-center gap-2 shrink-0">
               {po.bankSlipUrl && (
                 <a
-                  href={po.bankSlipUrl}
+                  href={po.bankSlipUrl.startsWith('http') ? po.bankSlipUrl : `http://localhost:5070${po.bankSlipUrl}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-semibold border border-slate-700 transition-colors"

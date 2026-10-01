@@ -53,6 +53,48 @@ class ApiClient {
       _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);
 
+  Future<dynamic> postMultipart(
+    String path,
+    Map<String, String> fields, {
+    List<int>? fileBytes,
+    String? fileName,
+    String fieldName = 'bankSlipFile',
+  }) async {
+    final session = await storage.read();
+    final uri = Uri.parse('$baseUrl$path');
+    final request = http.MultipartRequest('POST', uri);
+
+    if (session != null && session.accessToken.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer ${session.accessToken}';
+    }
+
+    request.fields.addAll(fields);
+
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fieldName,
+          fileBytes,
+          filename: fileName ?? 'bank_slip.png',
+        ),
+      );
+    }
+
+    try {
+      final streamed = await request.send().timeout(requestTimeout);
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(_message(response), statusCode: response.statusCode);
+      }
+      if (response.body.isEmpty) return null;
+      return jsonDecode(response.body);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw const ApiException('Could not connect to the server for upload.');
+    }
+  }
+
   Future<dynamic> _request(
     String method,
     String path, [

@@ -418,20 +418,49 @@ namespace ManufacturingCoordinator.Controllers
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<PurchaseOrderResponseDto>> UploadBankSlip(
             int id,
-            [FromForm] IFormFile bankSlipFile,
+            [FromForm] IFormFile? bankSlipFile,
             [FromForm] string bankReferenceNumber,
             [FromForm] string? notes = null)
         {
             var userId = GetCurrentUserId();
-            if (bankSlipFile == null || bankSlipFile.Length == 0)
-                return BadRequest(new { message = "Bank slip file is required." });
-
             if (string.IsNullOrWhiteSpace(bankReferenceNumber))
                 return BadRequest(new { message = "Bank transaction reference number is required." });
 
             try
             {
                 var po = await _poService.UploadBankSlipAsync(id, bankSlipFile, bankReferenceNumber, notes, userId);
+                return Ok(po);
+            }
+            catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
+            catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+            catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+        /// <summary>
+        /// POST /api/purchase-orders/{id}/bank-slip-json — settle bank slip payment via JSON payload
+        /// </summary>
+        [HttpPost("{id:int}/bank-slip-json")]
+        [Authorize(Roles = "SupplyChainManager")]
+        [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<PurchaseOrderResponseDto>> UploadBankSlipJson(
+            int id,
+            [FromBody] BankSlipUploadDto dto)
+        {
+            var userId = GetCurrentUserId();
+            if (dto == null || string.IsNullOrWhiteSpace(dto.BankReferenceNumber))
+                return BadRequest(new { message = "Bank transaction reference number is required." });
+
+            try
+            {
+                var notes = dto.Notes;
+                if (!string.IsNullOrWhiteSpace(dto.BankName))
+                {
+                    notes = string.IsNullOrWhiteSpace(notes) ? $"Bank: {dto.BankName}" : $"{notes} (Bank: {dto.BankName})";
+                }
+
+                var po = await _poService.UploadBankSlipAsync(id, null, dto.BankReferenceNumber, notes, userId);
                 return Ok(po);
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }

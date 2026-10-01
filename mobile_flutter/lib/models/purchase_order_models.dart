@@ -218,6 +218,10 @@ class PurchaseOrderDetail {
     this.approvedAt,
     this.stripePaymentIntentId,
     this.stripePaymentStatus,
+    this.bankSlipUrl,
+    this.bankReferenceNumber,
+    this.bankSlipStatus,
+    this.bankSlipUploadedAt,
     this.emailStatus,
     this.emailSentAt,
     required this.orderLines,
@@ -244,6 +248,10 @@ class PurchaseOrderDetail {
   final DateTime? approvedAt;
   final String? stripePaymentIntentId;
   final String? stripePaymentStatus;
+  final String? bankSlipUrl;
+  final String? bankReferenceNumber;
+  final String? bankSlipStatus;
+  final DateTime? bankSlipUploadedAt;
   final String? emailStatus;
   final DateTime? emailSentAt;
   final List<OrderLine> orderLines;
@@ -275,6 +283,10 @@ class PurchaseOrderDetail {
       approvedAt: json['approvedAt'] != null ? DateTime.tryParse(json['approvedAt'].toString()) : null,
       stripePaymentIntentId: json['stripePaymentIntentId'] as String?,
       stripePaymentStatus: json['stripePaymentStatus'] as String?,
+      bankSlipUrl: json['bankSlipUrl'] as String?,
+      bankReferenceNumber: json['bankReferenceNumber'] as String?,
+      bankSlipStatus: json['bankSlipStatus'] as String?,
+      bankSlipUploadedAt: json['bankSlipUploadedAt'] != null ? DateTime.tryParse(json['bankSlipUploadedAt'].toString()) : null,
       emailStatus: json['emailStatus'] as String?,
       emailSentAt: json['emailSentAt'] != null ? DateTime.tryParse(json['emailSentAt'].toString()) : null,
       orderLines: rawLines.map((l) => OrderLine.fromJson(l as Map<String, dynamic>)).toList(),

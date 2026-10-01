@@ -185,6 +185,7 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<ExceptionMiddleware>();
 
 app.UseCors("AllowAll");
+app.UseStaticFiles();
 
 if (!app.Environment.IsDevelopment())
 {

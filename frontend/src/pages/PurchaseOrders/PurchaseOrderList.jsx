@@ -17,7 +17,8 @@ import {
   Loader2,
   AlertCircle,
   X,
-  Sparkles
+  Sparkles,
+  CreditCard
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -515,13 +516,24 @@ export default function PurchaseOrderList() {
                       {new Date(order.createdAt).toLocaleDateString()}
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <Link
-                        to={`/purchase-orders/${order.id}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-400 hover:text-white hover:bg-slate-800"
-                      >
-                        <span>Manage</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        {(order.status === 'Approved' || order.status === 'Payment') && (
+                          <Link
+                            to={`/purchase-orders/${order.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800/80 hover:bg-cyan-900/90 transition-all shadow-sm"
+                          >
+                            <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Pay (Stripe / Slip)</span>
+                          </Link>
+                        )}
+                        <Link
+                          to={`/purchase-orders/${order.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-400 hover:text-white hover:bg-slate-800"
+                        >
+                          <span>Manage</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

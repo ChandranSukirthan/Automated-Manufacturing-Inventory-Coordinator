@@ -202,6 +202,9 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         [Required]
         public string BankReferenceNumber { get; set; } = string.Empty;
 
+        [MaxLength(200)]
+        public string? BankName { get; set; }
+
         [MaxLength(1000)]
         public string? Notes { get; set; }
     }

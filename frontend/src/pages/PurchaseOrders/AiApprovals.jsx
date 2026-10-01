@@ -47,27 +47,42 @@ export default function AiApprovals() {
   // Check if current user is Supply Chain Manager
   const isManager = user && (user.role === 1 || user.role === 'SupplyChainManager' || user.role === '1');
 
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'awaiting_payment'
+  const [approvedOrders, setApprovedOrders] = useState([]);
+
   const fetchPendingOrders = async () => {
     setLoading(true);
     setError('');
     try {
       const allOrders = await purchaseOrderService.getPurchaseOrders();
-      // Fetch full details for pending orders so we have lines and vendor details
       const pendingSummaries = allOrders.filter((o) => o.status === 'PendingApproval');
+      const awaitingSummaries = allOrders.filter((o) => o.status === 'Approved' || o.status === 'Payment');
 
-      const detailedList = await Promise.all(
-        pendingSummaries.map(async (summary) => {
-          try {
-            return await purchaseOrderService.getPurchaseOrderById(summary.id);
-          } catch {
-            return summary;
-          }
-        })
-      );
+      const [detailedPending, detailedAwaiting] = await Promise.all([
+        Promise.all(
+          pendingSummaries.map(async (summary) => {
+            try {
+              return await purchaseOrderService.getPurchaseOrderById(summary.id);
+            } catch {
+              return summary;
+            }
+          })
+        ),
+        Promise.all(
+          awaitingSummaries.map(async (summary) => {
+            try {
+              return await purchaseOrderService.getPurchaseOrderById(summary.id);
+            } catch {
+              return summary;
+            }
+          })
+        )
+      ]);
 
-      setOrders(detailedList);
+      setOrders(detailedPending);
+      setApprovedOrders(detailedAwaiting);
     } catch (err) {
-      setError(parseErrorMessage(err, 'Failed to fetch pending approval orders.'));
+      setError(parseErrorMessage(err, 'Failed to fetch approval queue orders.'));
     } finally {
       setLoading(false);
     }
@@ -197,12 +212,129 @@ export default function AiApprovals() {
         </div>
       )}
 
-      {/* Pending Orders Cockpit */}
+      {/* Dual Tab Navigation: Pending Approval vs Approved & Awaiting Payment */}
+      <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab('pending')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'pending'
+              ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30'
+              : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Pending Manager Approval</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 border border-slate-700 font-mono">
+            {orders.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('awaiting_payment')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'awaiting_payment'
+              ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-cyan-600/30'
+              : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800'
+          }`}
+        >
+          <CreditCard className="w-4 h-4 text-cyan-300" />
+          <span>Approved & Awaiting Payment (Stripe / Bank Slip)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 border border-slate-700 font-mono">
+            {approvedOrders.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Orders Cockpit */}
       {loading ? (
         <div className="p-20 flex flex-col items-center justify-center gap-3 bg-slate-900/30 rounded-2xl border border-slate-800">
           <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-          <p className="text-sm text-slate-400">Loading pending approval queue...</p>
+          <p className="text-sm text-slate-400">Loading approval queue...</p>
         </div>
+      ) : activeTab === 'awaiting_payment' ? (
+        approvedOrders.length === 0 ? (
+          <div className="p-16 text-center bg-slate-900/30 rounded-2xl border border-slate-800 space-y-3">
+            <CheckCircle2 className="w-12 h-12 text-emerald-500/80 mx-auto" />
+            <h3 className="text-base font-semibold text-white">No orders awaiting settlement</h3>
+            <p className="text-sm text-slate-400 max-w-sm mx-auto">
+              All approved purchase orders have completed payment settlement or none are currently in the payment queue.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+              <span>Showing {approvedOrders.length} approved order(s) awaiting Stripe or Bank Slip payment</span>
+              <span className="font-semibold text-cyan-400">Select payment method to settle and dispatch</span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              {approvedOrders.map((po) => {
+                const firstLine = po.orderLines?.[0] || {};
+                const materialName = firstLine.rawMaterialName || 'Industrial Raw Material';
+                const totalAmount = po.totalCost || 0;
+
+                return (
+                  <div
+                    key={po.id}
+                    className="bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 rounded-2xl overflow-hidden shadow-2xl transition-all"
+                  >
+                    <div className="p-5 border-b border-slate-800 bg-slate-950/60 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                          <CreditCard className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-extrabold text-white tracking-tight">
+                              {po.poNumber}
+                            </span>
+                            <span className="text-xs font-mono text-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-md border border-cyan-800/40">
+                              Approved — Awaiting Settlement
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Supplier: <strong className="text-white">{po.supplierName}</strong> • Approved on {po.approvedAt ? new Date(po.approvedAt).toLocaleDateString() : 'Recently'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-semibold text-slate-400 block">Total Due</span>
+                          <span className="text-base font-mono font-bold text-emerald-400">
+                            ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+                          </span>
+                        </div>
+                        <StatusBadge status={po.status} />
+                      </div>
+                    </div>
+
+                    <div className="p-5 flex flex-wrap items-center justify-between gap-4 bg-slate-950/40">
+                      <div className="text-xs text-slate-300">
+                        <p>Material: <strong className="text-white">{materialName}</strong></p>
+                        <p className="text-slate-400 text-[11px] mt-0.5">
+                          Order is authorized. Use the payment gateway to finalize Stripe card charge or upload a bank deposit slip.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <Link
+                          to={`/purchase-orders/${po.id}`}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 hover:from-blue-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-cyan-600/20"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          <span>Open Payment Gateway (Stripe / Bank Slip) &rarr;</span>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
       ) : orders.length === 0 ? (
         <div className="p-16 text-center bg-slate-900/30 rounded-2xl border border-slate-800 space-y-3">
           <CheckCircle2 className="w-12 h-12 text-emerald-500/80 mx-auto" />
@@ -454,7 +586,7 @@ export default function AiApprovals() {
         onClose={() => setApproveModalOpen(false)}
         onConfirm={handleApprove}
         title={`Approve Order ${selectedOrder?.poNumber}`}
-        message={`Are you sure you want to approve this purchase order for $${selectedOrder?.totalCost?.toFixed(2)}? This action will automatically charge via Stripe Sandbox, generate a PDF invoice, and dispatch it via SendGrid to ${selectedOrder?.supplierName}.`}
+        message={`Are you sure you want to approve this purchase order for $${selectedOrder?.totalCost?.toFixed(2)}? Once approved, you will proceed to the Payment Gateway to settle via Stripe Card or upload a Bank Transfer Slip before dispatching to ${selectedOrder?.supplierName}.`}
         confirmText="Confirm & Approve"
         variant="success"
         loading={actionLoading}
@@ -551,15 +683,22 @@ export default function AiApprovals() {
               })}
             </div>
 
-            {/* Footer with Done button when completed */}
+            {/* Footer with Payment Gateway button when completed */}
             {approvalStep === 3 ? (
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
+                <Link
+                  to={`/purchase-orders/${selectedOrder?.id}`}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-500 hover:to-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2"
+                >
+                  <CreditCard className="w-4 h-4 text-cyan-300" />
+                  <span>Proceed to Payment Gateway (Stripe / Bank Slip) &rarr;</span>
+                </Link>
                 <button
                   onClick={handleFinishApprovalAnimation}
-                  className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Done - Return to Approvals</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Return to Approvals Queue</span>
                 </button>
               </div>
             ) : (

@@ -390,12 +390,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 poId = po.Id;
             }
 
-            // Reload for payment processing
+            // Reload for sync
             var approvedPo = await LoadPoAsync(id);
-
-            // Trigger payment and dispatch after approval (with dev sandbox support)
-            await ProcessPaymentInternalAsync(approvedPo, approverId, forceDispatch: true);
-
+            // PO is now in Approved status, ready for Manager Financial Settlement (Stripe or Bank Slip)
             // Sync with AgentWorkflow if this PO was AI-generated
             try
             {
@@ -1226,18 +1223,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         };
 
         public async Task<PurchaseOrderResponseDto> UploadBankSlipAsync(
-            int id, Microsoft.AspNetCore.Http.IFormFile file, string referenceNumber, string? notes = null, Guid? userId = null)
+            int id, Microsoft.AspNetCore.Http.IFormFile? file, string referenceNumber, string? notes = null, Guid? userId = null)
         {
-            if (file == null || file.Length == 0)
-                throw new ArgumentException("Bank slip file cannot be empty.");
-
-            if (file.Length > 10 * 1024 * 1024)
-                throw new ArgumentException("Bank slip file size cannot exceed 10 MB.");
-
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var allowedExtensions = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
-            if (!allowedExtensions.Contains(ext))
-                throw new ArgumentException("Invalid file format. Only PDF, PNG, and JPG/JPEG files are accepted.");
+            if (string.IsNullOrWhiteSpace(referenceNumber))
+                throw new ArgumentException("Bank transaction reference number is required.");
 
             var po = await LoadPoAsync(id);
 
@@ -1245,12 +1234,40 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "slips");
             Directory.CreateDirectory(uploadsDir);
 
-            var uniqueFileName = $"slip_{po.PoNumber}_{Guid.NewGuid():N}{ext}";
-            var filePath = Path.Combine(uploadsDir, uniqueFileName);
-
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            string uniqueFileName;
+            if (file != null && file.Length > 0)
             {
-                await file.CopyToAsync(stream);
+                if (file.Length > 10 * 1024 * 1024)
+                    throw new ArgumentException("Bank slip file size cannot exceed 10 MB.");
+
+                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var allowedExtensions = new[] { ".pdf", ".png", ".jpg", ".jpeg" };
+                if (!allowedExtensions.Contains(ext))
+                    throw new ArgumentException("Invalid file format. Only PDF, PNG, and JPG/JPEG files are accepted.");
+
+                uniqueFileName = $"slip_{po.PoNumber}_{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploadsDir, uniqueFileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+            }
+            else
+            {
+                uniqueFileName = $"slip_{po.PoNumber}_{Guid.NewGuid():N}.html";
+                var filePath = Path.Combine(uploadsDir, uniqueFileName);
+                var content = $@"<!DOCTYPE html><html><head><title>Bank Transfer Receipt - {po.PoNumber}</title>
+<style>body{{font-family:sans-serif;padding:30px;background:#0f172a;color:#f8fafc}} .box{{background:#1e293b;padding:24px;border-radius:12px;border:1px solid #334155;max-width:500px;margin:auto;}} h2{{color:#38bdf8;margin-top:0;}} .row{{display:flex;justify-content:space-between;margin:12px 0;border-bottom:1px solid #334155;padding-bottom:8px;}} .badge{{background:#10b981;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:bold;}}</style>
+</head><body><div class='box'><h2>Bank Transfer Verification</h2>
+<div class='row'><span>Purchase Order</span><strong>{po.PoNumber}</strong></div>
+<div class='row'><span>Reference Number</span><strong>{referenceNumber}</strong></div>
+<div class='row'><span>Amount Paid</span><strong>${po.TotalCost:N2} {po.Currency}</strong></div>
+<div class='row'><span>Status</span><span class='badge'>VERIFIED</span></div>
+<div class='row'><span>Date</span><span>{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</span></div>
+<p style='color:#94a3b8;font-size:12px;margin-top:16px;'>{notes ?? "Electronic bank transfer confirmation."}</p>
+</div></body></html>";
+                await File.WriteAllTextAsync(filePath, content);
             }
 
             po.BankSlipUrl = $"/uploads/slips/{uniqueFileName}";

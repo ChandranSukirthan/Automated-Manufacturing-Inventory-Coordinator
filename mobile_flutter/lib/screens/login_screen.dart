@@ -19,8 +19,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
+  final _email = TextEditingController(text: 'manager@amic.com');
+  final _password = TextEditingController(text: 'Manager@123');
   bool _obscurePassword = true;
   bool _isGoogleLoading = false;
 
@@ -200,6 +200,15 @@ class _LoginScreenState extends State<LoginScreen> {
               subtitle: const Text('quality@amic.com', style: TextStyle(color: Color(0xFF34D399), fontSize: 11)),
               onTap: () => Navigator.pop(ctx, 'quality@amic.com'),
             ),
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: const Color(0xFF1E293B),
+              leading: const CircleAvatar(backgroundColor: Color(0xFFD97706), child: Icon(Icons.engineering, color: Colors.white)),
+              title: const Text('Floor Worker', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: const Text('worker@amic.com', style: TextStyle(color: Color(0xFFFBBF24), fontSize: 11)),
+              onTap: () => Navigator.pop(ctx, 'worker@amic.com'),
+            ),
           ],
         ),
         actions: [
@@ -216,8 +225,9 @@ class _LoginScreenState extends State<LoginScreen> {
         'manager@amic.com': 'Manager@123',
         'admin@amic.com': 'Admin@123',
         'quality@amic.com': 'Quality@123',
+        'worker@amic.com': 'Worker@123',
       };
-      await widget.appState.login(selectedEmail, pwdMap[selectedEmail] ?? 'Manager@123');
+      await widget.appState.login(selectedEmail, pwdMap[selectedEmail] ?? 'Worker@123');
     }
   }
 
