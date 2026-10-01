@@ -566,7 +566,11 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         public async Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false)
         {
             var po = await LoadPoAsync(id);
-            if (po.Status != PurchaseOrderStatus.Payment && po.Status != PurchaseOrderStatus.Approved)
+            if (po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
+            {
+                return (await GetByIdAsync(id))!;
+            }
+            if (po.Status != PurchaseOrderStatus.Payment && po.Status != PurchaseOrderStatus.Approved && po.Status != PurchaseOrderStatus.PaymentFailed)
             {
                 throw new InvalidOperationException(
                     $"Purchase Order must be in Approved or Payment status to process payment. Current status is {po.Status}.");

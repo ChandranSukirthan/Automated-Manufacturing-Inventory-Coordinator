@@ -34,6 +34,8 @@ builder.Configuration["JwtSettings:SecretKey"] = Env.GetString("JWT_SECRET_KEY")
 builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? builder.Configuration["JwtSettings:Issuer"];
 builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
 
+builder.Configuration["StripeSettings:SecretKey"] = Env.GetString("STRIPE_SECRET_KEY") ?? builder.Configuration["StripeSettings:SecretKey"];
+
 // Controllers with JSON String Enum conversion
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

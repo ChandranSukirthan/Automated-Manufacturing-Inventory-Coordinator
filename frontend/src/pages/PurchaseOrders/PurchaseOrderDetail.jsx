@@ -118,12 +118,12 @@ export default function PurchaseOrderDetail() {
 
     const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get('payment') === 'success') {
-       purchaseOrderService.processPayment(id).then(() => {
-          fetchPoDetails();
-          fetchTrackingDetails();
-          setSlipSuccessMessage('Stripe Checkout successful! Payment verified and purchase order dispatched.');
-       }).catch(err => setError(parseErrorMessage(err, 'Failed to complete payment settlement.')));
-       window.history.replaceState({}, document.title, window.location.pathname);
+      purchaseOrderService.processPayment(id).then(() => {
+        fetchPoDetails();
+        fetchTrackingDetails();
+        setSlipSuccessMessage('Stripe Checkout successful! Payment verified and purchase order dispatched.');
+      }).catch(err => setError(parseErrorMessage(err, 'Failed to complete payment settlement.')));
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [id]);
 
@@ -503,28 +503,25 @@ export default function PurchaseOrderDetail() {
                 return (
                   <div
                     key={st.step}
-                    className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between ${
-                      isCompleted
+                    className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center justify-between ${isCompleted
                         ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
                         : isCurrent
-                        ? 'bg-brand-500/10 border-brand-500/50 text-brand-300 ring-2 ring-brand-500/20'
-                        : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
-                    }`}
+                          ? 'bg-brand-500/10 border-brand-500/50 text-brand-300 ring-2 ring-brand-500/20'
+                          : 'bg-slate-950/40 border-slate-800/80 text-slate-500'
+                      }`}
                   >
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-1.5 transition-all ${
-                        isCompleted
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-1.5 transition-all ${isCompleted
                           ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30'
                           : isCurrent
-                          ? 'bg-brand-500 text-white animate-pulse'
-                          : 'bg-slate-800 text-slate-400 border border-slate-700'
-                      }`}
+                            ? 'bg-brand-500 text-white animate-pulse'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        }`}
                     >
                       {isCompleted ? <Check className="w-3.5 h-3.5" /> : st.step}
                     </div>
-                    <p className={`text-[11px] font-semibold leading-tight line-clamp-2 ${
-                      isCompleted ? 'text-emerald-300' : isCurrent ? 'text-white font-bold' : 'text-slate-400'
-                    }`}>
+                    <p className={`text-[11px] font-semibold leading-tight line-clamp-2 ${isCompleted ? 'text-emerald-300' : isCurrent ? 'text-white font-bold' : 'text-slate-400'
+                      }`}>
                       {st.stageName}
                     </p>
                     {st.notes && (
@@ -593,11 +590,10 @@ export default function PurchaseOrderDetail() {
             <button
               type="button"
               onClick={() => setPaymentTab('stripe')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                paymentTab === 'stripe'
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${paymentTab === 'stripe'
                   ? 'border-brand-500 text-white bg-slate-800/40 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <CreditCard className="w-4 h-4 text-brand-400" />
               <span>Stripe Card Gateway (Sandbox)</span>
@@ -605,11 +601,10 @@ export default function PurchaseOrderDetail() {
             <button
               type="button"
               onClick={() => setPaymentTab('bank_slip')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                paymentTab === 'bank_slip'
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${paymentTab === 'bank_slip'
                   ? 'border-brand-500 text-white bg-slate-800/40 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <UploadCloud className="w-4 h-4 text-cyan-400" />
               <span>Bank Transfer / Slip Upload</span>
@@ -973,11 +968,10 @@ export default function PurchaseOrderDetail() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                  riskLevel === 'Low Risk' 
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${riskLevel === 'Low Risk'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                     : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                }`}>
+                  }`}>
                   <ShieldCheck className="w-3.5 h-3.5" />
                   <span>Risk Level: {riskLevel}</span>
                 </span>
