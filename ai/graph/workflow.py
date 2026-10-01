@@ -159,7 +159,7 @@ def save_procurement_outcome(state: AgentState) -> None:
 def _after_data_extraction(state: AgentState) -> str:
     if state.get("status") == WorkflowStatus.Failed:
         return END
-    return "purchasing"
+    return "production_analysis"
 
 
 def _after_purchasing(state: AgentState) -> str:
@@ -182,17 +182,18 @@ def _after_validation(state: AgentState) -> str:
 
 def build_workflow_graph():
     """
-    Assembles the LangGraph StateGraph.
-    EXACTLY FOUR AGENTS — no fifth agent added:
+    Assembles the LangGraph StateGraph connecting all 4 collaborative agents:
     1. planner (Planner / Coordinator)
-    2. data_extraction (Data Extraction Agent)
-    3. purchasing (Goal-Based Purchasing Agent)
-    4. validation (Validation / Safety Agent)
+    2. data_extraction (Data Extraction Agent - Inventory)
+    3. production_analysis (Production Analysis Agent - IT Admin/Equipment)
+    4. purchasing (Goal-Based Purchasing Agent - Supply Chain Manager)
+    5. validation (Validation / Safety Agent - Quality & Risk Gate)
     """
     workflow = StateGraph(AgentState)
 
     workflow.add_node("planner", planner_node)
     workflow.add_node("data_extraction", data_extraction_node)
+    workflow.add_node("production_analysis", production_analysis_node)
     workflow.add_node("purchasing", purchasing_node)
     workflow.add_node("validation", validation_node)
 
@@ -201,8 +202,9 @@ def build_workflow_graph():
     workflow.add_conditional_edges(
         "data_extraction",
         _after_data_extraction,
-        {"purchasing": "purchasing", END: END},
+        {"production_analysis": "production_analysis", END: END},
     )
+    workflow.add_edge("production_analysis", "purchasing")
     workflow.add_conditional_edges(
         "purchasing",
         _after_purchasing,

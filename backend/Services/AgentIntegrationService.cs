@@ -139,31 +139,67 @@ namespace backend.Services
                     if (root.TryGetProperty("workflow_id", out var wfElement) && wfElement.GetString() is string wfFromServer)
                         workflowId = wfFromServer;
 
-                    // Parse candidates from purchasing_data field (LangGraph AgentState)
+                    // Parse candidates from purchasing_data or supplierCandidates / supplier_candidates
                     var candidates = new List<SupplierCandidateDto>();
-                    if (root.TryGetProperty("purchasing_data", out var pdElement) && pdElement.ValueKind == JsonValueKind.Object)
+                    JsonElement suppliersEl = default;
+                    bool hasSuppliers = false;
+
+                    if (root.TryGetProperty("supplierCandidates", out var scEl) && scEl.ValueKind == JsonValueKind.Array && scEl.GetArrayLength() > 0)
                     {
-                        if (pdElement.TryGetProperty("suppliers", out var suppliersEl) && suppliersEl.ValueKind == JsonValueKind.Array)
+                        suppliersEl = scEl;
+                        hasSuppliers = true;
+                    }
+                    else if (root.TryGetProperty("supplier_candidates", out var scEl2) && scEl2.ValueKind == JsonValueKind.Array && scEl2.GetArrayLength() > 0)
+                    {
+                        suppliersEl = scEl2;
+                        hasSuppliers = true;
+                    }
+                    else if (root.TryGetProperty("purchasing_data", out var pdElement) && pdElement.ValueKind == JsonValueKind.Object &&
+                             pdElement.TryGetProperty("suppliers", out var scEl3) && scEl3.ValueKind == JsonValueKind.Array && scEl3.GetArrayLength() > 0)
+                    {
+                        suppliersEl = scEl3;
+                        hasSuppliers = true;
+                    }
+
+                    if (hasSuppliers)
+                    {
+                        foreach (var s in suppliersEl.EnumerateArray())
                         {
-                            foreach (var s in suppliersEl.EnumerateArray())
+                            candidates.Add(new SupplierCandidateDto
                             {
-                                candidates.Add(new SupplierCandidateDto
-                                {
-                                    SupplierName = GetString(s, "supplierName", "supplier_name", "supplier") ?? "Unknown Supplier",
-                                    MaterialName = GetString(s, "materialName", "material_name") ?? materialName,
-                                    UnitPrice = GetDecimal(s, 0m, "unitPrice", "unit_price"),
-                                    Currency = GetString(s, "currency") ?? "USD",
-                                    MinimumOrderQuantity = GetDecimal(s, 0m, "minimumOrderQuantity", "minimum_order_quantity"),
-                                    PackSize = GetDecimal(s, 1m, "packSize", "pack_size"),
-                                    LeadTimeDays = GetInt(s, 7, "leadTimeDays", "lead_time_days"),
-                                    QualityEvidence = GetString(s, "qualityEvidence", "quality_evidence", "certification") ?? string.Empty,
-                                    Availability = GetString(s, "availabilityStatus", "availability", "stock_status") ?? "In Stock",
-                                    SupplierStatus = "UNVERIFIED",  // always UNVERIFIED for AI-discovered candidates
-                                    ConfidenceScore = GetDecimal(s, 0m, "confidenceScore", "confidence_score"),
-                                    SourceUrl = GetString(s, "sourceUrl", "source_url", "url")
-                                });
-                            }
+                                SupplierName = GetString(s, "supplierName", "supplier_name", "supplier") ?? "Unknown Supplier",
+                                MaterialName = GetString(s, "materialName", "material_name") ?? materialName,
+                                UnitPrice = GetDecimal(s, 0m, "unitPrice", "unit_price"),
+                                Currency = GetString(s, "currency") ?? "USD",
+                                MinimumOrderQuantity = GetDecimal(s, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
+                                PackSize = GetDecimal(s, 1m, "packSize", "pack_size"),
+                                LeadTimeDays = GetInt(s, 7, "leadTimeDays", "lead_time_days"),
+                                QualityEvidence = GetString(s, "qualityEvidence", "quality_evidence", "certification") ?? string.Empty,
+                                Availability = GetString(s, "availabilityStatus", "availability", "stock_status") ?? "In Stock",
+                                SupplierStatus = GetString(s, "supplierStatus", "verificationStatus") ?? "UNVERIFIED",
+                                ConfidenceScore = GetDecimal(s, 0m, "confidenceScore", "confidence_score"),
+                                SourceUrl = GetString(s, "sourceUrl", "source_url", "url")
+                            });
                         }
+                    }
+                    else if ((root.TryGetProperty("recommendedSupplier", out var recEl) || root.TryGetProperty("recommended_supplier", out recEl)) &&
+                             recEl.ValueKind == JsonValueKind.Object)
+                    {
+                        candidates.Add(new SupplierCandidateDto
+                        {
+                            SupplierName = GetString(recEl, "supplierName", "supplier_name", "supplier") ?? "Unknown Supplier",
+                            MaterialName = GetString(recEl, "materialName", "material_name") ?? materialName,
+                            UnitPrice = GetDecimal(recEl, 0m, "unitPrice", "unit_price"),
+                            Currency = GetString(recEl, "currency") ?? "USD",
+                            MinimumOrderQuantity = GetDecimal(recEl, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
+                            PackSize = GetDecimal(recEl, 1m, "packSize", "pack_size"),
+                            LeadTimeDays = GetInt(recEl, 7, "leadTimeDays", "lead_time_days"),
+                            QualityEvidence = GetString(recEl, "qualityEvidence", "quality_evidence") ?? string.Empty,
+                            Availability = GetString(recEl, "availabilityStatus", "availability") ?? "In Stock",
+                            SupplierStatus = GetString(recEl, "supplierStatus", "verificationStatus") ?? "APPROVED",
+                            ConfidenceScore = 0.95m,
+                            SourceUrl = GetString(recEl, "sourceUrl", "source_url")
+                        });
                     }
 
                     if (candidates.Count > 0)

@@ -86,40 +86,50 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     unit: str = state.get("unit") or req.get("unit") or "units"
 
     # ── Authoritative net deficit ─────────────────────────────────────────────
-    base_qty = float(
-        state.get("net_deficit")
-        or req.get("netDeficit")
-        or state.get("required_quantity")
+    explicit_deficit = state.get("net_deficit") if state.get("net_deficit") is not None else req.get("netDeficit")
+    prod_req = float(
+        state.get("required_quantity")
+        or req.get("productionRequirement")
         or req.get("requiredQuantity")
         or inv_data.get("requiredQuantity")
-        or 1000.0
+        or (explicit_deficit if explicit_deficit is not None else 1000.0)
     )
+    safety = float(state.get("safety_stock") or req.get("safetyStock") or 0.0)
+    current_stk = float(state.get("current_stock") or req.get("currentStock") or 0.0)
+    open_po = float(state.get("open_po_quantity") or req.get("openPOQuantity") or req.get("existingOpenPoQuantity") or 0.0)
+
+    qty_calc = calculate_purchase_quantity(
+        production_requirement=prod_req,
+        safety_stock=safety,
+        current_stock=current_stk,
+        open_po_quantity=open_po,
+        moq=0.0,
+        pack_size=1.0,
+        net_deficit=explicit_deficit,
+    )
+    net_deficit = qty_calc.get("adjustedQuantity") or qty_calc.get("recommendedQuantity") or prod_req
 
     # Inter-agent cooperation: If Production Agent detected a material shortfall, reconcile it
     shortfall = float(impact.get("plannedOutput", 0) - impact.get("adjustedOutput", 0))
-    net_deficit = max(base_qty, shortfall) if shortfall > 0 else base_qty
-
-    qty_calc = calculate_purchase_quantity(
-        production_requirement=float(state.get("required_quantity") or req.get("productionRequirement") or base_qty),
-        safety_stock=float(state.get("safety_stock") or req.get("safetyStock") or 0.0),
-        current_stock=float(state.get("current_stock") or req.get("currentStock") or 0.0),
-        open_po_quantity=float(state.get("open_po_quantity") or req.get("openPOQuantity") or 0.0),
-        moq=0.0,
-        pack_size=1.0,
-        net_deficit=net_deficit,
-    )
-    net_deficit = qty_calc["netDeficit"]
+    if shortfall > net_deficit:
+        net_deficit = shortfall
 
     tool_log.append({
         "tool": "calculate_purchase_quantity",
-        "inputs": {"explicit_deficit": net_deficit},
+        "inputs": {"explicit_deficit": explicit_deficit, "calculated": net_deficit},
         "output": {"netDeficit": net_deficit},
         "timestamp": now_iso,
     })
     completed.append(f"Purchasing: Authoritative net deficit = {net_deficit:,.2f} {unit}")
 
     # ── Query available internal/catalog suppliers ─────────────────────────────
-    available_suppliers = query_supplier_rates(material_id)
+    raw_suppliers = query_supplier_rates(material_id)
+    if isinstance(raw_suppliers, dict):
+        available_suppliers = [raw_suppliers]
+    elif isinstance(raw_suppliers, list):
+        available_suppliers = [s for s in raw_suppliers if isinstance(s, dict)]
+    else:
+        available_suppliers = []
 
     # ── External market research via Gemini Search Grounding ──────────────────
     market_candidates = search_external_supplier_market(
@@ -144,8 +154,11 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     all_candidates: List[Dict[str, Any]] = []
 
     for s in internal_suppliers:
+        raw_code = str(s.get("supplierCode") or s.get("supplierId") or "SUP-001")
+        if raw_code.isdigit():
+            raw_code = f"SUP-{int(raw_code):03d}"
         cand: Dict[str, Any] = {
-            "supplierId": str(s.get("supplierId") or s.get("supplierCode") or "SUP-001"),
+            "supplierId": raw_code,
             "supplierName": s.get("supplierName", "Internal Approved Supplier"),
             "origin": "Internal",
             "productName": f"Approved {material_name}",
@@ -173,19 +186,22 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
     # Also add standard catalog suppliers from available_suppliers
     for cat in available_suppliers:
-        if not any(c.get("supplierName") == cat.get("name") for c in all_candidates):
+        if not isinstance(cat, dict):
+            continue
+        cat_name = cat.get("name") or cat.get("supplierName") or "Catalog Supplier"
+        if not any(c.get("supplierName") == cat_name for c in all_candidates):
             all_candidates.append({
                 "supplierId": str(cat.get("supplierId", "SUP-001")),
-                "supplierName": cat.get("name", "Catalog Supplier"),
+                "supplierName": cat_name,
                 "origin": "Internal Catalog",
                 "productName": f"Standard {material_name}",
                 "material": material_name,
                 "materialName": material_name,
                 "specification": specification,
-                "unitPrice": float(cat.get("pricePerUnit", 1.45)),
+                "unitPrice": float(cat.get("pricePerUnit") or cat.get("unitPrice") or 1.45),
                 "currency": "USD",
                 "unit": unit,
-                "minimumOrderQuantity": float(cat.get("minOrderQuantity", 500.0)),
+                "minimumOrderQuantity": float(cat.get("minOrderQuantity") or cat.get("minimumOrderQuantity") or 500.0),
                 "packSize": 50.0,
                 "availableQuantity": max(net_deficit * 2, 10000.0),
                 "leadTimeDays": int(cat.get("leadTimeDays", 7)),
@@ -248,15 +264,15 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
     # ── Selection ─────────────────────────────────────────────────────────────
     selection = select_supplier(validated_pairs, eval_requirement)
-    top_cand = selection.get("selectedCandidate") or all_candidates[0]
-    top_report = selection.get("validationReport") or validated_pairs[0][1]
+    top_cand = selection.get("selectedCandidate") or (all_candidates[0] if all_candidates else {})
+    top_report = selection.get("validationReport") or (validated_pairs[0][1] if validated_pairs else {})
     recommended_qty = top_report.get("adjustedQuantity") or net_deficit
     total_cost = top_report.get("totalCost") or round(recommended_qty * (top_cand.get("unitPrice") or 1.45), 2)
 
     # Chosen supplier format for test compatibility
     chosen_supplier = {
         "supplierId": top_cand.get("supplierId", "SUP-001"),
-        "name": top_cand.get("supplierName", "Apex Industrial Metals"),
+        "name": top_cand.get("supplierName", "Apex Polymer Solutions Ltd"),
         "pricePerUnit": float(top_cand.get("unitPrice", 1.45)),
         "leadTimeDays": int(top_cand.get("leadTimeDays", 7)),
         "minOrderQuantity": float(top_cand.get("minimumOrderQuantity", 500.0)),
@@ -350,6 +366,9 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "supplierStatus": top_cand.get("supplierStatus", "APPROVED"),
         },
         "alternatives": selection.get("alternatives", []),
+        "rejectedCandidates": selection.get("rejectedCandidates", []),
+        "validationSummary": top_report,
+        "sources": sources,
         "requiresHumanApproval": True,
         "netDeficit": net_deficit,
         "recommendedQuantity": recommended_qty,

@@ -151,9 +151,67 @@ def _consumption_rate(sku: str) -> float:
     return float(abs(model.coef_[0]))
 
 
+def init_db_tables():
+    """
+    Ensures required database tables exist in PostgreSQL upon AI service startup.
+    Creates AgentWorkflows and ProcurementOutcomes if they don't already exist.
+    """
+    try:
+        with psycopg.connect(
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            dbname=settings.DB_NAME,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            connect_timeout=3,
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS "AgentWorkflows" (
+                        "Id" uuid NOT NULL PRIMARY KEY,
+                        "WorkflowId" character varying(50) NOT NULL,
+                        "Objective" character varying(500) NOT NULL,
+                        "CurrentAgent" character varying(200) NOT NULL,
+                        "Status" text NOT NULL,
+                        "ApprovalStatus" text NOT NULL,
+                        "StartedAt" timestamp with time zone NOT NULL DEFAULT timezone('utc', now()),
+                        "CompletedAt" timestamp with time zone NULL,
+                        "FinalOutcome" character varying(1000) NULL
+                    );
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_AgentWorkflows_WorkflowId" ON "AgentWorkflows" ("WorkflowId");
+
+                    CREATE TABLE IF NOT EXISTS "ProcurementOutcomes" (
+                        "Id" serial PRIMARY KEY,
+                        "Material" character varying(200),
+                        "RequestedQuantity" double precision,
+                        "RecommendedQuantity" double precision,
+                        "FinalOrderedQuantity" double precision,
+                        "RecommendedSupplier" character varying(200),
+                        "SelectedSupplier" character varying(200),
+                        "EstimatedPrice" double precision,
+                        "FinalPrice" double precision,
+                        "EstimatedLeadTime" integer,
+                        "ActualLeadTime" integer,
+                        "QualityEvidence" text,
+                        "SupplierVerification" character varying(100),
+                        "ManagerDecision" character varying(100),
+                        "ManagerRevision" text,
+                        "ProcurementSuccess" boolean,
+                        "PaymentSuccess" boolean,
+                        "DeliverySuccess" boolean,
+                        "CreatedAt" timestamp with time zone DEFAULT timezone('utc', now())
+                    );
+                """)
+            conn.commit()
+            logger.info("AgentWorkflows and ProcurementOutcomes DB tables verified/initialized.")
+    except Exception as ex:
+        logger.debug(f"DB table init note: {ex}")
+
+
 # ── App lifespan: start both background tasks ────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db_tables()
     scanner = asyncio.create_task(autonomous_equipment_telemetry_scanner())
     monitor = asyncio.create_task(inventory_monitor_task())
     yield

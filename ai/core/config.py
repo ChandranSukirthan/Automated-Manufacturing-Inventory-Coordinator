@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     @property
     def GEMINI_API_KEY(self) -> str:
-        return self.gemini_api_key
+        return (self.gemini_api_key or "").strip("'\" \t\r\n")
 
     @property
     def GEMINI_MODEL(self) -> str:

@@ -85,8 +85,15 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     # ── 5. Quality & Quarantine Safety Assessment (Student 3) ─────────────────
     quality_safety_status = "CLEAR"
+    quality_data = dict(state.get("quality_data") or {})
+    defect = quality_data.get("defect")
     quarantined_rolls_count = _check_quarantine_count()
-    if quarantined_rolls_count > 0:
+
+    if defect and str(defect.get("severity", "")).capitalize() in ("High", "Critical"):
+        quality_safety_status = "QUARANTINE_REQUIRED"
+        quarantined_rolls_count = max(quarantined_rolls_count, 1)
+        completed.append(f"Quality Agent: Quarantine required for defect {defect.get('batchId', 'UNKNOWN')} ({defect.get('severity')} severity)")
+    elif quarantined_rolls_count > 0:
         quality_safety_status = "QUARANTINE_ACTIVE"
         completed.append(f"Quality Agent: Detected {quarantined_rolls_count} active quarantine holds")
     else:
@@ -98,6 +105,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         or (estimated_total > 1000.0)
         or (adjusted_output < planned_target)
         or (quarantined_rolls_count > 0)
+        or (quality_safety_status == "QUARANTINE_REQUIRED")
     )
 
     impact_reasons = []
@@ -148,6 +156,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "requires_approval": False,
             "completed_steps": completed,
             "errors": errors,
+            "quality_data": quality_data,
         }
 
     # ── Revision requested: re-enter purchasing with revision context ──────────
@@ -162,6 +171,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "requires_approval": True,
             "completed_steps": completed,
             "errors": errors,
+            "quality_data": quality_data,
         }
 
     # ── Route to human approval (all procurement requires manager sign-off) ────
@@ -173,6 +183,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "requires_approval": True,
         "completed_steps": completed + ["Waiting for Supply Chain Manager human approval"],
         "errors": errors,
+        "quality_data": quality_data,
     }
 
 
@@ -185,7 +196,7 @@ def execution_node(state: AgentState) -> Dict[str, Any]:
     draft_po = state.get("draft_po") or state.get("purchasing_data", {}).get("draft_po") or {}
     po_num = draft_po.get("poNumber", "PO-DRAFT")
 
-    completed.append(f"Execution: Draft PO {po_num} registered in ERP staging queue")
+    completed.append(f"Execution: PO {po_num} registered in ERP staging queue")
 
     return {
         "current_agent": "Execution",
