@@ -415,7 +415,7 @@ namespace ManufacturingCoordinator.Api.Services
                 var payload = await GoogleJsonWebSignature.ValidateAsync(tokenId, settings);
                 return payload;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 throw new AuthException("Invalid Google token.", HttpStatusCode.Unauthorized);
             }
