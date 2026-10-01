@@ -50,6 +50,8 @@ class RunWorkflowRequest(BaseModel):
     preferredRegion: Optional[str] = None
     requiredByDate: Optional[str] = None
     specification: Optional[str] = None
+    purchasing_data: Optional[Dict[str, Any]] = None
+    quality_data: Optional[Dict[str, Any]] = None
 
     # Legacy aliases (kept for backward compatibility)
     maximumBudget: Optional[float] = None
@@ -57,7 +59,7 @@ class RunWorkflowRequest(BaseModel):
 
 
 class RejectWorkflowRequest(BaseModel):
-    reason: Optional[str] = Field("Rejected by Supply Chain Manager")
+    reason: Optional[str] = Field("Rejected by human administrator")
     rejectedBy: Optional[str] = None
 
 
@@ -71,14 +73,14 @@ class ApproveRequest(BaseModel):
 
 
 class MaintenanceCheckRequest(BaseModel):
-    uptime: float
-    maintenanceInterval: float
-    machineId: str = "M001"
+    uptime: float = Field(...)
+    maintenanceInterval: float = Field(...)
+    machineId: str = Field("M001")
 
 
 class ProductionImpactRequest(BaseModel):
-    target: int
-    availableMaterial: int
+    target: int = Field(...)
+    availableMaterial: int = Field(...)
 
 
 # ── Workflow Endpoints ─────────────────────────────────────────────────────────
@@ -134,6 +136,8 @@ def trigger_workflow(request: RunWorkflowRequest):
         required_by_date=request.requiredByDate,
         specification=request.specification,
         procurement_request_id=request.procurementRequestId,
+        purchasing_data=request.purchasing_data,
+        quality_data=request.quality_data,
     )
 
     return get_final_output(result)

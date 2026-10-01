@@ -44,6 +44,19 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     tool_results = dict(state.get("tool_results") or {})
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    # If draft_po is already provided (e.g., verifying an existing manual PO), preserve it
+    existing_purchasing = dict(state.get("purchasing_data", {}))
+    if existing_purchasing.get("draft_po"):
+        draft_po = existing_purchasing["draft_po"]
+        po_num = draft_po.get("poNumber", "PO-DRAFT")
+        completed.append(f"Purchasing: Validating existing purchase order {po_num}")
+        return {
+            "current_agent": "Purchasing",
+            "purchasing_data": existing_purchasing,
+            "completed_steps": completed,
+            "errors": errors
+        }
+
     # ── Step 1 & 2: Read authoritative procurement requirement ─────────────────
     req = dict(state.get("procurement_requirement") or {})
     inv_data = dict(state.get("inventory_data") or {})

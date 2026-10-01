@@ -10,7 +10,7 @@ export default function PageHeader({
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-6 mb-6">
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-purple-400 uppercase tracking-widest text-xs font-bold">
+          <span className="text-blue-400 uppercase tracking-widest text-xs font-bold">
             {category}
           </span>
           <span className="text-slate-600">•</span>

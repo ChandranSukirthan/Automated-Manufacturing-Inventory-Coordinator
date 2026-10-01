@@ -90,9 +90,9 @@ void main() {
       expect(find.text('WF-PROC-101'), findsOneWidget);
 
       // 2. Verify Safety Gate Banner
-      expect(find.text('Waiting for Supply Chain Manager approval'), findsOneWidget);
+      expect(find.text('Supply Chain Manager Approval & Sourcing Gate'), findsOneWidget);
       expect(
-        find.textContaining('Review and approval are handled in the Supply Chain Manager Web Console.'),
+        find.textContaining('Executive decision required'),
         findsOneWidget,
       );
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ using iText.Layout.Properties;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Enums;
+using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Api.Interfaces;
 using backend.Data;
@@ -144,6 +146,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Record audit: PO created
             await RecordAuditAsync(po.Id, "PO created", createdById, "Purchase order initialized in Draft state.");
 
+            // Create / update AI Validation workflow record
+            await EnsurePoValidationWorkflowAsync(po);
+
             // Reload with navigation properties
             return (await GetByIdAsync(po.Id))!;
         }
@@ -197,6 +202,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             await ValidatePurchaseOrderAsync(po);
 
             await _context.SaveChangesAsync();
+            await EnsurePoValidationWorkflowAsync(po);
             return (await GetByIdAsync(po.Id))!;
         }
 
@@ -364,6 +370,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Record audit: PO submitted
             await RecordAuditAsync(po.Id, "PO submitted", userId, "Submitted for manager authorization.");
 
+            await EnsurePoValidationWorkflowAsync(po);
+
             if (tx is not null) await tx.CommitAsync();
 
             return (await GetByIdAsync(po.Id))!;
@@ -371,6 +379,14 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
         public async Task<PurchaseOrderResponseDto> ApproveAsync(int id, Guid approverId, string? notes = null)
         {
+            var poToApprove = await LoadPoAsync(id);
+
+            // 1. LIVE AI VALIDATION: Run the Validation/Safety Agent workflow for this PO right now
+            await RunAiValidationWorkflowAsync(poToApprove);
+
+            // 2. BACKEND APPROVAL GATE: Authoritative verification against PostgreSQL & QA state
+            await ValidateApprovalGateAsync(poToApprove);
+
             int poId;
             using (var tx = await BeginTransactionIfSupportedAsync())
             {
@@ -393,6 +409,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Reload for sync
             var approvedPo = await LoadPoAsync(id);
             // PO is now in Approved status, ready for Manager Financial Settlement (Stripe or Bank Slip)
+            await EnsurePoValidationWorkflowAsync(approvedPo);
             // Sync with AgentWorkflow if this PO was AI-generated
             try
             {
@@ -542,6 +559,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             await RecordAuditAsync(po.Id, "PO rejected", approverId, $"Rejected: {reason}");
 
             if (tx is not null) await tx.CommitAsync();
+
+            // Ensure AgentWorkflow status is synced
+            await EnsurePoValidationWorkflowAsync(po);
 
             // Sync with AgentWorkflow if this PO was AI-generated
             try
@@ -706,6 +726,460 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 throw new InvalidOperationException("Total cost must be strictly positive.");
 
             ValidateBudget(po);
+        }
+
+        /// <summary>
+        /// BACKEND APPROVAL GATE: Authoritative verification against PostgreSQL state,
+        /// ensuring active supplier, valid math/lines, and that any QA/quarantine issue
+        /// has been manually resolved and quarantine released before approval is granted.
+        /// </summary>
+        public async Task ValidateApprovalGateAsync(PurchaseOrder po)
+        {
+            // 1. Authoritative check on Supplier master catalog in PostgreSQL
+            var supplier = await _context.Suppliers.FindAsync(po.SupplierId);
+            if (supplier == null)
+            {
+                throw new InvalidOperationException($"Approval blocked: Supplier {po.SupplierId} not found.");
+            }
+            if (!supplier.IsActive)
+            {
+                var suppIdent = !string.IsNullOrWhiteSpace(supplier.SupplierCode) ? supplier.SupplierCode : supplier.Name;
+                throw new InvalidOperationException($"Approval blocked: Validation failed because supplier {suppIdent} is inactive.");
+            }
+
+            // 2. Order lines validation
+            if (po.OrderLines == null || !po.OrderLines.Any())
+            {
+                po.OrderLines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
+            }
+
+            if (po.OrderLines == null || !po.OrderLines.Any())
+            {
+                throw new InvalidOperationException("Approval blocked: Purchase order must have at least one order line.");
+            }
+
+            foreach (var line in po.OrderLines)
+            {
+                if (line.Quantity <= 0)
+                {
+                    throw new InvalidOperationException("Approval blocked: Order line quantity must be strictly greater than zero.");
+                }
+                if (line.UnitPrice <= 0)
+                {
+                    throw new InvalidOperationException("Approval blocked: Order line unit price must be strictly greater than zero.");
+                }
+
+                var expectedLineTotal = Math.Round(line.Quantity * line.UnitPrice, 2);
+                if (line.TotalPrice > 0 && Math.Abs(line.TotalPrice - expectedLineTotal) > 0.05m)
+                {
+                    throw new InvalidOperationException("Approval blocked: PO financial calculation mismatch detected.");
+                }
+            }
+
+            // 3. Find associated AgentWorkflow (AI Validation / QA)
+            AgentWorkflow? wf = null;
+            if (!string.IsNullOrEmpty(po.Notes))
+            {
+                var match = Regex.Match(po.Notes, @"(WF-[A-Za-z0-9_-]+)");
+                if (match.Success)
+                {
+                    var wfId = match.Groups[1].Value;
+                    wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
+                }
+            }
+
+            if (wf == null)
+            {
+                var candidates = new[] { $"WF-QA-{po.PoNumber}", $"WF-{po.PoNumber}", $"WF-2026-{(100 + po.Id):D3}", $"WF-{po.Id}" };
+                wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => candidates.Contains(w.WorkflowId));
+            }
+
+            // If no workflow or validation results exist yet, generate them dynamically
+            if (wf == null || string.IsNullOrWhiteSpace(wf.ValidationResults))
+            {
+                wf = await RunAiValidationWorkflowAsync(po);
+            }
+
+            // 4. Authoritative check on AI ValidationResults if present
+            if (wf != null && !string.IsNullOrWhiteSpace(wf.ValidationResults))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(wf.ValidationResults);
+                    var root = doc.RootElement;
+
+                    // Supplier validation check
+                    if (root.TryGetProperty("supplierValidation", out var sv) && sv.GetString() == "INACTIVE_SUPPLIER")
+                    {
+                        var suppIdent = !string.IsNullOrWhiteSpace(supplier.SupplierCode) ? supplier.SupplierCode : supplier.Name;
+                        throw new InvalidOperationException($"Approval blocked: Validation failed because supplier {suppIdent} is inactive.");
+                    }
+
+                    // PO Math check
+                    if (root.TryGetProperty("poMathematicalCheck", out var pm) && pm.GetString() == "CALCULATION_MISMATCH")
+                    {
+                        throw new InvalidOperationException("Approval blocked: PO financial calculation mismatch detected.");
+                    }
+
+                    // Material validation
+                    if (root.TryGetProperty("materialValidation", out var mv))
+                    {
+                        var matStr = mv.GetString();
+                        if (matStr != null && matStr.StartsWith("INVALID", StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException("Approval blocked: Validation failed because material is invalid.");
+                        }
+                    }
+
+                    var qualitySafetyStatus = root.TryGetProperty("qualitySafetyStatus", out var qs) ? qs.GetString() : null;
+                    var manualResolutionStatus = root.TryGetProperty("manualResolutionStatus", out var mr) ? mr.GetString() : null;
+                    var rejectionReason = root.TryGetProperty("rejectionReason", out var rr) ? rr.GetString() : null;
+                    var isValid = root.TryGetProperty("isValid", out var iv) && iv.ValueKind == JsonValueKind.True;
+
+                    bool isQuarantineRequired = qualitySafetyStatus == "QUARANTINE_REQUIRED" || qualitySafetyStatus == "QUARANTINE_ACTIVE";
+
+                    if (isQuarantineRequired)
+                    {
+                        // 4a. Check if QualityInspector has provided manual resolution
+                        if (manualResolutionStatus != "RESOLVED")
+                        {
+                            throw new InvalidOperationException("Approval blocked: QA validation requires manual review.");
+                        }
+
+                        // 4b. Recheck CURRENT PostgreSQL state for active quarantine holds
+                        var hasActiveQuarantines = await _context.Quarantines.AnyAsync(q => q.Status == QuarantineStatus.Active);
+                        if (hasActiveQuarantines)
+                        {
+                            throw new InvalidOperationException("Approval blocked: Associated inventory is still quarantined.");
+                        }
+                    }
+                    else if (!isValid && manualResolutionStatus != "RESOLVED")
+                    {
+                        var reason = !string.IsNullOrWhiteSpace(rejectionReason) ? rejectionReason : "QA validation requires manual review.";
+                        throw new InvalidOperationException($"Approval blocked: {reason}");
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not parse ValidationResults for workflow {WorkflowId}", wf.WorkflowId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Invokes the Python AI Validation / Safety Agent workflow at http://localhost:8000/api/workflows/run
+        /// for the specified Purchase Order, persisting the newly produced validation assessment.
+        /// </summary>
+        public async Task<AgentWorkflow> RunAiValidationWorkflowAsync(PurchaseOrder po)
+        {
+            string workflowId;
+            if (!string.IsNullOrWhiteSpace(po.Notes) && Regex.IsMatch(po.Notes, @"(WF-[A-Za-z0-9_-]+)"))
+            {
+                workflowId = Regex.Match(po.Notes, @"(WF-[A-Za-z0-9_-]+)").Groups[1].Value;
+            }
+            else
+            {
+                workflowId = $"WF-QA-{po.PoNumber}";
+                if (string.IsNullOrWhiteSpace(po.Notes))
+                {
+                    po.Notes = $"Workflow ID: {workflowId}";
+                }
+                else if (!po.Notes.Contains("WF-"))
+                {
+                    po.Notes = $"{po.Notes} [Workflow ID: {workflowId}]";
+                }
+            }
+
+            if (po.OrderLines == null || !po.OrderLines.Any())
+            {
+                po.OrderLines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
+            }
+
+            var supplier = po.Supplier ?? await _context.Suppliers.FindAsync(po.SupplierId);
+            var firstLine = po.OrderLines?.FirstOrDefault();
+            var totalQty = po.OrderLines?.Sum(l => l.Quantity) ?? 1000m;
+            var unitPrice = firstLine?.UnitPrice ?? 0m;
+            var budgetCap = po.BudgetLimit > 0 ? po.BudgetLimit : 5000m;
+
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                var payload = new
+                {
+                    objective = $"Validation & quality safety assessment for PO {po.PoNumber}",
+                    workflowId = workflowId,
+                    material_id = firstLine?.RawMaterialId.ToString() ?? "1",
+                    required_quantity = (double)totalQty,
+                    purchasing_data = new
+                    {
+                        draft_po = new
+                        {
+                            poNumber = po.PoNumber,
+                            supplierId = po.SupplierId.ToString(),
+                            supplier = supplier?.Name ?? $"SUP-{po.SupplierId}",
+                            materialId = firstLine?.RawMaterialId.ToString() ?? "1",
+                            quantity = (double)totalQty,
+                            unitPrice = (double)unitPrice,
+                            totalAmount = (double)po.TotalCost,
+                            budgetThreshold = (double)budgetCap
+                        }
+                    }
+                };
+
+                var content = new StringContent(JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("http://localhost:8000/api/workflows/run", content);
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation("Successfully executed AI Validation/Safety agent workflow for PO {PoNumber}", po.PoNumber);
+                    var syncedWf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
+                    if (syncedWf != null && !string.IsNullOrWhiteSpace(syncedWf.ValidationResults))
+                    {
+                        return syncedWf;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "FastAPI agent workflow execution unavailable, falling back to authoritative database validation for PO {PoNumber}", po.PoNumber);
+            }
+
+            return await EnsurePoValidationWorkflowAsync(po);
+        }
+
+        /// <summary>
+        /// Generates and persists the AI Validation & Safety Agent assessment into PostgreSQL AgentWorkflows.
+        /// Ensures all 14 schema properties are computed and immediately available in Quality History.
+        /// </summary>
+        public async Task<AgentWorkflow> EnsurePoValidationWorkflowAsync(PurchaseOrder po)
+        {
+            // 1. Identify Workflow ID
+            string workflowId;
+            if (!string.IsNullOrWhiteSpace(po.Notes) && Regex.IsMatch(po.Notes, @"(WF-[A-Za-z0-9_-]+)"))
+            {
+                workflowId = Regex.Match(po.Notes, @"(WF-[A-Za-z0-9_-]+)").Groups[1].Value;
+            }
+            else
+            {
+                workflowId = $"WF-QA-{po.PoNumber}";
+                if (string.IsNullOrWhiteSpace(po.Notes))
+                {
+                    po.Notes = $"Workflow ID: {workflowId}";
+                }
+                else if (!po.Notes.Contains("WF-"))
+                {
+                    po.Notes = $"{po.Notes} [Workflow ID: {workflowId}]";
+                }
+            }
+
+            var existingWf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => 
+                w.WorkflowId == workflowId || 
+                w.WorkflowId == $"WF-QA-{po.PoNumber}" || 
+                w.WorkflowId == $"WF-{po.PoNumber}" || 
+                w.WorkflowId == $"WF-2026-{(100 + po.Id):D3}");
+
+            // 2. Validate Supplier against PostgreSQL ERP master catalog
+            var supplier = po.Supplier ?? await _context.Suppliers.FindAsync(po.SupplierId);
+            string supplierValidation = "PASSED";
+            bool isValid = true;
+            string? rejectionReason = null;
+
+            if (supplier == null || !supplier.IsActive)
+            {
+                supplierValidation = "INACTIVE_SUPPLIER";
+                isValid = false;
+                var sName = supplier?.Name ?? $"SUP-{po.SupplierId}";
+                rejectionReason = $"Supplier '{sName}' is inactive in ERP master catalog.";
+            }
+
+            // 3. Validate Budget
+            string budgetCheck = "PASSED";
+            if (po.BudgetLimit > 0 && po.TotalCost > po.BudgetLimit)
+            {
+                budgetCheck = "BUDGET_EXCEEDED";
+                isValid = false;
+                rejectionReason ??= $"Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).";
+            }
+
+            // 4. Validate Order Lines & Math
+            if (po.OrderLines == null || !po.OrderLines.Any())
+            {
+                po.OrderLines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
+            }
+
+            string poMathematicalCheck = "PASSED";
+            if (po.OrderLines == null || !po.OrderLines.Any() || po.TotalCost <= 0)
+            {
+                poMathematicalCheck = "CALCULATION_MISMATCH";
+                isValid = false;
+                rejectionReason ??= "PO total cost or line quantities are invalid.";
+            }
+            else
+            {
+                foreach (var line in po.OrderLines)
+                {
+                    if (line.Quantity <= 0 || line.UnitPrice <= 0)
+                    {
+                        poMathematicalCheck = "CALCULATION_MISMATCH";
+                        isValid = false;
+                        rejectionReason ??= "Order line quantity and unit price must be strictly positive.";
+                        break;
+                    }
+                    var expected = Math.Round(line.Quantity * line.UnitPrice, 2);
+                    if (line.TotalPrice > 0 && Math.Abs(line.TotalPrice - expected) > 0.05m)
+                    {
+                        poMathematicalCheck = "CALCULATION_MISMATCH";
+                        isValid = false;
+                        rejectionReason ??= $"Calculation mismatch: {line.Quantity} x ${line.UnitPrice:N2} != ${line.TotalPrice:N2}";
+                        break;
+                    }
+                }
+            }
+
+            // 5. Material & Quality / Quarantine Safety Check
+            string materialValidation = "PASSED";
+            string qualitySafetyStatus = "CLEAR";
+            int quarantinedRollsCount = 0;
+
+            var activeQuarantines = await _context.Quarantines
+                .Where(q => q.Status == QuarantineStatus.Active)
+                .ToListAsync();
+
+            if (activeQuarantines.Any())
+            {
+                quarantinedRollsCount = activeQuarantines.Count;
+                qualitySafetyStatus = "QUARANTINE_ACTIVE";
+                isValid = false;
+            }
+
+            // 6. Impact Assessment
+            bool isHighImpact = po.TotalCost > 1000m || qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED" || !isValid;
+            string? impactReason = null;
+            if (!isValid && !string.IsNullOrWhiteSpace(rejectionReason))
+            {
+                impactReason = rejectionReason;
+            }
+            else if (qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED")
+            {
+                impactReason = $"{quarantinedRollsCount} inventory roll(s) currently held in quarantine. Quality inspection required.";
+            }
+            else if (po.TotalCost > 5000m)
+            {
+                impactReason = $"High expenditure (${po.TotalCost:N2}) requires managerial authorization.";
+            }
+            else
+            {
+                impactReason = $"Procurement order (${po.TotalCost:N2}) within standard operational parameters.";
+            }
+
+            // 7. Manual resolution state handling (strictly authoritative from current DB state)
+            string? manualResolutionStatus = null;
+            string? manualResolutionNote = null;
+            string? resolvedBy = null;
+            string? resolvedAt = null;
+
+            if (activeQuarantines.Any())
+            {
+                // Active blocking quarantine exists: resolution MUST be PENDING_REVIEW, never stale RESOLVED.
+                manualResolutionStatus = "PENDING_REVIEW";
+            }
+            else
+            {
+                // No active quarantines. If this specific workflow was previously resolved after quarantine release, preserve it.
+                if (existingWf != null && !string.IsNullOrWhiteSpace(existingWf.ValidationResults))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(existingWf.ValidationResults);
+                        var root = doc.RootElement;
+                        var prevStatus = root.TryGetProperty("manualResolutionStatus", out var mrs) ? mrs.GetString() : null;
+                        if (prevStatus == "RESOLVED")
+                        {
+                            manualResolutionStatus = "RESOLVED";
+                            if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                            if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                            if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                        }
+                    }
+                    catch { }
+                }
+
+                if (manualResolutionStatus == null)
+                {
+                    manualResolutionStatus = isValid ? "NOT_REQUIRED" : "PENDING_REVIEW";
+                }
+            }
+
+            // 8. Build JSON
+            var validationDict = new Dictionary<string, object?>
+            {
+                ["isValid"] = isValid,
+                ["qualitySafetyStatus"] = qualitySafetyStatus,
+                ["supplierValidation"] = supplierValidation,
+                ["budgetCheck"] = budgetCheck,
+                ["poMathematicalCheck"] = poMathematicalCheck,
+                ["materialValidation"] = materialValidation,
+                ["quarantinedRollsCount"] = quarantinedRollsCount,
+                ["isHighImpact"] = isHighImpact,
+                ["impactReason"] = impactReason,
+                ["rejectionReason"] = rejectionReason,
+                ["manualResolutionStatus"] = manualResolutionStatus,
+                ["manualResolutionNote"] = manualResolutionNote,
+                ["resolvedBy"] = resolvedBy,
+                ["resolvedAt"] = resolvedAt
+            };
+
+            var json = JsonSerializer.Serialize(validationDict);
+
+            // 9. Save or Update AgentWorkflow
+            if (existingWf != null)
+            {
+                existingWf.ValidationResults = json;
+                if (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment || po.Status == PurchaseOrderStatus.Sent)
+                {
+                    existingWf.Status = WorkflowStatus.Completed;
+                    existingWf.ApprovalStatus = ApprovalStatus.Approved;
+                    existingWf.CompletedAt = DateTime.UtcNow;
+                    existingWf.FinalOutcome = $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})";
+                }
+                else if (po.Status == PurchaseOrderStatus.Rejected)
+                {
+                    existingWf.Status = WorkflowStatus.Failed;
+                    existingWf.ApprovalStatus = ApprovalStatus.Rejected;
+                    existingWf.CompletedAt = DateTime.UtcNow;
+                    existingWf.FinalOutcome = $"PO {po.PoNumber} rejected: {po.RejectionReason}";
+                }
+                else
+                {
+                    existingWf.Status = WorkflowStatus.WaitingForApproval;
+                    existingWf.ApprovalStatus = ApprovalStatus.Pending;
+                    existingWf.CurrentAgent = "Validation/Safety";
+                }
+                await _context.SaveChangesAsync();
+                return existingWf;
+            }
+            else
+            {
+                var newWf = new AgentWorkflow
+                {
+                    Id = Guid.NewGuid(),
+                    WorkflowId = workflowId,
+                    Objective = $"Autonomous validation & procurement safety assessment for PO {po.PoNumber}",
+                    CurrentAgent = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? "Execution" : "Validation/Safety",
+                    Status = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? WorkflowStatus.Completed : (po.Status == PurchaseOrderStatus.Rejected ? WorkflowStatus.Failed : WorkflowStatus.WaitingForApproval),
+                    ApprovalStatus = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
+                    StartedAt = po.CreatedAt,
+                    CompletedAt = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? po.UpdatedAt : null,
+                    FinalOutcome = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : null,
+                    ValidationResults = json
+                };
+                _context.AgentWorkflows.Add(newWf);
+                await _context.SaveChangesAsync();
+                return newWf;
+            }
         }
 
         // ── State Machine Transition ──────────────────────────────────────────────

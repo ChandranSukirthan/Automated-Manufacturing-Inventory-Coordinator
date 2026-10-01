@@ -66,31 +66,50 @@ class ManufacturingApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
         navigationBarTheme: NavigationBarThemeData(
-          indicatorColor: AppColors.violet,
+          backgroundColor: const Color(0xFF070B14),
+          indicatorColor: AppColors.primary.withValues(alpha: 0.2),
           iconTheme: WidgetStateProperty.resolveWith(
             (states) => IconThemeData(
               color: states.contains(WidgetState.selected)
-                  ? AppColors.strongText
+                  ? AppColors.primaryLight
                   : AppColors.mutedText,
             ),
           ),
           labelTextStyle: WidgetStateProperty.resolveWith(
             (states) => TextStyle(
               color: states.contains(WidgetState.selected)
-                  ? AppColors.violet
+                  ? AppColors.primaryLight
                   : AppColors.mutedText,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
             ),
           ),
         ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
+        inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.background,
+          fillColor: AppColors.surface,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primaryLight, width: 1.5),
+          ),
         ),
-        cardTheme: const CardThemeData(
-          margin: EdgeInsets.only(bottom: 12),
+        cardTheme: CardThemeData(
+          margin: const EdgeInsets.only(bottom: 12),
           elevation: 0,
           color: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border),
+          ),
         ),
       ),
       home: appState.isLoading

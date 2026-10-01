@@ -119,6 +119,11 @@ namespace ManufacturingCoordinator.Api.Services
 
         public async Task<QuarantineDto?> ReleaseAsync(Guid id)
         {
+            return await ReleaseAsync(id, null, null);
+        }
+
+        public async Task<QuarantineDto?> ReleaseAsync(Guid id, string? resolutionNote, string? resolvedBy)
+        {
             var quarantine = await _db.Quarantines
                 .Include(q => q.DefectReport)
                 .FirstOrDefaultAsync(q => q.Id == id);
@@ -144,6 +149,77 @@ namespace ManufacturingCoordinator.Api.Services
             quarantine.Status = QuarantineStatus.Released;
             quarantine.ReleasedAt = DateTime.UtcNow;
             inventoryRoll.Status = InventoryStatus.Available;
+
+            if (!string.IsNullOrWhiteSpace(resolutionNote))
+            {
+                quarantine.Reason = $"{quarantine.Reason} | Resolution: {resolutionNote.Trim()}";
+            }
+
+            // Sync ONLY with workflows specifically associated with this quarantine / affected inventory / defect
+            if (!string.IsNullOrWhiteSpace(resolutionNote))
+            {
+                var rollId = quarantine.InventoryRollId?.Trim();
+                var defectIdStr = quarantine.DefectReportId.ToString();
+                var quarantineIdStr = quarantine.Id.ToString();
+                var batchId = quarantine.DefectReport?.BatchId?.Trim();
+
+                var allWorkflows = await _db.AgentWorkflows.ToListAsync();
+                var matchingWorkflows = allWorkflows.Where(wf =>
+                {
+                    if (string.IsNullOrWhiteSpace(wf.WorkflowId)) return false;
+
+                    // Match explicitly associated workflows (by Roll ID, Defect ID, Quarantine ID, or specific Batch ID)
+                    bool matchRoll = !string.IsNullOrEmpty(rollId) && (
+                        wf.WorkflowId.Contains(rollId, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(rollId, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(rollId, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchDefect = !string.IsNullOrEmpty(defectIdStr) && (
+                        wf.WorkflowId.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(defectIdStr, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchQuarantine = (
+                        wf.WorkflowId.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && wf.Objective.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase)) ||
+                        (wf.ValidationResults != null && wf.ValidationResults.Contains(quarantineIdStr, StringComparison.OrdinalIgnoreCase))
+                    );
+
+                    bool matchBatch = !string.IsNullOrEmpty(batchId) && (
+                        wf.WorkflowId.Equals($"WF-DEFECT-{batchId}", StringComparison.OrdinalIgnoreCase) ||
+                        wf.WorkflowId.Equals($"WF-{batchId}", StringComparison.OrdinalIgnoreCase) ||
+                        (wf.Objective != null && (
+                            wf.Objective.Contains($"Batch {batchId}", StringComparison.OrdinalIgnoreCase) ||
+                            wf.Objective.Contains($"batch {batchId}", StringComparison.OrdinalIgnoreCase)
+                        ))
+                    );
+
+                    return matchRoll || matchDefect || matchQuarantine || matchBatch;
+                }).ToList();
+
+                foreach (var wf in matchingWorkflows)
+                {
+                    if (!string.IsNullOrWhiteSpace(wf.ValidationResults))
+                    {
+                        try
+                        {
+                            var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(wf.ValidationResults);
+                            if (dict != null)
+                            {
+                                dict["manualResolutionStatus"] = "RESOLVED";
+                                dict["manualResolutionNote"] = resolutionNote.Trim();
+                                dict["resolvedBy"] = resolvedBy ?? "QualityInspector";
+                                dict["resolvedAt"] = DateTime.UtcNow.ToString("o");
+                                wf.ValidationResults = JsonSerializer.Serialize(dict);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             return ToDto(quarantine);

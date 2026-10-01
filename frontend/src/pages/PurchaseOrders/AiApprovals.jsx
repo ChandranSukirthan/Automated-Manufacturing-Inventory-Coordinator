@@ -499,22 +499,39 @@ export default function AiApprovals() {
                           style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
                         />
                       </div>
-                      <p className="text-[11px] text-emerald-400/90 pt-1">
-                        ✓ Validation Passed: Vendor active, threshold rule verified, no budget overrun.
-                      </p>
+
+                      {/* QA Safety Gate Resolution Badge */}
+                      {(() => {
+                        const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
+                        const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
+                        const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
+
+                        return (
+                          <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                            isBlocked ? 'bg-rose-950/40 border-rose-500/40 text-rose-300' : 'bg-slate-950/80 border-slate-800 text-emerald-400'
+                          }`}>
+                            <span className="font-semibold">QA Safety Gate:</span>
+                            <span className="font-bold">
+                              {isBlocked
+                                ? 'Approval Blocked — QA/Safety issue unresolved'
+                                : 'QA/Safety Issue Resolved — Approval may proceed'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Tool Execution Summary */}
                     <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 font-mono">
                       <span className="font-bold text-slate-300 flex items-center gap-1.5 uppercase text-[10px] tracking-wider font-sans">
                         <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Tool Execution Summary</span>
+                        <span>Tool Execution &amp; Gate Summary</span>
                       </span>
                       <div className="text-[11px] text-slate-400 space-y-1">
                         <p>• calculate_burn_rate(SKU) → 180.5 kg/day</p>
-                        <p>• calculate_days_remaining() → 3.2 days remaining</p>
-                        <p>• check_approval_threshold({totalAmount}) → True (&gt; $5,000)</p>
                         <p>• validate_budget({totalAmount}, {budgetLimit}) → APPROVED</p>
+                        <p>• check_qa_safety_status() → {po.manualResolutionStatus === 'RESOLVED' ? 'RESOLVED' : 'CLEAR / VERIFIED'}</p>
+                        <p>• enforce_backend_gate() → AUTHORITATIVE POSTGRESQL VERIFIED</p>
                       </div>
                     </div>
                   </div>

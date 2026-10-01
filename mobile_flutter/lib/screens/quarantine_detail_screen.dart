@@ -42,8 +42,20 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     try {
       final record = await widget.service.getQuarantine(widget.quarantineId);
       final results = await Future.wait([
-        widget.service.getBatch(record.batchId),
-        widget.service.getDefect(record.defectReportId),
+        widget.service.getBatch(record.batchId).catchError(
+              (_) => const BatchDetails(id: '', productType: '', inventoryRolls: []),
+            ),
+        widget.service.getDefect(record.defectReportId).catchError(
+              (_) => DefectReport(
+                id: record.defectReportId,
+                batchId: record.batchId,
+                productType: '',
+                severity: 'Unknown',
+                description: '',
+                createdAt: DateTime.now(),
+                status: 'Open',
+              ),
+            ),
       ]);
       if (mounted) {
         setState(() {
@@ -54,27 +66,60 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
       }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Unable to load quarantine details.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _release() async {
+    final noteController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Release quarantine?'),
-        content: const Text(
-          'Release this quarantine and return the inventory to normal business handling?',
+      barrierColor: Colors.black.withValues(alpha: 0.75),
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: Color(0xFF1E293B)),
+        ),
+        title: const Text(
+          'Release Quarantine',
+          style: TextStyle(color: AppColors.strongText, fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Release this quarantine hold and return the inventory roll to active stock?',
+              style: TextStyle(color: AppColors.secondaryText, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              maxLines: 3,
+              style: const TextStyle(color: AppColors.strongText, fontSize: 13),
+              decoration: const InputDecoration(
+                labelText: 'Disposition note (optional)',
+                hintText: 'Reason or laboratory clearance note...',
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Release'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF059669),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Authorize Release'),
           ),
         ],
       ),
@@ -88,18 +133,14 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     try {
       final record = await widget.service.releaseQuarantine(
         widget.quarantineId,
+        resolutionNote: noteController.text.trim(),
       );
-      final results = await Future.wait([
-        widget.service.getBatch(record.batchId),
-        widget.service.getDefect(record.defectReportId),
-      ]);
       if (mounted) {
         setState(() {
           _record = record;
-          _batch = results[0] as BatchDetails;
-          _defect = results[1] as DefectReport;
         });
       }
+      _load();
     } on ApiException catch (exception) {
       if (mounted) setState(() => _error = exception.message);
     } finally {
@@ -114,7 +155,7 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
     }
     if (_error != null && _record == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Quarantine details')),
+        appBar: AppBar(title: const Text('Quarantine Details')),
         body: StateMessage(
           message: _error!,
           icon: Icons.cloud_off,
@@ -131,7 +172,7 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
         ),
       );
     }
-    final active = record.status == 'Active';
+    final active = record.status.toLowerCase() == 'active';
     final inventoryStatus = _batch?.inventoryRolls
         .firstWhere(
           (roll) => roll.id == record.inventoryRollId,
@@ -145,140 +186,131 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quarantine details'),
+        title: const Text('Quarantine Details'),
         leading: BackButton(onPressed: () => Navigator.pop(context)),
       ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
           children: [
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 17, 16, 16),
-              decoration: _quarantineDetailDecoration,
+              padding: const EdgeInsets.all(18),
+              decoration: _detailBoxDecoration(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'QUARANTINE RECORD',
-                    style: TextStyle(
-                      color: AppColors.primaryLight,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.1,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'QUARANTINE RECORD',
+                        style: TextStyle(
+                          color: AppColors.primaryLight,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: active
+                              ? AppColors.error.withValues(alpha: 0.15)
+                              : const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: active
+                                ? AppColors.error.withValues(alpha: 0.35)
+                                : const Color(0xFF10B981).withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          record.status,
+                          style: TextStyle(
+                            color: active ? AppColors.error : const Color(0xFF34D399),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Defect',
-                    style: TextStyle(
-                      color: AppColors.mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 10),
                   Text(
-                    record.defectReportId,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    'Roll: ${record.inventoryRollId}',
                     style: const TextStyle(
-                      color: AppColors.strongText,
-                      fontSize: 20,
+                      color: Color(0xFF67E8F9),
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
                   Row(
                     children: [
                       Expanded(
-                        child: _BadgeField(
-                          label: 'Severity',
-                          child: _QuarantineDetailBadge(
-                            label: _defect?.severity ?? 'Unknown',
-                            color: AppColors.error,
-                          ),
-                        ),
+                        child: _metaField('Severity', _defect?.severity ?? 'Unknown', isBadge: true),
                       ),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: _BadgeField(
-                          label: 'Status',
-                          child: _QuarantineDetailBadge(
-                            label: record.status,
-                            color: AppColors.primaryLight,
-                          ),
+                        child: _metaField('Batch Number', record.batchId),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _metaField('Inventory Status', inventoryStatus ?? 'Unknown'),
+                      ),
+                      Expanded(
+                        child: _metaField('Defect Report', '#${record.defectReportId.length > 8 ? record.defectReportId.substring(0, 8) : record.defectReportId}'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _metaField('Created Date', _formatDate(record.createdAt)),
+                      ),
+                      Expanded(
+                        child: _metaField(
+                          'Released Date',
+                          record.releasedAt == null ? 'Not released' : _formatDate(record.releasedAt!),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _Info(label: 'Batch code', value: record.batchId),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _Info(
-                          label: 'Inventory roll',
-                          value: record.inventoryRollId,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _BadgeField(
-                          label: 'Inventory status',
-                          child: _QuarantineDetailBadge(
-                            label: inventoryStatus ?? 'Unknown',
-                            color: AppColors.primaryLight,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _Info(
-                          label: 'Created',
-                          value: _formatDate(record.createdAt),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _Info(
-                    label: 'Released',
-                    value: record.releasedAt == null
-                        ? 'Not released'
-                        : _formatDate(record.releasedAt!),
-                  ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 14),
+
                   const Text(
-                    'Reason',
+                    'REASON FOR QUARANTINE',
                     style: TextStyle(
                       color: AppColors.mutedText,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
                     ),
                   ),
-                  const SizedBox(height: 7),
+                  const SizedBox(height: 6),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(13),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.background.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(11),
-                      border: Border.all(color: const Color(0xFF2A3958)),
+                      color: const Color(0xFF0B0F19),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF1E293B)),
                     ),
                     child: Text(
                       record.reason,
                       style: const TextStyle(
                         color: AppColors.primaryText,
-                        fontSize: 14,
+                        fontSize: 13,
                         height: 1.4,
                       ),
                     ),
@@ -292,24 +324,27 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
             ],
             if (active) ...[
               const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _releasing ? null : _release,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.background,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
+              SizedBox(
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: _releasing ? null : _release,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
                   ),
-                ),
-                icon: _releasing
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle_outline),
-                label: Text(
-                  _releasing ? 'Releasing...' : 'Release quarantine',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  icon: _releasing
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.verified_user_outlined),
+                  label: Text(
+                    _releasing ? 'Releasing...' : 'Authorize Quarantine Release',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ),
             ],
@@ -318,118 +353,69 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
       ),
     );
   }
-}
 
-class _Info extends StatelessWidget {
-  const _Info({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.mutedText,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
+  Widget _metaField(String label, String value, {bool isBadge = false}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          color: AppColors.mutedText,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
         ),
-        const SizedBox(height: 5),
+      ),
+      const SizedBox(height: 3),
+      if (isBadge)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            value.toUpperCase(),
+            style: TextStyle(
+              color: value.toLowerCase() == 'critical' || value.toLowerCase() == 'high'
+                  ? AppColors.error
+                  : const Color(0xFFFBBF24),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'monospace',
+            ),
+          ),
+        )
+      else
         Text(
           value,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: AppColors.strongText,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
+            fontFamily: 'monospace',
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
-      ],
-    ),
+    ],
   );
-}
 
-class _BadgeField extends StatelessWidget {
-  const _BadgeField({required this.label, required this.child});
-
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.mutedText,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 6),
-        child,
-      ],
-    ),
-  );
-}
-
-class _QuarantineDetailBadge extends StatelessWidget {
-  const _QuarantineDetailBadge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(7),
-      border: Border.all(color: color.withValues(alpha: 0.32)),
-    ),
-    child: Text(
-      label,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: color,
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
+  BoxDecoration _detailBoxDecoration() => BoxDecoration(
+    color: const Color(0xFF0F172A),
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
       ),
-    ),
+    ],
   );
-}
 
-final _quarantineDetailDecoration = BoxDecoration(
-  gradient: const LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-  ),
-  borderRadius: BorderRadius.circular(16),
-  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-  boxShadow: [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.25),
-      blurRadius: 10,
-      offset: const Offset(0, 4),
-    ),
-  ],
-);
-
-String _formatDate(DateTime value) {
-  final local = value.toLocal();
-  String twoDigits(int number) => number.toString().padLeft(2, '0');
-  return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
-      '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.month}/${two(local.day)}/${local.year} ${two(local.hour)}:${two(local.minute)}';
+  }
 }

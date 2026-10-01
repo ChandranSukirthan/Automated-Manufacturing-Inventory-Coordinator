@@ -33,9 +33,10 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/release")]
-        public async Task<IActionResult> Release(Guid id)
+        public async Task<IActionResult> Release(Guid id, [FromBody] ReleaseQuarantineDto? dto = null)
         {
-            var quarantine = await _service.ReleaseAsync(id);
+            var resolvedBy = User.Identity?.Name ?? "QualityInspector";
+            var quarantine = await _service.ReleaseAsync(id, dto?.ResolutionNote, resolvedBy);
             return quarantine == null ? NotFound() : Ok(quarantine);
         }
     }

@@ -142,6 +142,7 @@ class DefectReport {
     required this.description,
     required this.createdAt,
     required this.status,
+    this.skuCode,
     this.reportedByUserId,
     this.affectedInventory = const [],
   });
@@ -153,6 +154,7 @@ class DefectReport {
   final String description;
   final DateTime createdAt;
   final String status;
+  final String? skuCode;
   final String? reportedByUserId;
   final List<String> affectedInventory;
 
@@ -165,6 +167,7 @@ class DefectReport {
     createdAt:
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     status: json['status'] as String? ?? '',
+    skuCode: json['skuCode'] as String?,
     reportedByUserId: json['reportedByUserId']?.toString(),
     affectedInventory: (json['affectedInventory'] as List<dynamic>? ?? [])
         .map((item) => item.toString())
@@ -179,6 +182,7 @@ extension DefectReportCopy on DefectReport {
     String? severity,
     String? description,
     String? status,
+    String? skuCode,
     String? reportedByUserId,
     List<String>? affectedInventory,
   }) => DefectReport(
@@ -189,6 +193,7 @@ extension DefectReportCopy on DefectReport {
     description: description ?? this.description,
     createdAt: createdAt,
     status: status ?? this.status,
+    skuCode: skuCode ?? this.skuCode,
     reportedByUserId: reportedByUserId ?? this.reportedByUserId,
     affectedInventory: affectedInventory ?? this.affectedInventory,
   );
@@ -228,4 +233,216 @@ class QuarantineRecord {
             DateTime.now(),
         releasedAt: DateTime.tryParse(json['releasedAt'] as String? ?? ''),
       );
+}
+
+/// Model representing the AI Validation & Safety Gate Assessment
+class AiValidationData {
+  const AiValidationData({
+    required this.workflowId,
+    required this.status,
+    this.isValid,
+    this.qualitySafetyStatus,
+    this.supplierValidation,
+    this.budgetCheck,
+    this.poMathematicalCheck,
+    this.materialValidation,
+    this.quarantinedRollsCount,
+    this.isHighImpact,
+    this.impactReason,
+    this.rejectionReason,
+    this.manualResolutionStatus,
+    this.manualResolutionNote,
+    this.resolvedBy,
+    this.resolvedAt,
+    this.purchaseOrderNumber,
+    this.poNumber,
+  });
+
+  final String workflowId;
+  final String status;
+  final bool? isValid;
+  final String? qualitySafetyStatus;
+  final String? supplierValidation;
+  final String? budgetCheck;
+  final String? poMathematicalCheck;
+  final String? materialValidation;
+  final int? quarantinedRollsCount;
+  final bool? isHighImpact;
+  final String? impactReason;
+  final String? rejectionReason;
+  final String? manualResolutionStatus;
+  final String? manualResolutionNote;
+  final String? resolvedBy;
+  final String? resolvedAt;
+  final String? purchaseOrderNumber;
+  final String? poNumber;
+
+  factory AiValidationData.fromJson(Map<String, dynamic> json) => AiValidationData(
+    workflowId: json['workflowId']?.toString() ?? '',
+    status: json['status']?.toString() ?? 'COMPLETED',
+    isValid: json['isValid'] as bool?,
+    qualitySafetyStatus: json['qualitySafetyStatus']?.toString(),
+    supplierValidation: json['supplierValidation']?.toString() ?? json['supplierCheck']?.toString(),
+    budgetCheck: json['budgetCheck']?.toString(),
+    poMathematicalCheck: json['poMathematicalCheck']?.toString() ?? json['poMathCheck']?.toString(),
+    materialValidation: json['materialValidation']?.toString() ?? json['materialCheck']?.toString(),
+    quarantinedRollsCount: json['quarantinedRollsCount'] as int?,
+    isHighImpact: json['isHighImpact'] as bool?,
+    impactReason: json['impactReason']?.toString(),
+    rejectionReason: json['rejectionReason']?.toString(),
+    manualResolutionStatus: json['manualResolutionStatus']?.toString(),
+    manualResolutionNote: json['manualResolutionNote']?.toString(),
+    resolvedBy: json['resolvedBy']?.toString(),
+    resolvedAt: json['resolvedAt']?.toString(),
+    purchaseOrderNumber: json['purchaseOrderNumber']?.toString(),
+    poNumber: json['poNumber']?.toString(),
+  );
+
+  /// Helper to extract PO Number cleanly
+  String get poReference {
+    if (purchaseOrderNumber != null && purchaseOrderNumber!.isNotEmpty) return purchaseOrderNumber!;
+    if (poNumber != null && poNumber!.isNotEmpty) return poNumber!;
+    final match = RegExp(r'PO-\d{4}-\d{4}', caseSensitive: false).firstMatch(workflowId);
+    if (match != null) return match.group(0)!;
+    return 'Not available';
+  }
+
+  /// 1. Original AI Assessment (Strictly Preserved)
+  String get origAiOutcome {
+    if (isValid != null) return isValid! ? 'VALID' : 'INVALID';
+    if (qualitySafetyStatus != null) {
+      final s = qualitySafetyStatus!.toUpperCase().trim();
+      return (s == 'CLEAR' || s == 'PASSED') ? 'VALID' : 'INVALID';
+    }
+    return 'Not available';
+  }
+
+  String get origSafetyStatus {
+    if (qualitySafetyStatus != null && qualitySafetyStatus!.isNotEmpty) {
+      return qualitySafetyStatus!.toUpperCase().trim();
+    }
+    if (quarantinedRollsCount != null) {
+      return quarantinedRollsCount! > 0 ? 'QUARANTINE_ACTIVE' : 'CLEAR';
+    }
+    return 'Not available';
+  }
+
+  String get quarantinedRollsDisplay {
+    if (quarantinedRollsCount != null) return '$quarantinedRollsCount roll(s)';
+    return 'Not available';
+  }
+
+  String get highImpactDisplay {
+    if (isHighImpact != null) return isHighImpact! ? 'YES' : 'NO';
+    return 'Not available';
+  }
+
+  /// 2. Current QA & Quarantine State
+  bool get isResolved => manualResolutionStatus?.toUpperCase().trim() == 'RESOLVED';
+
+  bool get hasQuarantineTrigger {
+    final safety = qualitySafetyStatus?.toUpperCase().trim();
+    return safety?.contains('QUARANTINE') == true ||
+        safety == 'BLOCKED' ||
+        (quarantinedRollsCount != null && quarantinedRollsCount! > 0) ||
+        isValid == false;
+  }
+
+  String get currentManualResolution {
+    if (isResolved) return 'RESOLVED';
+    final manual = manualResolutionStatus?.toUpperCase().trim();
+    final safety = qualitySafetyStatus?.toUpperCase().trim();
+    if (manual == 'NOT_REQUIRED' || (safety == 'CLEAR' && (quarantinedRollsCount == 0 || quarantinedRollsCount == null) && isValid != false)) {
+      return 'NOT REQUIRED';
+    }
+    if (hasQuarantineTrigger) return 'PENDING REVIEW';
+    if (safety != null) return 'NOT REQUIRED';
+    return 'Not available';
+  }
+
+  String get currentQuarantineDisposition {
+    if (isResolved) return 'RELEASED';
+    final manual = manualResolutionStatus?.toUpperCase().trim();
+    final safety = qualitySafetyStatus?.toUpperCase().trim();
+    if (manual == 'NOT_REQUIRED' || (safety == 'CLEAR' && (quarantinedRollsCount == 0 || quarantinedRollsCount == null) && isValid != false)) {
+      return 'NONE';
+    }
+    if (hasQuarantineTrigger) return 'ACTIVE';
+    if (safety != null) return 'NONE';
+    return 'Not available';
+  }
+
+  /// 3. Safety Gate Status
+  String get safetyGateState {
+    if (isResolved) return 'RESOLVED';
+    if (hasQuarantineTrigger) return 'BLOCKED';
+    if (qualitySafetyStatus != null || isValid != null || quarantinedRollsCount != null) {
+      return 'CLEAR';
+    }
+    return 'Not available';
+  }
+
+  bool get isSafetyBlocked => safetyGateState == 'BLOCKED';
+  bool get needsReview => isSafetyBlocked && !isResolved;
+
+  /// Automated checks summary
+  List<ValidationCheckItem> get automatedCheckItems => [
+    ValidationCheckItem(name: 'Supplier Check', key: 'supplier', value: supplierValidation),
+    ValidationCheckItem(name: 'Budget Check', key: 'budget', value: budgetCheck),
+    ValidationCheckItem(name: 'PO Math Check', key: 'poMath', value: poMathematicalCheck),
+    ValidationCheckItem(name: 'Material Check', key: 'material', value: materialValidation),
+  ];
+
+  List<ValidationCheckItem> get presentChecks =>
+      automatedCheckItems.where((c) => c.value != null && c.value!.trim().isNotEmpty).toList();
+
+  List<ValidationCheckItem> get passedChecks => presentChecks.where((c) => c.isPassed).toList();
+
+  String get automatedSummary {
+    if (presentChecks.isEmpty) return 'Not available';
+    if (presentChecks.length == 4 && passedChecks.length == 4) return '4 / 4 PASSED';
+    if (presentChecks.length == 4) return '${passedChecks.length} / 4 PASSED';
+    return '${passedChecks.length} / ${presentChecks.length} PASSED';
+  }
+
+  bool get allAutomatedPassed => presentChecks.length == 4 && passedChecks.length == 4;
+}
+
+class ValidationCheckItem {
+  const ValidationCheckItem({
+    required this.name,
+    required this.key,
+    required this.value,
+  });
+
+  final String name;
+  final String key;
+  final String? value;
+
+  bool get isAvailable => value != null && value!.trim().isNotEmpty;
+
+  bool get isPassed {
+    if (!isAvailable) return false;
+    final s = value!.toUpperCase().trim();
+    return s == 'PASSED' || s == 'CLEAR' || s == 'VALID' || s == 'TRUE';
+  }
+
+  bool get isFailed {
+    if (!isAvailable) return false;
+    final s = value!.toUpperCase().trim();
+    return s == 'FAILED' || s == 'INVALID' || s == 'BLOCKED' || s == 'FALSE';
+  }
+
+  bool get isExceedsBudget {
+    if (!isAvailable) return false;
+    return value!.toUpperCase().trim() == 'EXCEEDS_BUDGET_THRESHOLD';
+  }
+
+  String get displayLabel {
+    if (!isAvailable) return 'Not available';
+    if (isPassed) return 'PASSED';
+    if (isFailed) return 'FAILED';
+    if (isExceedsBudget) return 'EXCEEDS THRESHOLD';
+    return value!.toUpperCase().trim();
+  }
 }

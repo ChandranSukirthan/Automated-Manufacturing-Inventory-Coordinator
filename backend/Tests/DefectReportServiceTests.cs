@@ -48,7 +48,7 @@ public class DefectReportServiceTests
             ProductType = ProductType.BoxPouch,
             Severity = DefectSeverity.MEDIUM,
             Description = "Second report",
-            AffectedInventory = ["ROLL13"],
+            AffectedInventory = [],
             Status = DefectStatus.Open
         };
 

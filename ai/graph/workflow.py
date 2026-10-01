@@ -13,6 +13,7 @@ Human approval outcomes:
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -57,6 +58,27 @@ def sync_to_database(state: AgentState) -> None:
         else None
     )
 
+    # Extract QA validation metadata if present
+    validation_results_json = None
+    val_res = state.get("validation_results")
+    if isinstance(val_res, dict) and val_res:
+        validation_results_json = json.dumps({
+            "isValid": bool(val_res.get("isValid", True)),
+            "qualitySafetyStatus": val_res.get("qualitySafetyStatus", "CLEAR"),
+            "supplierValidation": val_res.get("supplierValidation", "PASSED"),
+            "budgetCheck": val_res.get("budgetCheck", "PASSED"),
+            "poMathematicalCheck": val_res.get("poMathematicalCheck", "PASSED"),
+            "materialValidation": val_res.get("materialValidation", "PASSED"),
+            "quarantinedRollsCount": int(val_res.get("quarantinedRollsCount", 0) or 0),
+            "isHighImpact": bool(val_res.get("isHighImpact", False)),
+            "impactReason": val_res.get("impactReason") or "",
+            "rejectionReason": val_res.get("rejectionReason") or "",
+            "manualResolutionStatus": val_res.get("manualResolutionStatus") or "NOT_REQUIRED",
+            "manualResolutionNote": val_res.get("manualResolutionNote") or "",
+            "resolvedBy": val_res.get("resolvedBy") or "",
+            "resolvedAt": val_res.get("resolvedAt") or None,
+        })
+
     try:
         with psycopg.connect(
             host=settings.DB_HOST,
@@ -71,15 +93,16 @@ def sync_to_database(state: AgentState) -> None:
                     """
                     INSERT INTO "AgentWorkflows"
                         ("Id", "WorkflowId", "Objective", "CurrentAgent", "Status",
-                         "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome", "ValidationResults")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT ("WorkflowId") DO UPDATE
-                    SET "Objective"       = EXCLUDED."Objective",
-                        "CurrentAgent"    = EXCLUDED."CurrentAgent",
-                        "Status"          = EXCLUDED."Status",
-                        "ApprovalStatus"  = EXCLUDED."ApprovalStatus",
-                        "CompletedAt"     = COALESCE(EXCLUDED."CompletedAt", "AgentWorkflows"."CompletedAt"),
-                        "FinalOutcome"    = EXCLUDED."FinalOutcome";
+                    SET "Objective"          = EXCLUDED."Objective",
+                        "CurrentAgent"       = EXCLUDED."CurrentAgent",
+                        "Status"             = EXCLUDED."Status",
+                        "ApprovalStatus"     = EXCLUDED."ApprovalStatus",
+                        "CompletedAt"        = COALESCE(EXCLUDED."CompletedAt", "AgentWorkflows"."CompletedAt"),
+                        "FinalOutcome"       = EXCLUDED."FinalOutcome",
+                        "ValidationResults"  = COALESCE(EXCLUDED."ValidationResults", "AgentWorkflows"."ValidationResults");
                     """,
                     (
                         str(uuid.uuid4()),
@@ -91,6 +114,7 @@ def sync_to_database(state: AgentState) -> None:
                         datetime.now(timezone.utc),
                         completed_at,
                         state.get("final_outcome"),
+                        validation_results_json,
                     ),
                 )
             conn.commit()
@@ -244,6 +268,8 @@ def run_workflow(
     required_by_date: Optional[str] = None,
     specification: Optional[str] = None,
     procurement_request_id: Optional[int] = None,
+    quality_data: Optional[Dict[str, Any]] = None,
+    purchasing_data: Optional[Dict[str, Any]] = None,
 ) -> AgentState:
     """
     Starts and executes the workflow up to completion or the human approval gate.
@@ -289,6 +315,8 @@ def run_workflow(
         # Outputs (initialised)
         "inventory_data": initial_inv,
         "production_data": {},
+        "purchasing_data": purchasing_data or {},
+        "quality_data": quality_data or {},
         "supplier_rates": [],
         "historical_procurement": [],
         "supplier_candidates": [],
@@ -307,8 +335,6 @@ def run_workflow(
         "requires_approval": False,
         "manager_decision": None,
         "revision_request": None,
-        "purchasing_data": {},
-        "quality_data": {},
         "errors": [],
         "final_outcome": None,
         "created_at": now_iso,
