@@ -2,7 +2,6 @@ import 'dart:ui' as dart_ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_web/web_only.dart' as web;
 
 import '../app_state.dart';
 import '../models/auth_models.dart';
