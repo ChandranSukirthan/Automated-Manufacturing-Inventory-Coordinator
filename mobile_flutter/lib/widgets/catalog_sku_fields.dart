@@ -138,6 +138,78 @@ class CatalogSkuFields extends StatelessWidget {
   );
 }
 
+/// Selects a real inventory SKU instead of rebuilding one from its parts.
+///
+/// Use this when the action must be tied to stock that already exists (for
+/// example, defect reporting and roll registration).  A SKU that is being
+/// edited remains visible even if its stock has since reached zero.
+class AvailableSkuDropdown extends StatelessWidget {
+  const AvailableSkuDropdown({
+    super.key,
+    required this.inventoryItems,
+    required this.value,
+    required this.onChanged,
+    this.label = 'Material SKU',
+    this.enabled = true,
+    this.requireAvailableStock = true,
+  });
+
+  final List<InventoryItemModel> inventoryItems;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  final String label;
+  final bool enabled;
+  final bool requireAvailableStock;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedSku = value?.trim();
+    final items = inventoryItems
+        .where(
+          (item) =>
+              !requireAvailableStock ||
+              item.stockLevel > 0 ||
+              item.sku.toUpperCase() == selectedSku?.toUpperCase(),
+        )
+        .toList()
+      ..sort((left, right) => left.sku.compareTo(right.sku));
+    final selectedItem = items
+        .where((item) => item.sku.toUpperCase() == selectedSku?.toUpperCase())
+        .firstOrNull;
+
+    return DropdownButtonFormField<String>(
+      initialValue: selectedItem?.sku,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: requireAvailableStock
+            ? 'Only SKUs with stock are shown.'
+            : null,
+      ),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item.sku,
+              child: Text(
+                '${item.sku} — ${item.name} (${item.stockLevel} available)',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: enabled && items.isNotEmpty ? onChanged : null,
+      validator: (selected) {
+        if (selected == null || selected.trim().isEmpty) {
+          return items.isEmpty
+              ? 'No SKUs with available stock were found.'
+              : 'Select an available SKU.';
+        }
+        return null;
+      },
+    );
+  }
+}
+
 List<RawMaterialModel> materialOptionsFor(
   int? packagingTypeId,
   List<RawMaterialModel> materials,

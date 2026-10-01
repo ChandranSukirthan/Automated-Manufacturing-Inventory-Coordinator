@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using backend.Data;
+using backend.Dtos;
 using backend.Models;
 using backend.Services;
 using Xunit;
@@ -119,6 +120,14 @@ namespace backend.Tests
                 SkuCode = "RM-ALUM-QR",
                 ReorderThreshold = 100m
             });
+            context.InventoryItems.Add(new InventoryItem
+            {
+                Sku = mat.SkuCode,
+                Name = mat.Name,
+                StockLevel = 500,
+                ReorderThreshold = 100,
+            });
+            await context.SaveChangesAsync();
 
             // CREATE ROLL
             var roll = await service.CreateInventoryRollAsync(new InventoryRoll
@@ -137,7 +146,8 @@ namespace backend.Tests
             Assert.NotNull(qrResult);
             Assert.Equal("QR-ROLL-TEST-001", qrResult.RollIdentifier);
             Assert.Equal("RM-ALUM-QR", qrResult.SkuCode);
-            Assert.Equal(450m, qrResult.RemainingQuantity);
+            Assert.Equal(500m, qrResult.RemainingQuantity);
+            Assert.Equal(1000m, qrResult.CurrentSkuStock);
 
             // UPDATE ROLL
             roll.CurrentQuantity = 200m;
@@ -146,6 +156,131 @@ namespace backend.Tests
 
             var verifyQr = await service.GetInventoryRollByQrAsync("QR-ROLL-TEST-001");
             Assert.Equal(200m, verifyQr?.RemainingQuantity);
+        }
+
+        [Fact]
+        public async Task InventoryRoll_GeneratesItsOwnQrReference_And_IncreasesSkuStock()
+        {
+            var context = CreateInMemoryContext();
+            var service = CreateService(context);
+            var material = await service.CreateRawMaterialAsync(new RawMaterial
+            {
+                Name = "Test film",
+                SkuCode = "RM-ROLL-AUTO",
+            });
+            context.InventoryItems.Add(new InventoryItem
+            {
+                Sku = material.SkuCode,
+                Name = material.Name,
+                StockLevel = 100,
+            });
+            await context.SaveChangesAsync();
+
+            var roll = await service.CreateInventoryRollAsync(new InventoryRoll
+            {
+                RawMaterialId = material.Id,
+                InitialQuantity = 75m,
+            });
+
+            Assert.StartsWith("ROLL-", roll.RollIdentifier);
+            Assert.Equal(75m, roll.CurrentQuantity);
+            Assert.Equal("In Stock", roll.Status);
+            Assert.Equal(175, (await context.InventoryItems.SingleAsync()).StockLevel);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.CreateInventoryRollAsync(new InventoryRoll
+                {
+                    RawMaterialId = material.Id,
+                    InitialQuantity = 0m,
+                }));
+            await service.CreateInventoryRollAsync(new InventoryRoll
+            {
+                RawMaterialId = material.Id,
+                InitialQuantity = 26m,
+            });
+            Assert.Equal(201, (await context.InventoryItems.SingleAsync()).StockLevel);
+        }
+
+        [Fact]
+        public async Task RegisteringRoll_AddsItsQuantityToTheStockLevelShownForItsSku()
+        {
+            var context = CreateInMemoryContext();
+            var service = CreateService(context);
+            var material = await service.CreateRawMaterialAsync(new RawMaterial
+            {
+                Name = "Tinplate sheet",
+                SkuCode = "CAN-TIN-001",
+                ReorderThreshold = 140m,
+            });
+            context.InventoryItems.Add(new InventoryItem
+            {
+                Sku = material.SkuCode,
+                Name = material.Name,
+                RawMaterialId = material.Id,
+                StockLevel = 260,
+                ReorderThreshold = 140,
+            });
+            await context.SaveChangesAsync();
+
+            await service.CreateInventoryRollAsync(new InventoryRoll
+            {
+                RawMaterialId = material.Id,
+                RollIdentifier = "ROLL-CAN-TIN-001-01",
+                InitialQuantity = 2m,
+            });
+
+            var item = await context.InventoryItems.SingleAsync();
+            var stockLevel = (await service.GetStockLevelsAsync()).Single();
+            Assert.Equal(262, item.StockLevel);
+            Assert.Equal(262m, stockLevel.CurrentStock);
+            Assert.Equal("CAN-TIN-001", stockLevel.SkuCode);
+
+            var scanned = await service.GetInventoryRollByQrAsync(
+                "ROLL-CAN-TIN-001-01");
+            Assert.Equal(262m, scanned?.CurrentSkuStock);
+        }
+
+        [Fact]
+        public async Task LowStockAlert_ResolvesTheSkuFromTheSelectedMaterial()
+        {
+            var context = CreateInMemoryContext();
+            var service = CreateService(context);
+            var packaging = new PackagingType
+            {
+                Name = "Can",
+                ShortCode = "CAN",
+                IsActive = true,
+            };
+            context.PackagingTypes.Add(packaging);
+            await context.SaveChangesAsync();
+
+            var material = await service.CreateRawMaterialAsync(new RawMaterial
+            {
+                Name = "Tinplate sheet",
+                SkuCode = "CAN-TIN-001",
+                MaterialCode = "TIN",
+                PackagingTypeId = packaging.Id,
+            });
+            context.InventoryItems.Add(new InventoryItem
+            {
+                Sku = material.SkuCode,
+                Name = material.Name,
+                RawMaterialId = material.Id,
+                PackagingTypeId = packaging.Id,
+                StockLevel = 260,
+            });
+            await context.SaveChangesAsync();
+
+            var alert = await service.CreateStockAlertAsync(new CreateStockAlertDto
+            {
+                PackagingTypeId = packaging.Id,
+                RawMaterialId = material.Id,
+                QuantityRequested = 25,
+                WorkerId = "EMP0000",
+            });
+
+            Assert.Equal("CAN-TIN-001", alert.Sku);
+            Assert.Equal("Can", alert.PackagingType);
         }
 
         [Fact]
@@ -161,8 +296,17 @@ namespace backend.Tests
                 Category = "Plastic",
                 ReorderThreshold = 500m
             });
+            context.InventoryItems.Add(new InventoryItem
+            {
+                Sku = mat.SkuCode,
+                Name = mat.Name,
+                StockLevel = 100,
+                ReorderThreshold = 500,
+            });
+            await context.SaveChangesAsync();
 
-            // Add roll with only 100 remaining (threshold is 500)
+            // Receipt increases the live SKU balance to 200; it remains
+            // critically below its 500-unit threshold.
             await service.CreateInventoryRollAsync(new InventoryRoll
             {
                 RawMaterialId = mat.Id,

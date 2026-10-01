@@ -51,7 +51,7 @@ public class InventoryBusinessLogicTests
     }
 
     [Fact]
-    public async Task LowStockDetection_FlagsInventoryRollBelowMaterialThreshold()
+        public async Task LowStockDetection_UsesTheLiveInventorySkuBalance()
     {
         await using var context = CreateContext();
         var service = CreateService(context);
@@ -63,6 +63,14 @@ public class InventoryBusinessLogicTests
             UnitOfMeasure = "KG",
             ReorderThreshold = 100m,
         });
+        context.InventoryItems.Add(new InventoryItem
+        {
+            Sku = material.SkuCode,
+            Name = material.Name,
+            StockLevel = 40,
+            ReorderThreshold = 100,
+        });
+        await context.SaveChangesAsync();
 
         await service.CreateInventoryRollAsync(new InventoryRoll
         {
@@ -76,7 +84,7 @@ public class InventoryBusinessLogicTests
         var result = await service.DetectLowStockAsync(material.Id);
 
         Assert.True(result.LowStock);
-        Assert.Equal("CRITICAL", result.Severity);
-        Assert.Equal(40m, result.CurrentStock);
+        Assert.Equal("LOW", result.Severity);
+        Assert.Equal(80m, result.CurrentStock);
     }
 }

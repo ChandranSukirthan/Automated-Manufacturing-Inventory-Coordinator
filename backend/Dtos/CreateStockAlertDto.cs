@@ -4,10 +4,11 @@ namespace backend.Dtos
 {
     public class CreateStockAlertDto
     {
-        [Required]
+        // A floor worker selects a packaging type and raw material. The
+        // server resolves the specific inventory SKU, so callers never need
+        // to type or know an internal SKU value.
         public string Sku { get; set; } = string.Empty;
 
-        [Required]
         public string PackagingType { get; set; } = string.Empty;
 
         // Optional structured catalogue selection. Existing clients can still

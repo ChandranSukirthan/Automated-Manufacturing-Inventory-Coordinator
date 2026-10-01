@@ -36,7 +36,6 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   static const _input = Color(0xFF262626);
   final _controller = InventoryController();
   final _inventory = InventoryApiService();
-  late final TextEditingController _skuController;
   late final TextEditingController _quantityController;
 
   bool _loading = true;
@@ -52,14 +51,12 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _skuController = TextEditingController(text: _controller.sku);
     _quantityController = TextEditingController();
     _refresh();
   }
 
   @override
   void dispose() {
-    _skuController.dispose();
     _quantityController.dispose();
     _controller.dispose();
     super.dispose();
@@ -132,7 +129,6 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
         setState(() {
           _packagingTypeId = packaging?.id;
           _rawMaterialId = material?.id;
-          _skuController.text = int.tryParse(parts[2])?.toString() ?? '';
         });
       }
       await _refresh();
@@ -169,34 +165,46 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
   Future<void> _submitLowStockAlert() async {
     final packaging = packagingById(_packagingTypes, _packagingTypeId);
     final material = materialById(_rawMaterials, _rawMaterialId);
-    final skuNumber = int.tryParse(_skuController.text.trim());
-    if (packaging == null ||
-        material == null ||
-        skuNumber == null ||
-        skuNumber < 1) {
+    final requestedQuantity = int.tryParse(_quantityController.text.trim()) ?? 0;
+    if (packaging == null || material == null) {
       _showMessage(
-        'Select a packaging type and raw material, then enter a valid SKU number.',
+        'Select a packaging type and raw material.',
         isError: true,
       );
       return;
     }
-    _controller
-      ..setPackagingType(packaging.name)
-      ..setSku(buildSku(packaging, material, _skuController.text))
-      ..clearMessages();
+    if (requestedQuantity <= 0) {
+      _showMessage('Enter a requested quantity greater than zero.', isError: true);
+      return;
+    }
 
     setState(() => _submitting = true);
-    final saved = await _controller.submitLowStockAlert();
-    if (!mounted) return;
-
-    if (!saved) {
+    try {
+      // The API resolves the selected material to its traceable SKU. A floor
+      // worker reports the material that needs replenishing, not an internal
+      // SKU number that they have to type.
+      await _inventory.createAlert(
+        packagingType: packaging.name,
+        quantityRequested: requestedQuantity,
+        packagingTypeId: packaging.id,
+        rawMaterialId: material.id,
+      );
+    } on ApiException catch (exception) {
+      if (!mounted) return;
       setState(() => _submitting = false);
       _showMessage(
-        _controller.errorMessage ?? 'The low-stock alert could not be saved.',
+        exception.message,
         isError: true,
       );
       return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showMessage('The low-stock alert could not be saved.', isError: true);
+      return;
     }
+
+    if (!mounted) return;
 
     // A submitted alert is complete. Leave the worker with a blank form so a
     // later alert cannot accidentally reuse the previous SKU or quantity.
@@ -204,7 +212,6 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
       ..setPackagingType(null)
       ..setSku('')
       ..setQuantityRequested(0);
-    _skuController.clear();
     setState(() {
       _packagingTypeId = _packagingTypes.firstOrNull?.id;
       _rawMaterialId = materialOptionsFor(
@@ -592,27 +599,53 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          CatalogSkuFields(
-            packagingTypes: _packagingTypes,
-            rawMaterials: _rawMaterials,
-            packagingTypeId: _packagingTypeId,
-            rawMaterialId: _rawMaterialId,
-            skuNumberController: _skuController,
-            dark: true,
-            enabled: !_submitting && !_loading,
-            onPackagingTypeChanged: (value) => setState(() {
-              _packagingTypeId = value;
-              _rawMaterialId = materialOptionsFor(
-                value,
-                _rawMaterials,
-              ).firstOrNull?.id;
-              _skuController.clear();
-            }),
-            onRawMaterialChanged: (value) => setState(() {
-              _rawMaterialId = value;
-              _skuController.clear();
-            }),
-            onSkuNumberChanged: (_) => setState(() {}),
+          DropdownButtonFormField<int>(
+            value: _packagingTypes.any((type) => type.id == _packagingTypeId)
+                ? _packagingTypeId
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Packaging Type'),
+            dropdownColor: _input,
+            style: const TextStyle(color: Colors.white),
+            items: _packagingTypes
+                .map(
+                  (type) => DropdownMenuItem<int>(
+                    value: type.id,
+                    child: Text(type.name),
+                  ),
+                )
+                .toList(),
+            onChanged: _submitting || _loading
+                ? null
+                : (value) => setState(() {
+                    _packagingTypeId = value;
+                    _rawMaterialId = materialOptionsFor(
+                      value,
+                      _rawMaterials,
+                    ).firstOrNull?.id;
+                  }),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<int>(
+            value: materialOptionsFor(_packagingTypeId, _rawMaterials)
+                    .any((material) => material.id == _rawMaterialId)
+                ? _rawMaterialId
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Raw Material'),
+            dropdownColor: _input,
+            style: const TextStyle(color: Colors.white),
+            items: materialOptionsFor(_packagingTypeId, _rawMaterials)
+                .map(
+                  (material) => DropdownMenuItem<int>(
+                    value: material.id,
+                    child: Text('${material.name} (${material.materialCode})'),
+                  ),
+                )
+                .toList(),
+            onChanged: _submitting || _loading || _packagingTypeId == null
+                ? null
+                : (value) => setState(() => _rawMaterialId = value),
           ),
           const SizedBox(height: 16),
           const Text(

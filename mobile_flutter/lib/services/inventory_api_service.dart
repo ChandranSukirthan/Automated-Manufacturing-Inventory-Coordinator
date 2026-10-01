@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'api_client.dart';
 import 'session_storage.dart';
 
@@ -222,17 +224,18 @@ class InventoryApiService {
   }
 
   Future<void> createAlert({
-    required String sku,
-    required String packagingType,
+    String? sku,
+    String? packagingType,
     required int quantityRequested,
     int? packagingTypeId,
     int? rawMaterialId,
     int? skuNumber,
   }) async {
     await _api.post('/inventory/alerts', {
-      'sku': sku,
-      'packagingType': packagingType,
       'quantityRequested': quantityRequested,
+      if (sku != null && sku.trim().isNotEmpty) 'sku': sku,
+      if (packagingType != null && packagingType.trim().isNotEmpty)
+        'packagingType': packagingType,
       'packagingTypeId': ?packagingTypeId,
       'rawMaterialId': ?rawMaterialId,
       'skuNumber': ?skuNumber,
@@ -271,18 +274,22 @@ class InventoryApiService {
 
   Future<void> deleteItem(int id) => _api.delete('/inventory/$id');
 
-  Future<void> createRoll({
+  Future<InventoryRollModel> createRoll({
     required String rollIdentifier,
     required double quantity,
     required int rawMaterialId,
   }) async {
-    await _api.post('/inventory/rolls', {
+    final created = await _api.post('/inventory/rolls', {
       'rollIdentifier': rollIdentifier,
       'initialQuantity': quantity,
-      'currentQuantity': quantity,
       'rawMaterialId': rawMaterialId,
-    });
+    }) as Map<String, dynamic>;
+    return InventoryRollModel.fromJson(created);
   }
+
+  Future<Uint8List> fetchRollQr(String rollIdentifier) => _api.getBytes(
+    '/inventory/rolls/${Uri.encodeComponent(rollIdentifier)}/qr',
+  );
 
   Future<Map<String, dynamic>> lookupRoll(String qrCode) async =>
       await _api.get('/inventory/roll/qr/${Uri.encodeComponent(qrCode)}')

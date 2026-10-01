@@ -38,6 +38,8 @@ namespace backend.Dtos
         public string MaterialName { get; set; } = string.Empty;
         public decimal InitialQuantity { get; set; }
         public decimal RemainingQuantity { get; set; }
+        // Live SKU balance, after all received rolls and stock adjustments.
+        public decimal CurrentSkuStock { get; set; }
         public string Status { get; set; } = "In Stock";
         public DateTime ReceivedDate { get; set; } = DateTime.UtcNow;
     }

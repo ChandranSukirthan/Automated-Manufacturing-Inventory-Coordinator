@@ -332,8 +332,7 @@ namespace backend.Services
             PackagingType? packagingType;
 
             if (alertDto.PackagingTypeId.HasValue &&
-                alertDto.RawMaterialId.HasValue &&
-                alertDto.SkuNumber.HasValue)
+                alertDto.RawMaterialId.HasValue)
             {
                 packagingType = await _context.PackagingTypes
                     .FirstOrDefaultAsync(type => type.Id == alertDto.PackagingTypeId.Value && type.IsActive);
@@ -345,14 +344,24 @@ namespace backend.Services
                     throw new InvalidOperationException("The selected packaging type and raw material do not match.");
                 }
 
-                var generatedSku = BuildSku(packagingType.ShortCode, material.MaterialCode, alertDto.SkuNumber.Value);
-                material = await _context.RawMaterials
-                    .FirstOrDefaultAsync(rawMaterial => rawMaterial.SkuCode == generatedSku);
-                if (material == null || !await _context.InventoryItems.AnyAsync(item => item.Sku == generatedSku))
+                // Older API consumers may still send an SKU sequence number.
+                // The floor-worker form does not: its catalogue selection is
+                // sufficient to find the traceable inventory SKU.
+                var requestedSku = alertDto.SkuNumber.HasValue
+                    ? BuildSku(packagingType.ShortCode, material.MaterialCode, alertDto.SkuNumber.Value)
+                    : material.SkuCode;
+                var inventoryItem = alertDto.SkuNumber.HasValue
+                    ? await _context.InventoryItems
+                        .FirstOrDefaultAsync(item => item.Sku == requestedSku)
+                    : await _context.InventoryItems
+                        .FirstOrDefaultAsync(item =>
+                            item.Sku == requestedSku || item.RawMaterialId == material.Id);
+                if (inventoryItem == null)
                 {
-                    throw new InvalidOperationException($"SKU {generatedSku} is not an inventory item. Add it to stock before reporting low stock.");
+                    throw new InvalidOperationException(
+                        "The selected raw material is not an inventory item. Add it to stock before reporting low stock.");
                 }
-                return (generatedSku, packagingType.Name);
+                return (inventoryItem.Sku, packagingType.Name);
             }
 
             material = await _context.RawMaterials
@@ -403,6 +412,12 @@ namespace backend.Services
 
             if (roll == null) return null;
 
+            var currentSkuStock = await _context.InventoryItems
+                .AsNoTracking()
+                .Where(item => item.Sku == roll.RawMaterial!.SkuCode)
+                .Select(item => (decimal?)item.StockLevel)
+                .FirstOrDefaultAsync() ?? 0m;
+
             return new QrLookupResultDto
             {
                 RollId = roll.Id,
@@ -413,6 +428,7 @@ namespace backend.Services
                 MaterialName = roll.RawMaterial?.Name ?? "Raw Material",
                 InitialQuantity = roll.InitialQuantity,
                 RemainingQuantity = roll.CurrentQuantity,
+                CurrentSkuStock = currentSkuStock,
                 Status = roll.Status,
                 ReceivedDate = roll.ReceivedDate
             };
@@ -424,6 +440,10 @@ namespace backend.Services
             {
                 throw new InvalidOperationException("Roll quantity must be greater than zero.");
             }
+            if (roll.InitialQuantity != decimal.Truncate(roll.InitialQuantity))
+            {
+                throw new InvalidOperationException("Roll quantity must be a whole number.");
+            }
 
             var rawMaterial = await _context.RawMaterials.FindAsync(roll.RawMaterialId);
             if (rawMaterial == null)
@@ -433,22 +453,28 @@ namespace backend.Services
 
             var inventoryItem = await _context.InventoryItems
                 .FirstOrDefaultAsync(item => item.Sku == rawMaterial.SkuCode);
-            if (inventoryItem != null)
+            if (inventoryItem == null)
             {
-                var allocatedQuantity = await _context.InventoryRolls
-                    .Where(existingRoll => existingRoll.RawMaterialId == roll.RawMaterialId)
-                    .SumAsync(existingRoll => (decimal?)existingRoll.CurrentQuantity) ?? 0m;
-                var remainingStock = inventoryItem.StockLevel - allocatedQuantity;
-                if (roll.InitialQuantity > remainingStock)
-                {
-                    throw new InvalidOperationException(
-                        $"Roll quantity ({roll.InitialQuantity}) exceeds remaining stock ({Math.Max(remainingStock, 0)} of {inventoryItem.StockLevel}) for {rawMaterial.SkuCode}.");
-                }
+                throw new InvalidOperationException(
+                    "The selected SKU is not an inventory item. Add stock before registering a roll.");
             }
 
             if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
             {
-                roll.RollIdentifier = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
+                // The mobile app normally builds ROLL-{SKU}-{roll number}.
+                // Keep a safe fallback for older API consumers that omit the
+                // identifier while still making the QR code roll-specific.
+                roll.RollIdentifier = $"ROLL-{Guid.NewGuid():N}";
+            }
+            else if (await _context.InventoryRolls.AnyAsync(existingRoll =>
+                existingRoll.RollIdentifier.ToUpper() == roll.RollIdentifier.Trim().ToUpper()))
+            {
+                throw new InvalidOperationException(
+                    "That roll identifier is already registered for this SKU.");
+            }
+            else
+            {
+                roll.RollIdentifier = roll.RollIdentifier.Trim().ToUpperInvariant();
             }
             // Store only this application's QR endpoint. The mobile app never
             // receives a third-party provider URL or calls a missing helper.
@@ -456,9 +482,15 @@ namespace backend.Services
             roll.CreatedAt = DateTime.UtcNow;
             roll.UpdatedAt = DateTime.UtcNow;
             if (roll.ReceivedDate == default) roll.ReceivedDate = DateTime.UtcNow;
-            if (roll.CurrentQuantity == 0 && roll.InitialQuantity > 0) roll.CurrentQuantity = roll.InitialQuantity;
-            if (string.IsNullOrWhiteSpace(roll.Status)) roll.Status = "In Stock";
+            roll.CurrentQuantity = roll.InitialQuantity;
+            roll.Status = "In Stock";
 
+            // Registering a physical roll is a goods-received event. The roll
+            // gives the incoming stock its QR traceability and its quantity is
+            // added to the same SKU balance shown by Stock Levels.
+            inventoryItem.StockLevel = checked(
+                inventoryItem.StockLevel + decimal.ToInt32(roll.InitialQuantity));
+            rawMaterial.UpdatedAt = DateTime.UtcNow;
             _context.InventoryRolls.Add(roll);
             await _context.SaveChangesAsync();
             return roll;
@@ -508,13 +540,28 @@ namespace backend.Services
             var materials = await _context.RawMaterials
                 .Include(r => r.InventoryRolls)
                 .ToListAsync();
+            var materialsById = materials.ToDictionary(material => material.Id);
+            var inventoryItems = await _context.InventoryItems
+                .AsNoTracking()
+                .OrderBy(item => item.Sku)
+                .ToListAsync();
 
             var list = new List<StockLevelDetailDto>();
 
-            foreach (var m in materials)
+            // Stock Levels is intentionally inventory-item driven. It shows
+            // every registered SKU, including stock with no roll yet, and the
+            // value is the live balance updated when a roll is received.
+            foreach (var item in inventoryItems)
             {
-                var (currentStock, burnRate) = GetLiveInventoryMetrics(m);
-                var minStock = m.ReorderThreshold;
+                materialsById.TryGetValue(item.RawMaterialId ?? 0, out var material);
+                material ??= materials.FirstOrDefault(candidate =>
+                    candidate.SkuCode.Equals(item.Sku, StringComparison.OrdinalIgnoreCase));
+
+                var currentStock = (decimal)item.StockLevel;
+                var burnRate = material == null ? 0m : GetBurnRate(material);
+                var minStock = item.ReorderThreshold > 0
+                    ? item.ReorderThreshold
+                    : material?.ReorderThreshold ?? 0m;
                 var maxStock = minStock * 5m;
                 var daysRemaining = CalculateDaysRemaining(currentStock, burnRate);
 
@@ -523,31 +570,28 @@ namespace backend.Services
 
                 list.Add(new StockLevelDetailDto
                 {
-                    Id = m.Id,
-                    RawMaterialId = m.Id,
-                    SkuCode = m.SkuCode,
-                    MaterialName = m.Name,
+                    Id = item.Id,
+                    RawMaterialId = material?.Id ?? item.RawMaterialId ?? 0,
+                    SkuCode = item.Sku,
+                    MaterialName = string.IsNullOrWhiteSpace(item.Name)
+                        ? material?.Name ?? item.Sku
+                        : item.Name,
                     CurrentStock = currentStock,
                     MinimumStock = minStock,
                     MaximumStock = maxStock,
                     BurnRate = burnRate,
                     DaysRemaining = daysRemaining,
                     Status = status,
-                    UpdatedAt = m.UpdatedAt
+                    UpdatedAt = material?.UpdatedAt ?? DateTime.UtcNow
                 });
             }
 
             return list;
         }
 
-        private (decimal CurrentStock, decimal BurnRate) GetLiveInventoryMetrics(RawMaterial material)
+        private decimal GetBurnRate(RawMaterial material)
         {
             var rolls = material.InventoryRolls.ToList();
-            var currentStock = rolls
-                .Where(roll =>
-                    !roll.Status.Equals("Depleted", StringComparison.OrdinalIgnoreCase) &&
-                    !roll.Status.Equals("Quarantined", StringComparison.OrdinalIgnoreCase))
-                .Sum(roll => roll.CurrentQuantity);
             var historicalConsumption = rolls
                 .Where(roll => roll.InitialQuantity > roll.CurrentQuantity)
                 .Sum(roll => roll.InitialQuantity - roll.CurrentQuantity);
@@ -559,7 +603,7 @@ namespace backend.Services
                 1,
                 (int)Math.Ceiling((DateTime.UtcNow - firstRecordedAt).TotalDays));
 
-            return (currentStock, CalculateBurnRate(historicalConsumption, recordedDays));
+            return CalculateBurnRate(historicalConsumption, recordedDays);
         }
 
         public async Task<StockLevel> CreateStockLevelAsync(StockLevel stockLevel)
@@ -581,8 +625,15 @@ namespace backend.Services
                 return new LowStockItemDto { MaterialId = rawMaterialId, LowStock = false, Reason = "Material not found" };
             }
 
-            var (currentStock, burnRate) = GetLiveInventoryMetrics(material);
-            var minStock = material.ReorderThreshold;
+            var inventoryItem = await _context.InventoryItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item =>
+                    item.RawMaterialId == material.Id || item.Sku == material.SkuCode);
+            var currentStock = (decimal)(inventoryItem?.StockLevel ?? 0);
+            var burnRate = GetBurnRate(material);
+            var minStock = inventoryItem?.ReorderThreshold > 0
+                ? inventoryItem.ReorderThreshold
+                : material.ReorderThreshold;
             var daysRemaining = CalculateDaysRemaining(currentStock, burnRate);
 
             var isLow = currentStock <= minStock || daysRemaining <= 5m;

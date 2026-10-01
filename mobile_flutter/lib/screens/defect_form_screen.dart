@@ -24,29 +24,16 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _inventory = InventoryApiService();
   final _description = TextEditingController();
-  final _skuNumber = TextEditingController();
 
-  List<PackagingTypeModel> _packagingTypes = const [];
-  List<RawMaterialModel> _materials = const [];
-  int? _packagingTypeId;
-  int? _rawMaterialId;
+  List<InventoryItemModel> _inventoryItems = const [];
+  String? _selectedSku;
   bool _loading = true;
   bool _saving = false;
   String? _error;
 
   bool get _isEditing => widget.defect != null;
 
-  PackagingTypeModel? get _packaging =>
-      packagingById(_packagingTypes, _packagingTypeId);
-
-  RawMaterialModel? get _rawMaterial => materialById(
-    _materials,
-    _rawMaterialId,
-  );
-
-  String? get _sku => _packaging == null || _rawMaterial == null
-      ? null
-      : buildSku(_packaging!, _rawMaterial!, _skuNumber.text);
+  String? get _sku => _selectedSku?.trim();
 
   @override
   void initState() {
@@ -58,20 +45,15 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   @override
   void dispose() {
     _description.dispose();
-    _skuNumber.dispose();
     super.dispose();
   }
 
   Future<void> _loadCatalogue() async {
     try {
-      final results = await Future.wait([
-        _inventory.fetchPackagingTypes(),
-        _inventory.fetchRawMaterials(),
-      ]);
+      final inventoryItems = await _inventory.fetchInventory();
       if (!mounted) return;
       setState(() {
-        _packagingTypes = results[0] as List<PackagingTypeModel>;
-        _materials = results[1] as List<RawMaterialModel>;
+        _inventoryItems = inventoryItems;
         _restoreExistingSku();
         _loading = false;
       });
@@ -95,25 +77,17 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   void _restoreExistingSku() {
     final existingSku = widget.defect?.skuCode.trim() ?? '';
     if (existingSku.isEmpty) return;
-    final material = _materials
-        .where((item) => item.skuCode.toUpperCase() == existingSku.toUpperCase())
-        .firstOrNull;
-    if (material == null) return;
-
-    _packagingTypeId = material.packagingTypeId;
-    _rawMaterialId = materialOptionsFor(_packagingTypeId, _materials)
-        .where((item) => item.materialCode == material.materialCode)
-        .firstOrNull
-        ?.id;
-    _skuNumber.text = existingSku.split('-').last;
+    if (_inventoryItems.any(
+      (item) => item.sku.toUpperCase() == existingSku.toUpperCase(),
+    )) {
+      _selectedSku = existingSku;
+    }
   }
 
   void _clearForm() {
     _formKey.currentState?.reset();
     setState(() {
-      _packagingTypeId = null;
-      _rawMaterialId = null;
-      _skuNumber.clear();
+      _selectedSku = null;
       _description.clear();
       _error = null;
     });
@@ -123,11 +97,11 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     final sku = _sku;
     if (sku == null ||
-        !_materials.any(
-          (material) => material.skuCode.toUpperCase() == sku.toUpperCase(),
+        !_inventoryItems.any(
+          (item) => item.sku.toUpperCase() == sku.toUpperCase(),
         )) {
       setState(() {
-        _error = 'That SKU is not in the catalogue. Use one of the listed SKU numbers.';
+        _error = 'Select an SKU from the available-stock list.';
       });
       return;
     }
@@ -201,24 +175,13 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                   _ErrorMessage(message: _error!),
                   const SizedBox(height: 14),
                 ],
-                CatalogSkuFields(
-                  packagingTypes: _packagingTypes,
-                  rawMaterials: _materials,
-                  packagingTypeId: _packagingTypeId,
-                  rawMaterialId: _rawMaterialId,
-                  skuNumberController: _skuNumber,
-                  onPackagingTypeChanged: (value) => setState(() {
-                    _packagingTypeId = value;
-                    _rawMaterialId = materialOptionsFor(value, _materials)
-                        .firstOrNull
-                        ?.id;
-                    _skuNumber.clear();
+                AvailableSkuDropdown(
+                  inventoryItems: _inventoryItems,
+                  value: _selectedSku,
+                  onChanged: (value) => setState(() {
+                    _selectedSku = value;
+                    _error = null;
                   }),
-                  onRawMaterialChanged: (value) => setState(() {
-                    _rawMaterialId = value;
-                    _skuNumber.clear();
-                  }),
-                  onSkuNumberChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 18),
                 _SkuDisplay(value: _sku),
@@ -289,7 +252,7 @@ class _SkuDisplay extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          value ?? 'Choose packaging type and raw material',
+          value ?? 'Choose an available SKU',
           style: const TextStyle(
             color: AppColors.strongText,
             fontSize: 16,

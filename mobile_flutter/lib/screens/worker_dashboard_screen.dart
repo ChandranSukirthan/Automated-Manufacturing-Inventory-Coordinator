@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -171,6 +173,77 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       MaterialPageRoute(builder: (_) => ScannerView(controller: _controller)),
     );
     if (mounted) await _load();
+  }
+
+  Future<void> _showRollQr(InventoryRollModel roll) {
+    final material = _materials
+        .where((item) => item.id == roll.rawMaterialId)
+        .firstOrNull;
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Roll QR code'),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This QR code was generated automatically for this physical '
+                'roll. Scan it to load the roll and its remaining quantity.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FutureBuilder<Uint8List>(
+                future: _inventory.fetchRollQr(roll.rollIdentifier),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox.square(
+                      dimension: 220,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'The QR code could not be loaded. Check the server connection and try again.',
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  return Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(12),
+                    child: Image.memory(
+                      snapshot.data!,
+                      width: 220,
+                      height: 220,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'QR code for this inventory roll',
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${material?.skuCode ?? 'Selected SKU'} • '
+                '${roll.currentQuantity} units remaining',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _runDataExtraction() async {
@@ -357,11 +430,22 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           return Card(
             child: ListTile(
               leading: const Icon(Icons.qr_code_2),
-              title: Text(roll.rollIdentifier),
+                title: Text('${roll.currentQuantity} units'),
               subtitle: Text(
-                '${material?.skuCode ?? 'Unknown SKU'} • ${roll.currentQuantity} / ${roll.initialQuantity} units',
+                  '${material?.skuCode ?? 'Unknown SKU'} • '
+                  'original quantity: ${roll.initialQuantity} units',
               ),
-              trailing: Text(roll.status),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(roll.status),
+                    IconButton(
+                      tooltip: 'Show QR code',
+                      icon: const Icon(Icons.qr_code_2),
+                      onPressed: () => _showRollQr(roll),
+                    ),
+                  ],
+                ),
             ),
           );
         }),
@@ -660,7 +744,6 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   );
 
   Future<void> _showAlertForm() async {
-    final skuNumber = TextEditingController();
     final quantity = TextEditingController(text: '500');
     final formKey = GlobalKey<FormState>();
     int? packagingTypeId = _packagingTypes.firstOrNull?.id;
@@ -679,25 +762,59 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CatalogSkuFields(
-                    packagingTypes: _packagingTypes,
-                    rawMaterials: _materials,
-                    packagingTypeId: packagingTypeId,
-                    rawMaterialId: rawMaterialId,
-                    skuNumberController: skuNumber,
-                    onPackagingTypeChanged: (value) => setDialogState(() {
+                  DropdownButtonFormField<int>(
+                    value: _packagingTypes.any(
+                      (type) => type.id == packagingTypeId,
+                    )
+                        ? packagingTypeId
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Packaging Type',
+                    ),
+                    items: _packagingTypes
+                        .map(
+                          (type) => DropdownMenuItem<int>(
+                            value: type.id,
+                            child: Text(type.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) => setDialogState(() {
                       packagingTypeId = value;
                       rawMaterialId = materialOptionsFor(
                         value,
                         _materials,
                       ).firstOrNull?.id;
-                      skuNumber.clear();
                     }),
-                    onRawMaterialChanged: (value) => setDialogState(() {
-                      rawMaterialId = value;
-                      skuNumber.clear();
-                    }),
-                    onSkuNumberChanged: (_) => setDialogState(() {}),
+                    validator: (value) =>
+                        value == null ? 'Select a packaging type.' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: materialOptionsFor(packagingTypeId, _materials)
+                            .any((material) => material.id == rawMaterialId)
+                        ? rawMaterialId
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Raw Material'),
+                    items: materialOptionsFor(packagingTypeId, _materials)
+                        .map(
+                          (material) => DropdownMenuItem<int>(
+                            value: material.id,
+                            child: Text(
+                              '${material.name} (${material.materialCode})',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: packagingTypeId == null
+                        ? null
+                        : (value) => setDialogState(
+                            () => rawMaterialId = value,
+                          ),
+                    validator: (value) =>
+                        value == null ? 'Select a raw material.' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -726,8 +843,8 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 if (!formKey.currentState!.validate()) return;
                 final packaging = packagingById(_packagingTypes, packagingTypeId)!;
                 final material = materialById(_materials, rawMaterialId)!;
-                final fullSku = buildSku(packaging, material, skuNumber.text);
-                final normalizedSku = fullSku.toLowerCase();
+                final selectedSku = material.skuCode;
+                final normalizedSku = selectedSku.toLowerCase();
                 final duplicate = _alerts
                     .where(
                       (alert) =>
@@ -744,7 +861,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                     ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'An active alert (${duplicate.status}) already exists for $fullSku.',
+                          'An active alert (${duplicate.status}) already exists for $selectedSku.',
                         ),
                       ),
                     );
@@ -753,12 +870,10 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 }
                 try {
                   await _inventory.createAlert(
-                    sku: fullSku,
                     packagingType: packaging.name,
                     quantityRequested: int.parse(quantity.text),
                     packagingTypeId: packagingTypeId,
                     rawMaterialId: rawMaterialId,
-                    skuNumber: int.parse(skuNumber.text),
                   );
                   if (dialogContext.mounted) Navigator.pop(dialogContext, true);
                 } on ApiException catch (exception) {
@@ -781,7 +896,6 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
       // Delay disposal so Cancel cannot rebuild a field with a disposed
       // controller during that animation.
       await Future<void>.delayed(const Duration(milliseconds: 250));
-      skuNumber.dispose();
       quantity.dispose();
     }
   }

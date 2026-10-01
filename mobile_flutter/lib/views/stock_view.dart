@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -86,35 +88,44 @@ class _StockViewState extends State<StockView> {
   }
 
   Future<void> _showRegisterRollForm() async {
-    final identifier = TextEditingController();
+    final identifierNumber = TextEditingController();
     final quantity = TextEditingController();
-    final skuNumber = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    int? packagingTypeId = _packagingTypes.firstOrNull?.id;
-    int? rawMaterialId = materialOptionsFor(packagingTypeId, _rawMaterials)
+    int? packagingTypeId = _packagingTypes
+        .where((type) => _firstRollMaterialId(type.id) != null)
         .firstOrNull
         ?.id;
+    int? rawMaterialId = _firstRollMaterialId(packagingTypeId);
+    String? sku = _rollSkuOptionsFor(packagingTypeId, rawMaterialId)
+        .firstOrNull
+        ?.sku;
     String? submissionError;
 
     try {
-      final saved = await showDialog<bool>(
+      final createdRoll = await showDialog<InventoryRollModel>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) {
-            final packaging = packagingById(_packagingTypes, packagingTypeId);
-            final selectedTemplate = materialById(_rawMaterials, rawMaterialId);
-            final selected = packaging == null || selectedTemplate == null
+            final materialOptions = materialOptionsFor(
+              packagingTypeId,
+              _rawMaterials,
+            );
+            final skuOptions = _rollSkuOptionsFor(
+              packagingTypeId,
+              rawMaterialId,
+            );
+            final selectedItem = _inventoryItems
+                .where((item) => item.sku == sku)
+                .firstOrNull;
+            final selectedMaterial = selectedItem == null
                 ? null
-                : _rawMaterials
-                    .where(
-                      (material) =>
-                          material.skuCode ==
-                          buildSku(packaging, selectedTemplate, skuNumber.text),
-                    )
-                    .firstOrNull;
-            final remainingStock = selected == null
-                ? 0.0
-                : _remainingStockFor(selected);
+                : materialById(_rawMaterials, selectedItem.rawMaterialId);
+            final currentStock = selectedItem?.stockLevel ?? 0;
+            final enteredQuantity = int.tryParse(quantity.text.trim()) ?? 0;
+            final rollIdentifier = _buildRollIdentifier(
+              selectedItem?.sku,
+              identifierNumber.text,
+            );
             return AlertDialog(
               scrollable: true,
               insetPadding: const EdgeInsets.symmetric(
@@ -129,50 +140,161 @@ class _StockViewState extends State<StockView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _textField(identifier, 'Roll Identifier', required: true),
-                      CatalogSkuFields(
-                        packagingTypes: _packagingTypes,
-                        rawMaterials: _rawMaterials,
-                        packagingTypeId: packagingTypeId,
-                        rawMaterialId: rawMaterialId,
-                        skuNumberController: skuNumber,
-                        onPackagingTypeChanged: (value) => setDialogState(() {
+                      DropdownButtonFormField<int>(
+                        initialValue: packagingTypeId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Packaging Type',
+                        ),
+                        items: _packagingTypes
+                            .map(
+                              (packaging) => DropdownMenuItem<int>(
+                                value: packaging.id,
+                                child: Text(
+                                  packaging.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) => setDialogState(() {
                           packagingTypeId = value;
-                          rawMaterialId = materialOptionsFor(
-                            value,
-                            _rawMaterials,
-                          ).firstOrNull?.id;
-                          skuNumber.clear();
+                          rawMaterialId = _firstRollMaterialId(value);
+                          sku = _rollSkuOptionsFor(value, rawMaterialId)
+                              .firstOrNull
+                              ?.sku;
+                          identifierNumber.clear();
                           submissionError = null;
                         }),
-                        onRawMaterialChanged: (value) => setDialogState(() {
-                          rawMaterialId = value;
-                          skuNumber.clear();
+                        validator: (value) => value == null
+                            ? 'Select a packaging type.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: rawMaterialId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Raw Material',
+                        ),
+                        items: materialOptions
+                            .map(
+                              (material) => DropdownMenuItem<int>(
+                                value: material.id,
+                                child: Text(
+                                  '${material.name} (${material.materialCode})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: packagingTypeId == null
+                            ? null
+                            : (value) => setDialogState(() {
+                                rawMaterialId = value;
+                                sku = _rollSkuOptionsFor(
+                                  packagingTypeId,
+                                  value,
+                                ).firstOrNull?.sku;
+                                identifierNumber.clear();
+                                submissionError = null;
+                              }),
+                        validator: (value) => value == null
+                            ? 'Select a raw material.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: skuOptions.any((item) => item.sku == sku)
+                            ? sku
+                            : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'SKU Number'),
+                        items: skuOptions
+                            .map(
+                              (item) => DropdownMenuItem<String>(
+                                value: item.sku,
+                                child: Text(
+                                  '${_skuNumberLabel(item)} '
+                                  '(${item.stockLevel} units in stock)',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: skuOptions.isEmpty
+                            ? null
+                            : (value) => setDialogState(() {
+                                sku = value;
+                                identifierNumber.clear();
+                                submissionError = null;
+                              }),
+                        validator: (value) => value == null
+                            ? 'Select an SKU number in stock.'
+                            : null,
+                      ),
+                      if (selectedItem != null) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'SKU preview: ${selectedItem.sku}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: identifierNumber,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setDialogState(() {
                           submissionError = null;
                         }),
-                        onSkuNumberChanged: (_) => setDialogState(() {
-                          submissionError = null;
-                        }),
+                        decoration: InputDecoration(
+                          labelText: 'Roll Identifier',
+                          hintText: 'e.g. 01',
+                          prefixText: selectedItem == null
+                              ? null
+                              : 'ROLL-${selectedItem.sku}-',
+                        ),
+                        validator: (value) {
+                          final number = value?.trim() ?? '';
+                          final parsed = int.tryParse(number);
+                          if (!RegExp(r'^\d{1,6}$').hasMatch(number) ||
+                              parsed == null ||
+                              parsed <= 0) {
+                            return 'Enter a roll number greater than zero.';
+                          }
+                          if (_rolls.any(
+                            (roll) =>
+                                roll.rollIdentifier.toUpperCase() ==
+                                rollIdentifier.toUpperCase(),
+                          )) {
+                            return 'This roll number is already registered for this SKU.';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: TextFormField(
                           controller: quantity,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => setDialogState(() {
+                            submissionError = null;
+                          }),
                           decoration: const InputDecoration(
                             labelText: 'Roll Quantity',
                             hintText: 'Enter quantity',
                           ),
                           validator: (value) {
-                            final parsed = double.tryParse(value?.trim() ?? '');
+                            final parsed = int.tryParse(value?.trim() ?? '');
                             if (parsed == null || parsed <= 0) {
-                              return 'Enter a quantity greater than zero.';
-                            }
-                            if (parsed > remainingStock) {
-                              return 'Cannot exceed $remainingStock available units.';
+                              return 'Roll quantity must be greater than zero.';
                             }
                             return null;
                           },
@@ -181,9 +303,14 @@ class _StockViewState extends State<StockView> {
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          selected == null
-                              ? 'Enter an existing SKU number with available stock.'
-                              : 'Available: $remainingStock units',
+                          selectedMaterial == null
+                              ? 'Select an SKU in stock.'
+                              : enteredQuantity > 0
+                              ? 'Stock after registration: '
+                                  '${currentStock + enteredQuantity} units '
+                                  '(currently $currentStock)'
+                              : 'Current stock: $currentStock units. '
+                                  'Registering this roll adds to stock.',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.mutedText,
@@ -211,29 +338,27 @@ class _StockViewState extends State<StockView> {
                 ),
                 FilledButton(
                   onPressed: () async {
-                          if (!formKey.currentState!.validate()) return;
-                          if (selected == null || remainingStock <= 0) {
-                            setDialogState(() => submissionError =
-                                'This SKU is not available for roll registration.');
-                            return;
-                          }
-                          try {
-                            await _apiService.createRoll(
-                              rollIdentifier: identifier.text.trim(),
-                              quantity: double.parse(quantity.text),
-                              rawMaterialId: selected.id,
-                            );
-                            if (dialogContext.mounted) {
-                              Navigator.pop(dialogContext, true);
-                            }
-                          } on ApiException catch (exception) {
-                            if (dialogContext.mounted) {
-                              setDialogState(
-                                () => submissionError = exception.message,
-                              );
-                            }
-                          }
-                        },
+                    if (!formKey.currentState!.validate()) return;
+                    if (selectedMaterial == null) {
+                      setDialogState(() => submissionError =
+                          'Select an inventory SKU before registering a roll.');
+                      return;
+                    }
+                    try {
+                      final roll = await _apiService.createRoll(
+                        rollIdentifier: rollIdentifier,
+                        quantity: double.parse(quantity.text),
+                        rawMaterialId: selectedMaterial.id,
+                      );
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext, roll);
+                      }
+                    } on ApiException catch (exception) {
+                      if (dialogContext.mounted) {
+                        setDialogState(() => submissionError = exception.message);
+                      }
+                    }
+                  },
                   child: const Text('Register Roll'),
                 ),
               ],
@@ -241,45 +366,65 @@ class _StockViewState extends State<StockView> {
           },
         ),
       );
-      if (saved == true && mounted) await _fetchData();
+      if (createdRoll != null && mounted) {
+        await _fetchData();
+        if (mounted) await _showRollQr(createdRoll);
+      }
     } finally {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        identifier.dispose();
+        identifierNumber.dispose();
         quantity.dispose();
-        skuNumber.dispose();
       });
     }
   }
 
   List<RawMaterialModel> _rollRegistrableMaterials() {
-    final ownedSkus = _inventoryItems
-        .map((item) => item.sku.toLowerCase())
-        .toSet();
     return _rawMaterials
         .where(
-          (material) =>
-              ownedSkus.contains(material.skuCode.toLowerCase()) &&
-              _remainingStockFor(material) > 0,
+          (material) => _inventoryItems.any(
+            (item) =>
+                item.sku.toLowerCase() == material.skuCode.toLowerCase() &&
+                item.stockLevel > 0,
+          ),
         )
         .toList();
   }
 
-  double _remainingStockFor(RawMaterialModel material) {
-    final item = _inventoryItems
-        .where(
-          (candidate) =>
-              candidate.sku.toLowerCase() == material.skuCode.toLowerCase(),
-        )
-        .firstOrNull;
-    if (item == null) return 0;
-    final registeredStock = _rolls
-        .where((roll) => roll.rawMaterialId == material.id)
-        .fold<double>(
-          0,
-          (total, roll) => total + roll.currentQuantity.toDouble(),
-        );
-    final remaining = item.stockLevel.toDouble() - registeredStock;
-    return remaining > 0 ? remaining : 0;
+  int? _firstRollMaterialId(int? packagingTypeId) => materialOptionsFor(
+    packagingTypeId,
+    _rawMaterials,
+  ).where((material) => _rollSkuOptionsFor(packagingTypeId, material.id).isNotEmpty)
+      .firstOrNull
+      ?.id;
+
+  List<InventoryItemModel> _rollSkuOptionsFor(
+    int? packagingTypeId,
+    int? rawMaterialId,
+  ) {
+    final selectedMaterial = materialById(_rawMaterials, rawMaterialId);
+    if (packagingTypeId == null || selectedMaterial == null) return const [];
+
+    final options = _inventoryItems.where((item) {
+      final itemMaterial = materialById(_rawMaterials, item.rawMaterialId);
+      return item.stockLevel > 0 &&
+          item.packagingTypeId == packagingTypeId &&
+          itemMaterial?.materialCode == selectedMaterial.materialCode &&
+          itemMaterial != null;
+    }).toList();
+    options.sort((left, right) => (left.skuNumber ?? 0).compareTo(right.skuNumber ?? 0));
+    return options;
+  }
+
+  String _skuNumberLabel(InventoryItemModel item) {
+    final number = item.skuNumber;
+    if (number != null) return number.toString().padLeft(3, '0');
+    return item.sku.split('-').last;
+  }
+
+  String _buildRollIdentifier(String? selectedSku, String numberText) {
+    final parsed = int.tryParse(numberText.trim());
+    final suffix = parsed == null ? '??' : parsed.toString().padLeft(2, '0');
+    return 'ROLL-${selectedSku ?? 'SKU'}-$suffix';
   }
 
   Future<void> _showItemRolls(InventoryItemModel item) async {
@@ -342,11 +487,21 @@ class _StockViewState extends State<StockView> {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.inventory_2_outlined),
-                          title: Text(roll.rollIdentifier),
+                          title: Text('${roll.currentQuantity} units'),
                           subtitle: Text(
-                            'Quantity ${roll.currentQuantity} / ${roll.initialQuantity}',
+                            'Original quantity: ${roll.initialQuantity} units',
                           ),
-                          trailing: Text(roll.status),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(roll.status),
+                              IconButton(
+                                tooltip: 'Show QR code',
+                                icon: const Icon(Icons.qr_code_2),
+                                onPressed: () => _showRollQr(roll),
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -355,6 +510,78 @@ class _StockViewState extends State<StockView> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showRollQr(InventoryRollModel roll) {
+    final material = materialById(_rawMaterials, roll.rawMaterialId);
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Roll QR code'),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This QR code is created automatically for this physical roll. '
+                'Scan it to load this roll and its remaining quantity.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FutureBuilder<Uint8List>(
+                future: _apiService.fetchRollQr(roll.rollIdentifier),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox.square(
+                      dimension: 220,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'The QR code could not be loaded. Check the server connection and try again.',
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  return Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(12),
+                    child: Image.memory(
+                      snapshot.data!,
+                      width: 220,
+                      height: 220,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'QR code for this inventory roll',
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${material?.skuCode ?? 'Selected SKU'} • '
+                '${roll.currentQuantity} units remaining',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -492,24 +719,6 @@ class _StockViewState extends State<StockView> {
     );
   }
 
-  Widget _textField(
-    TextEditingController controller,
-    String label, {
-    bool required = false,
-    String? hintText,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: TextFormField(
-      controller: controller,
-      decoration: InputDecoration(labelText: label, hintText: hintText),
-      validator: required
-          ? (value) => value == null || value.trim().isEmpty
-                ? '$label is required.'
-                : null
-          : null,
-    ),
-  );
-
   Widget _numberField(
     TextEditingController controller,
     String label, {
@@ -638,8 +847,8 @@ class _StockViewState extends State<StockView> {
                     ),
                     subtitle: Text(
                       _rollRegistrableMaterials().isEmpty
-                          ? 'Add stock before registering a roll'
-                          : 'Create a roll from available stock',
+                          ? 'Add an inventory SKU before registering a roll'
+                          : 'Receive a physical roll into stock',
                       style: const TextStyle(color: AppColors.mutedText),
                     ),
                     trailing: FilledButton.icon(
