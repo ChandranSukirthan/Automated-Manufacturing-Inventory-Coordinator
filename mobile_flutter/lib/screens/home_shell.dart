@@ -10,7 +10,6 @@ import 'dashboard_screen.dart';
 import 'defects_screen.dart';
 import 'quarantine_screen.dart';
 import 'quarantine_history_screen.dart';
-import 'role_dashboard_screen.dart';
 import 'profile_screen.dart';
 import 'purchase_orders/po_status_dashboard_screen.dart';
 import 'purchase_orders/po_list_screen.dart';
@@ -87,16 +86,16 @@ class _HomeShellState extends State<HomeShell> {
       screens = [
         POStatusDashboardScreen(service: widget.poService),
         POListScreen(service: widget.poService),
-        AIWorkflowStatusScreen(service: widget.poService),
+        ProcurementDetailsScreen(service: widget.poService),
         SupplierStatusScreen(service: widget.poService),
         NotificationStatusScreen(service: widget.poService),
       ];
       titles = [
-        'PO Dashboard',
+        'Command Center',
         'Purchase Orders',
-        'AI Workflows',
-        'Suppliers',
-        'Notifications',
+        'AI Sourcing Hub',
+        'Suppliers & Verification',
+        'Low Stock & Reorder',
       ];
     } else if (isQualityInspector) {
       screens = [
@@ -217,15 +216,15 @@ class _HomeShellState extends State<HomeShell> {
               ),
             if (isManager || isITAdmin) ...[
               ListTile(
-                leading: const Icon(Icons.dashboard_outlined, color: Colors.cyanAccent),
-                title: const Text('PO Dashboard', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.dashboard_outlined, color: Color(0xFF5CC8F8)),
+                title: const Text('Command Center', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   setState(() => _selectedIndex = isITAdmin ? 1 : 0);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.receipt_long_outlined, color: Colors.cyanAccent),
+                leading: const Icon(Icons.receipt_long_outlined, color: Color(0xFF5CC8F8)),
                 title: const Text('Purchase Orders', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
@@ -233,11 +232,35 @@ class _HomeShellState extends State<HomeShell> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.psychology_outlined, color: Colors.cyanAccent),
-                title: const Text('AI Workflows & Approvals', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.auto_awesome_outlined, color: Color(0xFFA855F7)),
+                title: const Text('AI Sourcing Hub', style: TextStyle(color: Colors.white)),
                 onTap: () {
                   Navigator.pop(context);
                   setState(() => _selectedIndex = isITAdmin ? 3 : 2);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.business_outlined, color: Color(0xFF10B981)),
+                title: const Text('Suppliers & Verification', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isManager) {
+                    setState(() => _selectedIndex = 3);
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => SupplierStatusScreen(service: widget.poService)));
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+                title: const Text('Low Stock Alerts & Reorder', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isManager) {
+                    setState(() => _selectedIndex = 4);
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationStatusScreen(service: widget.poService)));
+                  }
                 },
               ),
             ],
@@ -336,9 +359,9 @@ class _HomeShellState extends State<HomeShell> {
                       label: 'Orders',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.psychology_outlined),
-                      selectedIcon: Icon(Icons.psychology),
-                      label: 'AI Flows',
+                      icon: Icon(Icons.auto_awesome_outlined),
+                      selectedIcon: Icon(Icons.auto_awesome),
+                      label: 'AI Sourcing',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.business_outlined),
@@ -346,9 +369,9 @@ class _HomeShellState extends State<HomeShell> {
                       label: 'Suppliers',
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.notifications_active_outlined),
-                      selectedIcon: Icon(Icons.notifications_active),
-                      label: 'Alerts',
+                      icon: Icon(Icons.warning_amber_rounded),
+                      selectedIcon: Icon(Icons.warning_rounded),
+                      label: 'Stock Alerts',
                     ),
                   ],
                 )

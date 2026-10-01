@@ -419,6 +419,8 @@ class SupplierSummary {
     required this.rating,
     required this.paymentTerms,
     required this.isActive,
+    this.address = '',
+    this.leadTimeDays = 5,
   });
 
   final int id;
@@ -429,17 +431,21 @@ class SupplierSummary {
   final double rating;
   final String paymentTerms;
   final bool isActive;
+  final String address;
+  final int leadTimeDays;
 
   factory SupplierSummary.fromJson(Map<String, dynamic> json) {
     return SupplierSummary(
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? 'Unknown',
-      contactPerson: json['contactPerson'] as String? ?? '',
-      email: json['email'] as String? ?? '',
-      phone: json['phone'] as String? ?? '',
+      contactPerson: json['contactPerson'] as String? ?? json['contactName'] as String? ?? '',
+      email: json['email'] as String? ?? json['contactEmail'] as String? ?? '',
+      phone: json['phone'] as String? ?? json['contactPhone'] as String? ?? '',
       rating: (json['rating'] as num? ?? 4.5).toDouble(),
       paymentTerms: json['paymentTerms'] as String? ?? 'Net30',
       isActive: json['isActive'] as bool? ?? true,
+      address: json['address'] as String? ?? '',
+      leadTimeDays: json['leadTimeDays'] as int? ?? 5,
     );
   }
 }
@@ -467,4 +473,56 @@ class SupplierAnalytics {
     );
   }
 }
+
+/// Stock Alert Item for warehouse and manager replenishment workflows
+class StockAlertItem {
+  const StockAlertItem({
+    required this.id,
+    required this.sku,
+    required this.packagingType,
+    required this.quantityRequested,
+    required this.status,
+    required this.workerId,
+    required this.createdAt,
+    this.rawMaterialId,
+    this.materialName,
+    this.currentStock,
+    this.safetyStock,
+    this.netDeficit,
+    required this.isRead,
+  });
+
+  final int id;
+  final String sku;
+  final String packagingType;
+  final int quantityRequested;
+  final String status;
+  final String workerId;
+  final DateTime createdAt;
+  final int? rawMaterialId;
+  final String? materialName;
+  final double? currentStock;
+  final double? safetyStock;
+  final double? netDeficit;
+  final bool isRead;
+
+  factory StockAlertItem.fromJson(Map<String, dynamic> json) {
+    return StockAlertItem(
+      id: json['id'] as int? ?? 0,
+      sku: json['sku'] as String? ?? '',
+      packagingType: json['packagingType'] as String? ?? 'RawMaterial',
+      quantityRequested: json['quantityRequested'] as int? ?? 0,
+      status: json['status'] as String? ?? 'Active',
+      workerId: json['workerId'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      rawMaterialId: json['rawMaterialId'] as int?,
+      materialName: json['materialName'] as String? ?? json['sku'] as String? ?? 'Raw Material',
+      currentStock: (json['currentStock'] as num?)?.toDouble(),
+      safetyStock: (json['safetyStock'] as num?)?.toDouble(),
+      netDeficit: (json['netDeficit'] as num?)?.toDouble(),
+      isRead: json['isRead'] as bool? ?? false,
+    );
+  }
+}
+
 

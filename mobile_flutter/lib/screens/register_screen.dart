@@ -1,6 +1,7 @@
 import 'dart:ui' as dart_ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app_state.dart';
@@ -39,7 +40,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _error;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com',
+    clientId: kIsWeb ? '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com' : null,
+    serverClientId: '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com',
     scopes: ['email', 'profile', 'openid'],
   );
 
@@ -159,7 +161,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Navigator.of(context).pop(); // Go back to root (which is now logged in)
       } else if (result is AuthSession) {
         widget.appState.setSession(result);
-        Navigator.of(context).pop();
+        if (mounted) Navigator.of(context).pop();
+      }
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'sign_in_failed'
+                  ? 'Google Sign-In requires SHA-1 fingerprint registration on Android. Please use Email/Password or register your SHA-1 fingerprint.'
+                  : 'Google Sign-In Error (${e.code}): ${e.message}',
+            ),
+            backgroundColor: Colors.amber.shade900,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -523,7 +538,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 kIsWeb
                                   ? SizedBox(
                                       height: 52,
-                                      child: web.renderButton(),
+                                      child: const SizedBox.shrink(),
                                     )
                                   : SizedBox(
                                       height: 52,

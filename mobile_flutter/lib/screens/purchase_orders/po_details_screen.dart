@@ -91,27 +91,8 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Authority Notice Banner
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B).withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.verified_user_outlined, color: cyanAccent, size: 20),
-                                SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Supply Chain Manager Read-Only Tracking. Formal approval signatures must be executed on the Web Manager Console.',
-                                    style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          // Manager Interactive Action Panel or Telemetry Notice
+                          _buildManagerActionBar(context, _po!),
 
                           const SizedBox(height: 16),
 
@@ -338,6 +319,390 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     );
   }
 
+  Widget _buildManagerActionBar(BuildContext context, PurchaseOrderDetail po) {
+    final status = po.status.toLowerCase();
+
+    if (status == 'pendingapproval') {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.gavel_rounded, color: Color(0xFFF59E0B), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Supply Chain Manager Approval Action',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Review order specifications and authorize release, request revision, or reject.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _handleApprove(po.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showRevisionDialog(po.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF59E0B),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: const Text('Revise', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showRejectDialog(po.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else if (status == 'approved' || status == 'payment') {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E38),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.payment_rounded, color: Color(0xFF8B5CF6), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Financial Settlement & Dispatch',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Order is authorized! Settle payment via Stripe gateway or trigger instant dispatch.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _handleStripeCheckout(po.id),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.credit_card, size: 16),
+                    label: const Text('Stripe Payment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleDirectPayment(po.id),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF5CC8F8),
+                      side: const BorderSide(color: Color(0xFF5CC8F8)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.send_rounded, size: 16),
+                    label: const Text('Instant Dispatch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else if (status == 'draft') {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Draft Purchase Order', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('Submit for manager approval', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              ],
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _handleSubmit(po.id),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5CC8F8),
+                foregroundColor: Colors.black,
+              ),
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text('Submit', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _handleApprove(int poId) async {
+    try {
+      await widget.service.approvePurchaseOrder(poId, notes: 'Approved by Supply Chain Manager via Mobile');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Purchase Order Approved successfully!'), backgroundColor: Color(0xFF10B981)),
+        );
+        _fetchDetails();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Approval failed: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleSubmit(int poId) async {
+    try {
+      await widget.service.submitPurchaseOrder(poId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Purchase Order Submitted for approval!'), backgroundColor: Color(0xFF5CC8F8)),
+        );
+        _fetchDetails();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submit failed: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _showRejectDialog(int poId) async {
+    final controller = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1B2B),
+        title: const Text('Reject Purchase Order', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter reason for rejection...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+            child: const Text('Reject Order'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && controller.text.trim().isNotEmpty) {
+      try {
+        await widget.service.rejectPurchaseOrder(poId, notes: controller.text.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Order Rejected.'), backgroundColor: Color(0xFFEF4444)),
+          );
+          _fetchDetails();
+        }
+      } catch (err) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Rejection failed: $err'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showRevisionDialog(int poId) async {
+    final controller = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1B2B),
+        title: const Text('Request Revision', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter required revisions...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: Colors.black),
+            child: const Text('Send Revision'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && controller.text.trim().isNotEmpty) {
+      try {
+        await widget.service.revisePurchaseOrder(poId, notes: controller.text.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Revision requested.'), backgroundColor: Color(0xFFF59E0B)),
+          );
+          _fetchDetails();
+        }
+      } catch (err) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Revision request failed: $err'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _handleStripeCheckout(int poId) async {
+    try {
+      final checkoutUrl = await widget.service.createCheckoutSession(poId);
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF0F1B2B),
+          title: const Row(
+            children: [
+              Icon(Icons.payment, color: Color(0xFF8B5CF6)),
+              SizedBox(width: 8),
+              Text('Stripe Payment Checkout', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Stripe Checkout Session Created.', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 10),
+              if (checkoutUrl != null)
+                SelectableText(
+                  checkoutUrl,
+                  style: const TextStyle(color: Color(0xFF5CC8F8), fontSize: 12),
+                ),
+              const SizedBox(height: 14),
+              const Text('Complete payment via browser checkout or proceed with simulated payment dispatch below.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _handleDirectPayment(poId);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+              icon: const Icon(Icons.check_circle_outline, size: 16),
+              label: const Text('Simulate Paid Success'),
+            ),
+          ],
+        ),
+      );
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Stripe Checkout error: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleDirectPayment(int poId) async {
+    try {
+      await widget.service.processPayment(poId, forceDispatch: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment processed & Order Dispatched to Supplier via PDF/SendGrid!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+        _fetchDetails();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Payment processing failed: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Widget _buildMetaColumn(String label, String value, IconData icon) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,3 +779,4 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     }
   }
 }
+

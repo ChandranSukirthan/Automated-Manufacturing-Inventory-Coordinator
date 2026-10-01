@@ -71,7 +71,7 @@ class AuthService {
       'token': idToken,
       'role': role,
     }) as Map<String, dynamic>;
-    final session = AuthSession.fromJson(data as Map<String, dynamic>);
+    final session = AuthSession.fromJson(data);
     await storage.save(session);
     return session;
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
+import 'po_details_screen.dart';
 
 class NotificationStatusScreen extends StatefulWidget {
   const NotificationStatusScreen({
@@ -19,6 +20,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
   bool _loading = true;
   String? _error;
   List<PurchaseOrderSummary> _orders = [];
+  List<StockAlertItem> _stockAlerts = [];
 
   @override
   void initState() {
@@ -34,9 +36,11 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
 
     try {
       final data = await widget.service.getPurchaseOrders();
+      final alerts = await widget.service.getStockAlerts();
       if (mounted) {
         setState(() {
           _orders = data;
+          _stockAlerts = alerts;
           _loading = false;
         });
       }
@@ -57,6 +61,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
     const cyanAccent = Color(0xFF5CC8F8);
     const emeraldAccent = Color(0xFF10B981);
     const amberAccent = Color(0xFFFFB74D);
+    const roseAccent = Color(0xFFEF4444);
 
     final sentCount = _orders.where((o) => o.status.toLowerCase() == 'sent').length;
     final pendingCount = _orders.where((o) => o.status.toLowerCase() == 'pendingapproval' || o.status.toLowerCase() == 'approved').length;
@@ -131,6 +136,131 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                         ),
 
                         const SizedBox(height: 20),
+
+                        // ── Low Stock Detection Section ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: roseAccent, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Low Stock Detection (${_stockAlerts.length})',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              _stockAlerts.isEmpty ? 'All Healthy' : 'Action Required',
+                              style: TextStyle(
+                                color: _stockAlerts.isEmpty ? emeraldAccent : roseAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        if (_stockAlerts.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: cardBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withOpacity(0.06)),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'No critical stock breaches. All inventory items are within safety thresholds.',
+                                style: TextStyle(color: Colors.white54, fontSize: 12),
+                              ),
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _stockAlerts.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 10),
+                            itemBuilder: (context, idx) {
+                              final alert = _stockAlerts[idx];
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: roseAccent.withOpacity(0.3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            alert.materialName ?? alert.sku,
+                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: roseAccent.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: roseAccent.withOpacity(0.3)),
+                                          ),
+                                          child: const Text('LOW STOCK', style: TextStyle(color: roseAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Deficit: ${alert.quantityRequested} units • SKU: ${alert.sku}',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: () => _handleReorderAlert(alert),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: cyanAccent,
+                                              foregroundColor: Colors.black,
+                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            icon: const Icon(Icons.flash_on, size: 14),
+                                            label: const Text('Reorder via PO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        OutlinedButton(
+                                          onPressed: () => _handleMarkRead(alert.id),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.white60,
+                                            side: const BorderSide(color: Colors.white24),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          child: const Text('Dismiss', style: TextStyle(fontSize: 11)),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+
+                        const SizedBox(height: 24),
 
                         const Text(
                           'Supplier Notification Outbox',
@@ -277,4 +407,61 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
       ),
     );
   }
+
+  Future<void> _handleReorderAlert(StockAlertItem alert) async {
+    final qty = alert.quantityRequested > 0 ? alert.quantityRequested : 500;
+    try {
+      final po = await widget.service.createPurchaseOrder({
+        'supplierId': 1,
+        'notes': 'Low stock replenish order for SKU ${alert.sku}',
+        'lines': [
+          {
+            'rawMaterialId': alert.rawMaterialId ?? 1,
+            'quantity': qty.toDouble(),
+            'unitPrice': 3.50,
+            'totalPrice': qty * 3.50,
+          }
+        ],
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reorder Purchase Order ${po.poNumber} created!'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+        _fetchNotificationTelemetry();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => PODetailsScreen(service: widget.service, poId: po.id)),
+        );
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reorder: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleMarkRead(int alertId) async {
+    try {
+      await widget.service.markStockAlertAsRead(alertId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alert acknowledged and dismissed.'), backgroundColor: Color(0xFF5CC8F8)),
+        );
+        _fetchNotificationTelemetry();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to dismiss alert: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 }
+

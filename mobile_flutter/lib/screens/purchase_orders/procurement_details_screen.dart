@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/procurement_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
+import 'po_details_screen.dart';
 
 /// 11-Stage Procurement Status & Recommendation Tracker for Mobile
 /// Enables Floor Workers & Managers to track raw-material procurement pipelines.
@@ -23,7 +24,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
   bool _loading = true;
   String? _error;
   ProcurementStatusTracking? _statusTracking;
-  ProcurementItem? _procurementItem;
+  List<SupplierCandidateItem> _candidates = [];
   int? _activeId;
 
   @override
@@ -53,15 +54,19 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
 
       if (targetId != null) {
         final status = await widget.service.getProcurementStatus(targetId);
-        ProcurementItem? item;
+        List<SupplierCandidateItem> candidates = [];
         try {
-          item = await widget.service.getProcurementById(targetId);
+          final item = await widget.service.getProcurementById(targetId);
+          candidates = await widget.service.getProcurementCandidates(targetId);
+          if (candidates.isEmpty && item.candidates.isNotEmpty) {
+            candidates = item.candidates;
+          }
         } catch (_) {}
 
         if (mounted) {
           setState(() {
             _statusTracking = status;
-            _procurementItem = item;
+            _candidates = candidates;
             _loading = false;
           });
         }
@@ -198,6 +203,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                               _buildRecommendationSummaryCard(cardBg, cyanAccent, emeraldAccent, amberAccent, roseAccent),
                               const SizedBox(height: 16),
                             ],
+
+                            // ── Evaluated Candidates Selection ──
+                            _buildCandidateSelectionCard(cardBg, cyanAccent, emeraldAccent, amberAccent),
+                            const SizedBox(height: 16),
 
                             // ── Approved Purchase Telemetry (Post-Approval) ──
                             if (_isApprovedOrLater) ...[
@@ -377,7 +386,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Waiting for Supply Chain Manager approval',
+                  'Supply Chain Manager Approval & Sourcing Gate',
                   style: TextStyle(
                     color: amberAccent,
                     fontSize: 15,
@@ -389,7 +398,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Review and approval are handled in the Supply Chain Manager Web Console. Floor Workers cannot authorize financial expenditures or release purchase orders.',
+            'Executive decision required: Review the AI-evaluated vendor candidates below. Select your preferred candidate to auto-generate a Purchase Order or trigger live AI market research.',
             style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 10),
@@ -401,12 +410,12 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.security, size: 14, color: Colors.white54),
-                SizedBox(width: 6),
+              children: [
+                Icon(Icons.verified_user, size: 14, color: amberAccent),
+                const SizedBox(width: 6),
                 Text(
-                  'Safety Policy Enforced • Read-Only Mode Active',
-                  style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
+                  'Supply Chain Authority Granted • Actionable Mobile Mode',
+                  style: TextStyle(color: amberAccent, fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -815,6 +824,270 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     );
   }
 
+  Widget _buildCandidateSelectionCard(
+    Color cardBg,
+    Color cyanAccent,
+    Color emeraldAccent,
+    Color amberAccent,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cyanAccent.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.inventory_2_outlined, color: cyanAccent, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Evaluated Candidates',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _handleTriggerResearch,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cyanAccent.withOpacity(0.15),
+                  foregroundColor: cyanAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.search, size: 14),
+                label: const Text('AI Research', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 12),
+          if (_candidates.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Text(
+                      'No evaluated supplier candidates loaded.',
+                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: _handleTriggerResearch,
+                      style: ElevatedButton.styleFrom(backgroundColor: cyanAccent, foregroundColor: Colors.black),
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('Trigger AI Agent Sourcing', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _candidates.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, idx) {
+                final c = _candidates[idx];
+                final isApproved = c.isApproved;
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isApproved ? emeraldAccent.withOpacity(0.3) : amberAccent.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              c.supplierName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: c.statusBadgeColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: c.statusBadgeColor.withOpacity(0.4)),
+                            ),
+                            child: Text(
+                              c.supplierStatus,
+                              style: TextStyle(
+                                color: c.statusBadgeColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Material: ${c.materialName}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'MOQ: ${c.minimumOrderQuantity.toStringAsFixed(0)} units @ \$${c.unitPrice.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                          ),
+                          Text(
+                            'Total: \$${c.totalCost.toStringAsFixed(2)}',
+                            style: TextStyle(color: cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _handleSelectCandidate(c.id),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.check, size: 14),
+                              label: const Text('Select Candidate & Generate PO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          if (c.isUnverified) ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              onPressed: () => _handleVerifySupplier(c.id, c.supplierName),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFF59E0B),
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              icon: const Icon(Icons.verified_user_outlined, size: 14),
+                              label: const Text('Verify', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleSelectCandidate(int candidateId) async {
+    if (_activeId == null) return;
+    try {
+      final po = await widget.service.createDraftPoFromCandidate(_activeId!, candidateId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Draft Purchase Order ${po.poNumber} created successfully!'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PODetailsScreen(service: widget.service, poId: po.id),
+          ),
+        );
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate Draft PO: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleTriggerResearch() async {
+    if (_activeId == null) return;
+    try {
+      await widget.service.startProcurementResearch(_activeId!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI Agent Market Research initiated! Fetching supplier candidates...'),
+            backgroundColor: Color(0xFF5CC8F8),
+          ),
+        );
+        _fetchDetails();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to trigger AI research: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleVerifySupplier(int candidateId, String supplierName) async {
+    if (_activeId == null) return;
+    try {
+      await widget.service.verifySupplierCandidate(_activeId!, candidateId, {
+        'taxId': 'TAX-2026-REG',
+        'bankAccountNumber': 'US893700011',
+        'complianceNotes': 'Verified by Supply Chain Manager via Mobile App',
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Supplier $supplierName verified & onboarded!'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+        _fetchDetails();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Supplier verification failed: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Widget _buildDetailRow(
     String label,
     String value, {
@@ -846,3 +1119,4 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     );
   }
 }
+

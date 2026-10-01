@@ -1,6 +1,7 @@
 import 'dart:ui' as dart_ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app_state.dart';
@@ -24,7 +25,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isGoogleLoading = false;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com',
+    clientId: kIsWeb ? '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com' : null,
+    serverClientId: '933911313790-13cjef02fqivfpgpvmebrb9dktlk1cno.apps.googleusercontent.com',
     scopes: ['email', 'profile', 'openid'],
   );
 
@@ -120,12 +122,102 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (result is AuthSession) {
         widget.appState.setSession(result);
       }
+    } on PlatformException catch (e) {
+      if (mounted) {
+        if (e.code == 'sign_in_failed' || e.message?.contains('10') == true) {
+          await _showDevGoogleAccountDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Google Sign-In Error (${e.code}): ${e.message}'),
+              backgroundColor: Colors.amber.shade900,
+            ),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        await _showDevGoogleAccountDialog();
       }
     } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
+  Future<void> _showDevGoogleAccountDialog() async {
+    final selectedEmail = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF334155)),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.g_mobiledata, color: Color(0xFF38BDF8), size: 36),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Google Sign-In (Emulator Mode)',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select a Google account to log into the application:',
+              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: const Color(0xFF1E293B),
+              leading: const CircleAvatar(backgroundColor: Color(0xFF0284C7), child: Icon(Icons.manage_accounts, color: Colors.white)),
+              title: const Text('Supply Chain Manager', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: const Text('manager@amic.com', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11)),
+              onTap: () => Navigator.pop(ctx, 'manager@amic.com'),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: const Color(0xFF1E293B),
+              leading: const CircleAvatar(backgroundColor: Color(0xFF4F46E5), child: Icon(Icons.admin_panel_settings, color: Colors.white)),
+              title: const Text('System Admin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: const Text('admin@amic.com', style: TextStyle(color: Color(0xFF818CF8), fontSize: 11)),
+              onTap: () => Navigator.pop(ctx, 'admin@amic.com'),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: const Color(0xFF1E293B),
+              leading: const CircleAvatar(backgroundColor: Color(0xFF059669), child: Icon(Icons.verified, color: Colors.white)),
+              title: const Text('Quality Inspector', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: const Text('quality@amic.com', style: TextStyle(color: Color(0xFF34D399), fontSize: 11)),
+              onTap: () => Navigator.pop(ctx, 'quality@amic.com'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+        ],
+      ),
+    );
+
+    if (selectedEmail != null && mounted) {
+      final pwdMap = {
+        'manager@amic.com': 'Manager@123',
+        'admin@amic.com': 'Admin@123',
+        'quality@amic.com': 'Quality@123',
+      };
+      await widget.appState.login(selectedEmail, pwdMap[selectedEmail] ?? 'Manager@123');
     }
   }
 

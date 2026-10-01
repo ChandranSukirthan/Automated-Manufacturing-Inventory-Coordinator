@@ -230,19 +230,43 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          'Terms: ${sup.paymentTerms}',
+                                          'Terms: ${sup.paymentTerms} • Lead Time: ${sup.leadTimeDays}d',
                                           style: const TextStyle(color: cyanAccent, fontSize: 11, fontWeight: FontWeight.w600),
                                         ),
-                                        Text(
-                                          sup.isActive ? 'Active Vendor' : 'Inactive',
-                                          style: TextStyle(
-                                            color: sup.isActive ? const Color(0xFF10B981) : Colors.white38,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: sup.isActive ? const Color(0xFF10B981).withOpacity(0.15) : amberAccent.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: sup.isActive ? const Color(0xFF10B981).withOpacity(0.3) : amberAccent.withOpacity(0.3)),
+                                          ),
+                                          child: Text(
+                                            sup.isActive ? 'VERIFIED & ACTIVE' : 'PENDING VERIFICATION',
+                                            style: TextStyle(
+                                              color: sup.isActive ? const Color(0xFF10B981) : amberAccent,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
+                                    if (!sup.isActive) ...[
+                                      const SizedBox(height: 10),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () => _handleVerifySupplier(sup),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF10B981),
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          icon: const Icon(Icons.verified_user_outlined, size: 14),
+                                          label: const Text('Verify & Activate Supplier', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               );
@@ -252,8 +276,152 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                     ),
                   ),
                 ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddSupplierDialog,
+        backgroundColor: cyanAccent,
+        foregroundColor: const Color(0xFF070E17),
+        icon: const Icon(Icons.domain_add_rounded),
+        label: const Text('Add Supplier', style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
     );
   }
+
+  Future<void> _handleVerifySupplier(SupplierSummary sup) async {
+    try {
+      await widget.service.verifySupplier(sup.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Supplier ${sup.name} verified & activated!'), backgroundColor: const Color(0xFF10B981)),
+        );
+        _fetchSuppliers();
+      }
+    } catch (err) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification error: $err'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddSupplierDialog() async {
+    final nameController = TextEditingController();
+    final contactController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
+    final termsController = TextEditingController(text: 'Net30');
+    final leadTimeController = TextEditingController(text: '5');
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1B2B),
+        title: const Row(
+          children: [
+            Icon(Icons.domain_add_rounded, color: Color(0xFF5CC8F8)),
+            SizedBox(width: 8),
+            Text('Register New Supplier', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Company / Supplier Name', labelStyle: TextStyle(color: Colors.white54)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: contactController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Contact Person Name', labelStyle: TextStyle(color: Colors.white54)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: emailController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Contact Email', labelStyle: TextStyle(color: Colors.white54)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phoneController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Contact Phone', labelStyle: TextStyle(color: Colors.white54)),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: addressController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(labelText: 'Physical Address', labelStyle: TextStyle(color: Colors.white54)),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: termsController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(labelText: 'Payment Terms', labelStyle: TextStyle(color: Colors.white54)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: leadTimeController,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(labelText: 'Lead Time (Days)', labelStyle: TextStyle(color: Colors.white54)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+            child: const Text('Register Supplier', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && nameController.text.trim().isNotEmpty) {
+      try {
+        await widget.service.createSupplier({
+          'name': nameController.text.trim(),
+          'contactEmail': emailController.text.trim().isNotEmpty ? emailController.text.trim() : 'contact@vendor.com',
+          'contactPhone': phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : '+1-555-0100',
+          'address': addressController.text.trim().isNotEmpty ? addressController.text.trim() : 'Sector 4, Industrial Zone',
+          'paymentTerms': termsController.text.trim().isNotEmpty ? termsController.text.trim() : 'Net30',
+          'leadTimeDays': int.tryParse(leadTimeController.text.trim()) ?? 5,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Supplier registered successfully!'), backgroundColor: Color(0xFF10B981)),
+          );
+          _fetchSuppliers();
+        }
+      } catch (err) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add supplier: $err'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
 
   Widget _buildMetricTile(String label, String value, Color color, Color bg) {
     return Container(
