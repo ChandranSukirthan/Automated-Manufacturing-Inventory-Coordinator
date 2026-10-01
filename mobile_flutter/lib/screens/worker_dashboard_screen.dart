@@ -763,7 +763,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<int>(
-                    value: _packagingTypes.any(
+                    initialValue: _packagingTypes.any(
                       (type) => type.id == packagingTypeId,
                     )
                         ? packagingTypeId
@@ -792,7 +792,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
-                    value: materialOptionsFor(packagingTypeId, _materials)
+                    initialValue: materialOptionsFor(packagingTypeId, _materials)
                             .any((material) => material.id == rawMaterialId)
                         ? rawMaterialId
                         : null,

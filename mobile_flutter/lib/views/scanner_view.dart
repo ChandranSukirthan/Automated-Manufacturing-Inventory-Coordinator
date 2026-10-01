@@ -357,6 +357,7 @@ class _ScannerViewState extends State<ScannerView> {
     if (!mounted) return;
 
     await _scannerController.stop();
+    if (!mounted) return;
     final enteredSku = await showDialog<String>(
       context: context,
       builder: (_) => _ManualSkuDialog(

@@ -600,7 +600,7 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
           ),
           const SizedBox(height: 18),
           DropdownButtonFormField<int>(
-            value: _packagingTypes.any((type) => type.id == _packagingTypeId)
+            initialValue: _packagingTypes.any((type) => type.id == _packagingTypeId)
                 ? _packagingTypeId
                 : null,
             isExpanded: true,
@@ -627,7 +627,7 @@ class _FloorWorkerHomeScreenState extends State<FloorWorkerHomeScreen> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
-            value: materialOptionsFor(_packagingTypeId, _rawMaterials)
+            initialValue: materialOptionsFor(_packagingTypeId, _rawMaterials)
                     .any((material) => material.id == _rawMaterialId)
                 ? _rawMaterialId
                 : null,
