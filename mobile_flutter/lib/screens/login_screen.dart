@@ -2,7 +2,6 @@ import 'dart:ui' as dart_ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:google_sign_in_web/web_only.dart' as web;
 
 import '../app_state.dart';
 import '../models/auth_models.dart';
@@ -438,16 +437,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           const Expanded(child: Divider(color: Color(0xFF26364B))),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      kIsWeb
-                          ? SizedBox(
-                              height: 52,
-                              child: web.renderButton(),
-                            )
-                          : SizedBox(
-                              height: 52,
-                              child: OutlinedButton.icon(
-                                onPressed: widget.appState.isLoading || _isGoogleLoading ? null : _handleGoogleSignIn,
+                      SizedBox(
+                        height: 52,
+                        child: OutlinedButton.icon(
+                          onPressed: widget.appState.isLoading || _isGoogleLoading ? null : _handleGoogleSignIn,
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: Colors.white,
                                   side: const BorderSide(color: Color(0xFF26364B)),
