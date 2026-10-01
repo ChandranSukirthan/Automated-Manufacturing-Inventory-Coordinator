@@ -24,20 +24,22 @@ tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 
 # ── Request / Response Schemas ─────────────────────────────────────────────────
 
-class RunWorkflowRequest(BaseModel):
     """
-    Procurement workflow trigger from ASP.NET Core.
+    Procurement workflow trigger from ASP.NET Core and direct API callers.
+    Supports both camelCase and snake_case formats.
     All quantity/budget fields are authoritative — the AI never invents them.
     """
     objective: str = Field(..., description="Business objective for the Planner agent.")
     workflowId: Optional[str] = Field(None)
     procurementRequestId: Optional[int] = Field(None)
 
-    # Authoritative procurement fields from ASP.NET Core
+    # Authoritative procurement fields
     materialId: Optional[str] = None
+    material_id: Optional[str] = None
     materialName: Optional[str] = None
     currentStock: Optional[float] = None
     requiredQuantity: Optional[float] = None
+    required_quantity: Optional[float] = None
     safetyStock: Optional[float] = None
     openPOQuantity: Optional[float] = None
     netDeficit: Optional[float] = None          # authoritative — never invented by AI
@@ -81,6 +83,7 @@ class ProductionImpactRequest(BaseModel):
 # ── Workflow Endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/run", status_code=status.HTTP_201_CREATED)
+@router.post("/trigger", status_code=status.HTTP_201_CREATED)
 def trigger_workflow(request: RunWorkflowRequest):
     """
     Triggers the multi-agent procurement workflow.
@@ -89,6 +92,8 @@ def trigger_workflow(request: RunWorkflowRequest):
     """
     # Resolve budget (accept both field names)
     budget = request.budgetLimit or request.maximumBudget
+    resolved_material_id = request.materialId or request.material_id
+    resolved_quantity = request.requiredQuantity if request.requiredQuantity is not None else request.required_quantity
 
     # Build legacy procurement_requirement dict for backward compatibility
     req_dict: Dict[str, Any] = {}
@@ -99,8 +104,8 @@ def trigger_workflow(request: RunWorkflowRequest):
     if request.netDeficit is not None:
         req_dict["netDeficit"] = request.netDeficit
         req_dict["requiredQuantity"] = request.netDeficit
-    elif request.requiredQuantity is not None:
-        req_dict["requiredQuantity"] = request.requiredQuantity
+    elif resolved_quantity is not None:
+        req_dict["requiredQuantity"] = resolved_quantity
     if budget is not None:
         req_dict["maximumBudget"] = budget
     if request.preferredRegion:
@@ -114,10 +119,10 @@ def trigger_workflow(request: RunWorkflowRequest):
         objective=request.objective,
         workflow_id=request.workflowId,
         procurement_requirement=req_dict if req_dict else None,
-        material_id=request.materialId,
+        material_id=resolved_material_id,
         material_name=request.materialName,
         current_stock=request.currentStock,
-        required_quantity=request.requiredQuantity,
+        required_quantity=resolved_quantity,
         safety_stock=request.safetyStock,
         open_po_quantity=request.openPOQuantity,
         net_deficit=request.netDeficit,

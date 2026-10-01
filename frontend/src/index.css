@@ -16,3 +16,63 @@
     font-family: 'Inter', system-ui, sans-serif;
   }
 }
+
+/* ============================================================
+   Worker Dashboard — Custom Animations
+   ============================================================ */
+
+/* Skeleton shimmer effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* Pulsing dot for active alerts */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.4); }
+}
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Tab content slide-in */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-slide-in {
+  animation: slide-in 0.25s ease-out;
+}
+
+/* Number count-up entrance */
+@keyframes count-entrance {
+  from { opacity: 0; transform: translateY(-6px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.count-entrance {
+  animation: count-entrance 0.4s ease-out;
+}
+
+/* Stock gauge bar fill animation */
+@keyframes gauge-fill {
+  from { width: 0%; }
+}
+.gauge-fill {
+  animation: gauge-fill 0.6s ease-out;
+}
+
+/* Subtle glow for active/new items */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+  50% { box-shadow: 0 0 12px 2px rgba(6, 182, 212, 0.15); }
+}
+.glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}

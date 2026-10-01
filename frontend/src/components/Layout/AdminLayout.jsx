@@ -99,6 +99,12 @@ export default function AdminLayout({ children, title, subtitle }) {
       default:
         return role || 'User';
     }
+    const s = String(role ?? '').toLowerCase().trim();
+    if (s === '0' || s === 'floorworker') return '';
+    if (s === '1' || s === 'supplychainmanager') return 'Supply Chain Mgr';
+    if (s === '2' || s === 'qualityinspector') return 'Quality Inspector';
+    if (s === '3' || s === 'itadmin') return 'IT Admin';
+    return '';
   };
 
   return (
@@ -196,6 +202,11 @@ export default function AdminLayout({ children, title, subtitle }) {
                 <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
                   {getRoleLabel(user?.role)}
                 </span>
+                {getRoleLabel(user?.role) ? (
+                  <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                    {getRoleLabel(user?.role)}
+                  </span>
+                ) : null}
               </div>
             </div>
             <button

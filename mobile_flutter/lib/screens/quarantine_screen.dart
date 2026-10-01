@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../models/quality_models.dart';
 import '../services/api_client.dart';
 import '../services/quality_service.dart';
@@ -16,6 +17,7 @@ class QuarantineScreen extends StatefulWidget {
 }
 
 class _QuarantineScreenState extends State<QuarantineScreen> {
+  static const _pageSize = 8;
   List<QuarantineRecord>? _records;
   List<DefectReport> _defects = [];
   String? _error;
@@ -23,6 +25,7 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
   String? _severity;
   String? _status;
   _QuarantineSort _sort = _QuarantineSort.newest;
+  int _page = 1;
 
   @override
   void initState() {
@@ -70,28 +73,18 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
           (_severity == null || severity == _severity) &&
           (_status == null || record.status == _status);
     }).toList();
-    records.sort((left, right) => switch (_sort) {
-      _QuarantineSort.newest => right.createdAt.compareTo(left.createdAt),
-      _QuarantineSort.oldest => left.createdAt.compareTo(right.createdAt),
-      _QuarantineSort.batch => left.batchId.compareTo(right.batchId),
-      _QuarantineSort.status => left.status.compareTo(right.status),
-      _QuarantineSort.severity => _severityFor(left).compareTo(_severityFor(right)),
-    });
-    return records;
-  }
-
-  Future<void> _showFilters() async {
-    final result = await showModalBottomSheet<_QuarantineFilters>(
-      context: context,
-      builder: (_) => _QuarantineFilterSheet(
-        initial: _QuarantineFilters(severity: _severity, status: _status),
-      ),
+    records.sort(
+      (left, right) => switch (_sort) {
+        _QuarantineSort.newest => right.createdAt.compareTo(left.createdAt),
+        _QuarantineSort.oldest => left.createdAt.compareTo(right.createdAt),
+        _QuarantineSort.batch => left.batchId.compareTo(right.batchId),
+        _QuarantineSort.status => left.status.compareTo(right.status),
+        _QuarantineSort.severity => _severityFor(
+          left,
+        ).compareTo(_severityFor(right)),
+      },
     );
-    if (result == null || !mounted) return;
-    setState(() {
-      _severity = result.severity;
-      _status = result.status;
-    });
+    return records;
   }
 
   Future<void> _showSort() async {
@@ -117,7 +110,12 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
         ),
       ),
     );
-    if (result != null && mounted) setState(() => _sort = result);
+    if (result != null && mounted) {
+      setState(() {
+        _sort = result;
+        _page = 1;
+      });
+    }
   }
 
   Future<void> _open(QuarantineRecord record) async {
@@ -136,20 +134,12 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
   @override
   Widget build(BuildContext context) {
     final records = _visibleRecords;
+    final totalPages = (records.length / _pageSize).ceil().clamp(1, 999999);
+    final visibleRecords = records
+        .skip((_page - 1).clamp(0, totalPages - 1) * _pageSize)
+        .take(_pageSize)
+        .toList();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Quarantine'),
-        actions: [
-          IconButton(onPressed: _showSort, icon: const Icon(Icons.sort)),
-          IconButton(
-            onPressed: _showFilters,
-            icon: Badge(
-              isLabelVisible: _severity != null || _status != null,
-              child: const Icon(Icons.tune),
-            ),
-          ),
-        ],
-      ),
       body: _error != null && _records == null
           ? StateMessage(message: _error!, icon: Icons.cloud_off, action: _load)
           : _records == null
@@ -159,58 +149,458 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  TextField(
-                    onChanged: (value) => setState(() => _query = value),
-                    decoration: InputDecoration(
-                      hintText: 'Search batch, inventory, reason...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              onPressed: () => setState(() => _query = ''),
-                              icon: const Icon(Icons.clear),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('${records.length} result${records.length == 1 ? '' : 's'} · ${_sort.label}'),
-                  const SizedBox(height: 8),
+                  _filterToolbar(),
+                  const SizedBox(height: 16),
+                  if (_error != null) _errorBanner(),
                   if (records.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.only(top: 120),
+                      padding: EdgeInsets.only(top: 80),
                       child: StateMessage(
                         message: 'No quarantine records match these filters.',
                         icon: Icons.inventory_2_outlined,
                       ),
                     )
                   else
-                    ...records.map(
-                      (record) => Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
-                          onTap: () => _open(record),
-                          title: Text(
-                            record.batchId,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '${record.inventoryRollId}\n${_severityFor(record)} · ${record.reason}\nCreated: ${_formatDate(record.createdAt)}${record.releasedAt == null ? '' : '\nReleased: ${_formatDate(record.releasedAt!)}'}',
-                            ),
-                          ),
-                          isThreeLine: true,
-                          trailing: StatusPill(record.status),
+                    _quarantineTable(visibleRecords),
+                  if (totalPages > 1) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: _page <= 1
+                              ? null
+                              : () => setState(() => _page--),
+                          icon: const Icon(Icons.chevron_left),
                         ),
-                      ),
+                        Text(
+                          'Page ${_page.clamp(1, totalPages)} of $totalPages',
+                        ),
+                        IconButton(
+                          onPressed: _page >= totalPages
+                              ? null
+                              : () => setState(() => _page++),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
                     ),
+                  ],
                 ],
               ),
             ),
     );
   }
+
+  Widget _filterToolbar() {
+    final hasFilters =
+        _query.isNotEmpty || _severity != null || _status != null;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _quarantineDecoration,
+      child: Column(
+        children: [
+            TextField(
+              onChanged: (value) => setState(() {
+                _query = value;
+                _page = 1;
+              }),
+              style: const TextStyle(color: AppColors.strongText),
+              decoration: InputDecoration(
+                hintText: 'Search batch, inventory, reason...',
+                hintStyle: const TextStyle(color: AppColors.mutedText),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () => setState(() {
+                          _query = '';
+                          _page = 1;
+                        }),
+                        icon: const Icon(Icons.clear),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _dropdown(
+                    'All Severities',
+                    _severity,
+                    const ['LOW', 'MEDIUM', 'HIGH', 'Critical'],
+                    (value) => setState(() {
+                      _severity = value;
+                      _page = 1;
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _dropdown(
+                    'All Statuses',
+                    _status,
+                    const ['Active', 'Released'],
+                    (value) => setState(() {
+                      _status = value;
+                      _page = 1;
+                    }),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Text(
+                  'Sort By: ',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+                ),
+                Text(
+                  _sort.label,
+                  style: const TextStyle(
+                    color: AppColors.secondaryText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                IconButton(
+                  onPressed: _showSort,
+                  icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                  tooltip: 'Change sort',
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.only(left: 8),
+                  constraints: const BoxConstraints(),
+                ),
+                if (hasFilters)
+                  IconButton(
+                    onPressed: () => setState(() {
+                      _query = '';
+                      _severity = null;
+                      _status = null;
+                      _page = 1;
+                    }),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    tooltip: 'Reset filters',
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.only(left: 8),
+                    constraints: const BoxConstraints(),
+                  ),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    '${_visibleRecords.length} quarantine record${_visibleRecords.length == 1 ? '' : 's'} found',
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.mutedText,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+      ),
+    );
+  }
+
+  Widget _dropdown(
+    String label,
+    String? value,
+    List<String> values,
+    ValueChanged<String?> onChanged,
+  ) => DropdownButtonFormField<String?>(
+    initialValue: value,
+    isExpanded: true,
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      enabledBorder: _quarantineFieldBorder,
+      focusedBorder: _quarantineFieldBorder.copyWith(
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+      ),
+    ),
+    style: const TextStyle(color: AppColors.strongText, fontSize: 13),
+    dropdownColor: AppColors.surface,
+    items: [
+      DropdownMenuItem<String?>(value: null, child: Text(label)),
+      ...values.map(
+        (item) => DropdownMenuItem<String?>(value: item, child: Text(item)),
+      ),
+    ],
+    onChanged: onChanged,
+  );
+
+  Widget _errorBanner() => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.error.withValues(alpha: 0.12),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            _error!,
+            style: const TextStyle(color: AppColors.errorText),
+          ),
+        ),
+        TextButton(onPressed: _load, child: const Text('Retry')),
+      ],
+    ),
+  );
+
+  Widget _quarantineTable(List<QuarantineRecord> records) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth < 700
+        ? _quarantineCards(records)
+        : Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: _quarantineDecoration,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Inventory Rolls')),
+                  DataColumn(label: Text('Severity')),
+                  DataColumn(label: Text('Reason')),
+                  DataColumn(label: Text('Created')),
+                  DataColumn(label: Text('Status')),
+                  DataColumn(label: Text('Released')),
+                  DataColumn(label: Text('Actions')),
+                ],
+                rows: records
+                    .map(
+                      (record) => DataRow(
+                        cells: [
+                          DataCell(Text(record.inventoryRollId)),
+                          DataCell(
+                            _QuarantineBadge(
+                              label: _severityFor(record),
+                              type: _QuarantineBadgeType.severity,
+                            ),
+                          ),
+                          DataCell(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Text(
+                                record.reason,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(_formatDate(record.createdAt))),
+                          DataCell(
+                            _QuarantineBadge(
+                              label: record.status,
+                              type: _QuarantineBadgeType.status,
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              record.releasedAt == null
+                                  ? 'Not released'
+                                  : _formatDate(record.releasedAt!),
+                            ),
+                          ),
+                          DataCell(
+                            IconButton(
+                              onPressed: () => _open(record),
+                              icon: const Icon(Icons.visibility_outlined),
+                              tooltip: 'View',
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+  );
+
+  Widget _quarantineCards(List<QuarantineRecord> records) => Column(
+    children: [
+      for (final record in records) ...[
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 15, 12, 8),
+          decoration: _quarantineDecoration,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    color: AppColors.primaryLight,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      record.inventoryRollId,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.strongText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
+              const SizedBox(height: 5),
+              _quarantineField(
+                'Severity',
+                _QuarantineBadge(
+                  label: _severityFor(record),
+                  type: _QuarantineBadgeType.severity,
+                ),
+              ),
+              _quarantineField(
+                'Reason',
+                Text(
+                  record.reason,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _quarantineField('Created', Text(_formatDate(record.createdAt))),
+              _quarantineField(
+                'Status',
+                _QuarantineBadge(
+                  label: record.status,
+                  type: _QuarantineBadgeType.status,
+                ),
+              ),
+              _quarantineField(
+                'Released',
+                Text(
+                  record.releasedAt == null
+                      ? 'Not released'
+                      : _formatDate(record.releasedAt!),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _open(record),
+                  icon: const Icon(Icons.visibility_outlined, size: 18),
+                  label: const Text('View'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primaryLight,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ],
+  );
+
+  Widget _quarantineField(String label, Widget value) => Padding(
+    padding: const EdgeInsets.only(top: 5, bottom: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.mutedText,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: DefaultTextStyle(
+            style: const TextStyle(
+              color: AppColors.strongText,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            child: value,
+          ),
+        ),
+      ],
+    ),
+  );
 }
+
+enum _QuarantineBadgeType { severity, status }
+
+class _QuarantineBadge extends StatelessWidget {
+  const _QuarantineBadge({required this.label, required this.type});
+
+  final String label;
+  final _QuarantineBadgeType type;
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = label.toLowerCase();
+    final color = type == _QuarantineBadgeType.status
+        ? AppColors.primaryLight
+        : lower == 'high' || lower == 'critical'
+        ? AppColors.error
+        : lower == 'low'
+        ? const Color(0xFF67E8F9)
+        : AppColors.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.25,
+        ),
+      ),
+    );
+  }
+}
+
+final _quarantineFieldBorder = OutlineInputBorder(
+  borderRadius: BorderRadius.circular(12),
+  borderSide: const BorderSide(color: Color(0xFF2A3958), width: 1.2),
+);
+
+final _quarantineDecoration = BoxDecoration(
+  gradient: const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+  ),
+  borderRadius: BorderRadius.circular(16),
+  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+  boxShadow: [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.25),
+      blurRadius: 10,
+      offset: const Offset(0, 4),
+    ),
+  ],
+);
 
 enum _QuarantineSort { newest, oldest, batch, severity, status }
 
@@ -252,12 +642,26 @@ class _QuarantineFilterSheetState extends State<_QuarantineFilterSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Filter quarantine', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Filter quarantine',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 12),
-          _dropdown('Severity', _severity, const ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], (value) => setState(() => _severity = value)),
-          _dropdown('Status', _status, const ['Active', 'Released'], (value) => setState(() => _status = value)),
+          _dropdown('Severity', _severity, const [
+            'LOW',
+            'MEDIUM',
+            'HIGH',
+            'Critical',
+          ], (value) => setState(() => _severity = value)),
+          _dropdown('Status', _status, const [
+            'Active',
+            'Released',
+          ], (value) => setState(() => _status = value)),
           FilledButton(
-            onPressed: () => Navigator.pop(context, _QuarantineFilters(severity: _severity, status: _status)),
+            onPressed: () => Navigator.pop(
+              context,
+              _QuarantineFilters(severity: _severity, status: _status),
+            ),
             child: const Text('Apply filters'),
           ),
           TextButton(
@@ -281,7 +685,9 @@ class _QuarantineFilterSheetState extends State<_QuarantineFilterSheet> {
       decoration: InputDecoration(labelText: label),
       items: [
         const DropdownMenuItem<String?>(value: null, child: Text('All')),
-        ...values.map((item) => DropdownMenuItem<String?>(value: item, child: Text(item))),
+        ...values.map(
+          (item) => DropdownMenuItem<String?>(value: item, child: Text(item)),
+        ),
       ],
       onChanged: onChanged,
     ),

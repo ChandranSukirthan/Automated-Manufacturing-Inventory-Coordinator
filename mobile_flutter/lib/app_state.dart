@@ -18,9 +18,18 @@ class AppState extends ChangeNotifier {
   bool get isAuthenticated => session != null;
 
   Future<void> restore() async {
-    session = null;
-    isLoading = false;
+    isLoading = true;
+    error = null;
     notifyListeners();
+
+    try {
+      session = await storage.read();
+    } catch (_) {
+      session = null;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> login(String email, String password) async {

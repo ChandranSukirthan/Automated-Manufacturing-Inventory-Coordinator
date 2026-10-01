@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../app_colors.dart';
 import '../app_state.dart';
-import '../controllers/inventory_controller.dart';
+import '../services/admin_service.dart';
 import '../services/purchase_order_service.dart';
 import '../services/quality_service.dart';
-import '../services/admin_service.dart';
-import '../views/factory_assistant_view.dart';
+import 'package:mobile_flutter/screens/admin/it_admin_main_screen.dart';
+import 'worker_dashboard_screen.dart';
 import 'dashboard_screen.dart';
 import 'defects_screen.dart';
+import 'defect_form_screen.dart';
 import 'quarantine_screen.dart';
 import 'quarantine_history_screen.dart';
 import 'profile_screen.dart';
@@ -19,6 +21,7 @@ import 'purchase_orders/notification_status_screen.dart';
 import 'purchase_orders/procurement_details_screen.dart';
 import 'purchase_orders/incoming_supplies_screen.dart';
 import 'admin_hub_screen.dart';
+import 'role_dashboard_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -40,49 +43,63 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
-  late final InventoryController _inventoryController;
+  int _selectedNavigationIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _inventoryController = InventoryController(poService: widget.poService);
-  }
-
-  @override
-  void dispose() {
-    _inventoryController.dispose();
-    super.dispose();
+  Future<void> _showProfilePopup() async {
+    final user = widget.appState.session!.user;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      builder: (_) => _ProfilePopup(
+        fullName: user.fullName,
+        email: user.email,
+        onSaveName: widget.appState.updateProfile,
+        onSignOut: widget.appState.logout,
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final user = widget.appState.session!.user;
-    final isITAdmin = user.isITAdmin;
-    final isQualityInspector = user.isQualityInspector;
-    final isManager = user.isSupplyChainManager || isITAdmin;
+    final isITAdmin = user.isITAdmin || user.role == 'ITAdmin' || user.role == '3' || user.role == 'Admin';
+    final isFloorWorker = user.isFloorWorker || user.role == 'FloorWorker' || user.role == '0' || user.role == 'Worker';
+    final isQualityInspector = user.isQualityInspector || user.role == 'QualityInspector' || user.role == '2';
+    final isManager = user.isSupplyChainManager || user.role == 'SupplyChainManager' || user.role == '1' || user.role == 'Manager';
+
+    if (isITAdmin) {
+      return ItAdminMainScreen(
+        apiClient: widget.qualityService.api,
+        showAppBar: true,
+        onSignOut: widget.appState.logout,
+        userName: user.fullName,
+        userEmail: user.email,
+      );
+    }
+
+    if (isFloorWorker) {
+      return WorkerDashboardScreen(qualityService: widget.qualityService);
+    }
 
     final List<Widget> screens;
     final List<String> titles;
 
-    if (isITAdmin) {
+    if (isQualityInspector) {
       screens = [
-        AdminHubScreen(adminService: widget.adminService),
-        POStatusDashboardScreen(service: widget.poService),
-        POListScreen(service: widget.poService),
-        AIWorkflowStatusScreen(service: widget.poService),
         DashboardScreen(
           service: widget.qualityService,
           appState: widget.appState,
         ),
+        DefectsScreen(service: widget.qualityService, showAppBar: false),
+        QuarantineScreen(service: widget.qualityService),
+        QuarantineHistoryScreen(
+          service: widget.qualityService,
+          showPageChrome: false,
+        ),
       ];
-      titles = [
-        'Admin Hub',
-        'PO Dashboard',
-        'Purchase Orders',
-        'AI Workflows',
-        'Quality Overview',
-      ];
-    } else if (isManager) {
+      titles = ['Dashboard', 'Defect reports', 'Quarantine', 'History'];
+    } else {
       screens = [
         POStatusDashboardScreen(service: widget.poService),
         POListScreen(service: widget.poService),
@@ -97,78 +114,16 @@ class _HomeShellState extends State<HomeShell> {
         'Suppliers & Verification',
         'Low Stock & Reorder',
       ];
-    } else if (isQualityInspector) {
-      screens = [
-        DashboardScreen(
-          service: widget.qualityService,
-          appState: widget.appState,
-        ),
-        DefectsScreen(service: widget.qualityService),
-        QuarantineScreen(service: widget.qualityService),
-        QuarantineHistoryScreen(service: widget.qualityService),
-      ];
-      titles = ['Dashboard', 'Defect reports', 'Quarantine', 'History'];
-    } else {
-      screens = [
-        FactoryAssistantView(
-          controller: _inventoryController,
-          poService: widget.poService,
-        ),
-        ProcurementDetailsScreen(service: widget.poService),
-        IncomingSuppliesScreen(service: widget.poService),
-        NotificationStatusScreen(service: widget.poService),
-      ];
-      titles = [
-        'Factory Assistant',
-        'Procurement Tracker',
-        'Incoming Supplies',
-        'Alerts',
-      ];
     }
-
     return Scaffold(
       appBar: AppBar(
         title: Text(titles[_selectedIndex < titles.length ? _selectedIndex : 0]),
         actions: [
-          PopupMenuButton<String>(
+          IconButton(
+            onPressed: _showProfilePopup,
             icon: const Icon(Icons.account_circle_outlined),
-            onSelected: (value) async {
-              if (value == 'logout') {
-                await widget.appState.logout();
-                return;
-              }
-              if (value != 'profile' || !mounted) return;
-
-              await Navigator.push<void>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ProfileScreen(appState: widget.appState),
-                ),
-              );
-              if (mounted) setState(() {});
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem<String>(
-                value: 'profile',
-                enabled: true,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user.fullName,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    Text(user.email),
-                    Text(user.role),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                value: 'logout',
-                child: Text('Sign out'),
-              ),
-            ],
+            color: AppColors.primaryLight,
+            tooltip: 'Profile',
           ),
         ],
       ),
@@ -309,21 +264,67 @@ class _HomeShellState extends State<HomeShell> {
         index: _selectedIndex < screens.length ? _selectedIndex : 0,
         children: screens,
       ),
-      bottomNavigationBar: isITAdmin
+      bottomNavigationBar: isQualityInspector
           ? NavigationBar(
+              selectedIndex: _selectedNavigationIndex,
+              onDestinationSelected: (index) async {
+                if (index == 2) {
+                  await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          DefectFormScreen(service: widget.qualityService),
+                    ),
+                  );
+                  if (mounted) {
+                    setState(() {
+                      _selectedIndex = 1;
+                      _selectedNavigationIndex = 1;
+                    });
+                  }
+                  return;
+                }
+                setState(() {
+                  _selectedNavigationIndex = index;
+                  _selectedIndex = index > 2 ? index - 1 : index;
+                });
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: 'Dashboard',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.fact_check_outlined),
+                  selectedIcon: Icon(Icons.fact_check),
+                  label: 'Defects',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.add_circle_outline),
+                  selectedIcon: Icon(Icons.add_circle),
+                  label: 'Create\nDefect',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  selectedIcon: Icon(Icons.inventory_2),
+                  label: 'Quarantine',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.history),
+                  label: 'History',
+                ),
+              ],
+            )
+          : NavigationBar(
               selectedIndex: _selectedIndex < 5 ? _selectedIndex : 0,
               onDestinationSelected: (index) =>
                   setState(() => _selectedIndex = index),
               destinations: const [
                 NavigationDestination(
-                  icon: Icon(Icons.admin_panel_settings_outlined),
-                  selectedIcon: Icon(Icons.admin_panel_settings),
-                  label: 'Admin',
-                ),
-                NavigationDestination(
                   icon: Icon(Icons.dashboard_outlined),
                   selectedIcon: Icon(Icons.dashboard),
-                  label: 'PO Dash',
+                  label: 'Dashboard',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.receipt_long_outlined),
@@ -331,104 +332,275 @@ class _HomeShellState extends State<HomeShell> {
                   label: 'Orders',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.psychology_outlined),
-                  selectedIcon: Icon(Icons.psychology),
-                  label: 'AI Flows',
+                  icon: Icon(Icons.auto_awesome_outlined),
+                  selectedIcon: Icon(Icons.auto_awesome),
+                  label: 'AI Sourcing',
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.fact_check_outlined),
-                  selectedIcon: Icon(Icons.fact_check),
-                  label: 'Quality',
+                  icon: Icon(Icons.business_outlined),
+                  selectedIcon: Icon(Icons.business),
+                  label: 'Suppliers',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.warning_amber_rounded),
+                  selectedIcon: Icon(Icons.warning_rounded),
+                  label: 'Stock Alerts',
                 ),
               ],
-            )
-          : isManager
-              ? NavigationBar(
-                  selectedIndex: _selectedIndex < 5 ? _selectedIndex : 0,
-                  onDestinationSelected: (index) =>
-                      setState(() => _selectedIndex = index),
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.dashboard_outlined),
-                      selectedIcon: Icon(Icons.dashboard),
-                      label: 'Dashboard',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.receipt_long_outlined),
-                      selectedIcon: Icon(Icons.receipt_long),
-                      label: 'Orders',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.auto_awesome_outlined),
-                      selectedIcon: Icon(Icons.auto_awesome),
-                      label: 'AI Sourcing',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.business_outlined),
-                      selectedIcon: Icon(Icons.business),
-                      label: 'Suppliers',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.warning_amber_rounded),
-                      selectedIcon: Icon(Icons.warning_rounded),
-                      label: 'Stock Alerts',
-                    ),
-                  ],
-                )
-              : isQualityInspector
-                  ? NavigationBar(
-                      selectedIndex: _selectedIndex < 4 ? _selectedIndex : 0,
-                      onDestinationSelected: (index) =>
-                          setState(() => _selectedIndex = index),
-                      destinations: const [
-                        NavigationDestination(
-                          icon: Icon(Icons.dashboard_outlined),
-                          selectedIcon: Icon(Icons.dashboard),
-                          label: 'Overview',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.fact_check_outlined),
-                          selectedIcon: Icon(Icons.fact_check),
-                          label: 'Defects',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.inventory_2_outlined),
-                          selectedIcon: Icon(Icons.inventory_2),
-                          label: 'Quarantine',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.history),
-                          label: 'History',
-                        ),
-                      ],
-                    )
-                  : NavigationBar(
-                      selectedIndex: _selectedIndex < 4 ? _selectedIndex : 0,
-                      onDestinationSelected: (index) =>
-                          setState(() => _selectedIndex = index),
-                      destinations: const [
-                        NavigationDestination(
-                          icon: Icon(Icons.precision_manufacturing_outlined),
-                          selectedIcon: Icon(Icons.precision_manufacturing),
-                          label: 'Factory',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.auto_awesome_outlined),
-                          selectedIcon: Icon(Icons.auto_awesome),
-                          label: 'Procurement',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.local_shipping_outlined),
-                          selectedIcon: Icon(Icons.local_shipping),
-                          label: 'Deliveries',
-                        ),
-                        NavigationDestination(
-                          icon: Icon(Icons.notifications_active_outlined),
-                          selectedIcon: Icon(Icons.notifications_active),
-                          label: 'Alerts',
-                        ),
-                      ],
-                    ),
+            ),
     );
   }
+}
+
+class _ProfilePopup extends StatefulWidget {
+  const _ProfilePopup({
+    required this.fullName,
+    required this.email,
+    required this.onSaveName,
+    required this.onSignOut,
+  });
+
+  final String fullName;
+  final String email;
+  final Future<dynamic> Function(String fullName) onSaveName;
+  final Future<void> Function() onSignOut;
+
+  @override
+  State<_ProfilePopup> createState() => _ProfilePopupState();
+}
+
+class _ProfilePopupState extends State<_ProfilePopup> {
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.fullName,
+  );
+  bool _editing = false;
+  bool _saving = false;
+  bool _signingOut = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveName() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSaveName(name);
+      if (mounted) {
+        setState(() {
+          _editing = false;
+          _saving = false;
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = exception.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _signOut() async {
+    setState(() => _signingOut = true);
+    await widget.onSignOut();
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+    child: Container(
+      constraints: const BoxConstraints(maxWidth: 390),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF131B2E), Color(0xFF0F1523)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.18),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: Text(
+                  widget.fullName.trim().isEmpty
+                      ? '?'
+                      : widget.fullName.trim()[0].toUpperCase(),
+                  style: const TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _editing
+                    ? TextField(
+                        controller: _nameController,
+                        autofocus: true,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _saveName(),
+                        style: const TextStyle(
+                          color: AppColors.strongText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Your name',
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                      )
+                    : InkWell(
+                        onTap: () => setState(() => _editing = true),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.fullName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.strongText,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () =>
+                                    setState(() => _editing = true),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                color: AppColors.primaryLight,
+                                tooltip: 'Edit name',
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+              ),
+              if (_editing)
+                IconButton(
+                  onPressed: _saving ? null : _saveName,
+                  icon: _saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check_rounded),
+                  color: AppColors.primaryLight,
+                  tooltip: 'Save name',
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 60),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'QA',
+                  style: TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _error!,
+              style: const TextStyle(color: AppColors.errorText, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Divider(height: 1, color: const Color(0xFF2A3958).withValues(alpha: 0.8)),
+          const SizedBox(height: 5),
+          TextButton.icon(
+            onPressed: _signingOut ? null : _signOut,
+            icon: _signingOut
+                ? const SizedBox.square(
+                    dimension: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.logout_rounded, size: 19),
+            label: const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Sign out'),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              alignment: Alignment.centerLeft,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }

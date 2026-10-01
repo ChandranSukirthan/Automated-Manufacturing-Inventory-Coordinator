@@ -110,16 +110,31 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
   const getRoleName = (role) => {
     if (role === null || role === undefined) return '';
     const s = String(role).trim().toLowerCase();
-    if (s === '1' || s === 'supplychainmanager') {
+    if (s === '1' || s === 'supplychainmanager' || s === 'manager') {
       return 'Supply Chain Manager';
     }
-    if (s === '2' || s === 'qualityinspector') {
+    if (s === '2' || s === 'qualityinspector' || s === 'quality') {
       return 'Quality Inspector';
     }
     if (s === '3' || s === 'itadmin' || s === 'systemadmin' || s === 'admin') {
       return 'System Admin';
     }
-    return '';
+    if (s === '0' || s === 'floorworker' || s === 'worker') {
+      return 'Floor Worker';
+    }
+    const r = parseInt(role, 10);
+    switch (r) {
+      case 1:
+        return 'Supply Chain Manager';
+      case 2:
+        return 'Quality Inspector';
+      case 3:
+        return 'System Admin';
+      case 0:
+        return 'Floor Worker';
+      default:
+        return 'Floor Worker';
+    }
   };
 
   return (
@@ -177,11 +192,9 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
               <p className="text-xs font-semibold text-white truncate">
                 {user?.fullName || 'Sukirthan'}
               </p>
-              {getRoleName(user?.role) && getRoleName(user?.role) !== 'Floor Worker' && (
-                <p className="text-[10px] text-brand-400 font-medium truncate">
-                  {getRoleName(user?.role)}
-                </p>
-              )}
+              <p className="text-[10px] text-brand-400 font-medium truncate">
+                {getRoleName(user?.role)}
+              </p>
             </div>
           </div>
         </div>

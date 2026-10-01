@@ -5,10 +5,12 @@ namespace backend.Models
 {
     public class InventoryRoll
     {
-        public int Id { get; set; }
+        public string Id { get; set; } = string.Empty;
         
         // Foreign Key
         public int RawMaterialId { get; set; }
+        
+        public string? BatchId { get; set; } = "BATCH001";
         
         [JsonIgnore]
         public RawMaterial? RawMaterial { get; set; }

@@ -30,6 +30,7 @@ import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
 import QuarantineManagementPage from './pages/Dashboard/QuarantineManagementPage';
 import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
 import QuarantineHistoryPage from './pages/Dashboard/QuarantineHistoryPage';
+import QALayout from './components/Layout/QALayout';
 
 // Student 4: Production & Equipment Pages
 import ProductionDashboard from './pages/Production/ProductionDashboard';
@@ -60,7 +61,6 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/otp-verify" element={<OTPVerification />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-
           {/* User Profile */}
           <Route
             path="/profile"
@@ -185,11 +185,59 @@ function App() {
             }
           />
 
-          {/* Worker Dashboard */}
+          {/* Student 1: Floor Worker Inventory & Stock Tracking Routes */}
           <Route
             path="/dashboard/worker"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/:id"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/rolls"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/stock-levels"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/low-stock"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <WorkerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/history"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
                 <WorkerDashboard />
               </ProtectedRoute>
             }
@@ -197,22 +245,24 @@ function App() {
 
           {/* Student 3: Quality & Defect Routes */}
           <Route element={<ProtectedRoute allowedRoles={[2, 'QualityInspector', 'ITAdmin']} />}>
-            <Route path="/quality" element={<QualityDashboard />} />
-            <Route path="/quality/defects" element={<DefectReportsPage />} />
-            <Route path="/quality/defects/new" element={<DefectFormPage />} />
-            <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
-            <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
-            <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
-            <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
-            <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
-            <Route path="/dashboard/quality" element={<QualityDashboard />} />
-            <Route path="/dashboard/defects" element={<DefectReportsPage />} />
-            <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
-            <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
-            <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
-            <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
-            <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
-            <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+            <Route element={<QALayout />}>
+              <Route path="/quality" element={<QualityDashboard />} />
+              <Route path="/quality/defects" element={<DefectReportsPage />} />
+              <Route path="/quality/defects/new" element={<DefectFormPage />} />
+              <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
+              <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
+              <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
+              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
+              <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/dashboard/quality" element={<QualityDashboard />} />
+              <Route path="/dashboard/defects" element={<DefectReportsPage />} />
+              <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
+              <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
+              <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
+              <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
+              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
+              <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+            </Route>
           </Route>
 
           {/* Student 4: Production & Equipment Routes */}

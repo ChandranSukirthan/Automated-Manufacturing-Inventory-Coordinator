@@ -1,6 +1,9 @@
 import '../models/quality_models.dart';
 import 'api_client.dart';
 
+Map<String, dynamic> _affectedInventoryBody(List<String>? inventory) =>
+    inventory == null ? <String, dynamic>{} : {'affectedInventory': inventory};
+
 class QualityService {
   QualityService(this.api);
 
@@ -35,53 +38,70 @@ class QualityService {
   );
 
   Future<QualityRecommendation> analyzeDefect({
-    required String batchId,
-    required String productType,
+    String? skuCode,
+    String? batchId,
+    String? productType,
     required String severity,
     required String description,
+    List<String> affectedInventory = const [],
   }) async => QualityRecommendation.fromJson(
-    await api.postAi('/quality/recommendation', {
-      'batchId': batchId,
-      'productType': productType,
+    await api.post('/defects/analyze', {
+      if (skuCode != null && skuCode.trim().isNotEmpty)
+        'skuCode': skuCode.trim(),
+      if (batchId != null && batchId.trim().isNotEmpty)
+        'batchId': batchId.trim(),
+      if (productType != null && productType.trim().isNotEmpty)
+        'productType': productType.trim(),
       'severity': severity,
       'description': description,
+      'affectedInventory': affectedInventory,
     }) as Map<String, dynamic>,
   );
 
   Future<DefectReport> createDefect({
-    required String batchId,
-    required String productType,
+    String? skuCode,
+    String? batchId,
+    String? productType,
     required String severity,
     required String description,
     String status = 'Open',
-    List<String> affectedInventory = const [],
+    List<String>? affectedInventory,
   }) async => DefectReport.fromJson(
     await api.post('/defects', {
-      'batchId': batchId,
-      'productType': productType,
+      if (skuCode != null && skuCode.trim().isNotEmpty)
+        'skuCode': skuCode.trim(),
+      if (batchId != null && batchId.trim().isNotEmpty)
+        'batchId': batchId.trim(),
+      if (productType != null && productType.trim().isNotEmpty)
+        'productType': productType.trim(),
       'severity': severity,
       'description': description,
       'status': status,
-      'affectedInventory': affectedInventory,
+      ..._affectedInventoryBody(affectedInventory),
     }) as Map<String, dynamic>,
   );
 
   Future<DefectReport> updateDefect({
     required String id,
-    required String batchId,
-    required String productType,
+    String? skuCode,
+    String? batchId,
+    String? productType,
     required String severity,
     required String description,
     required String status,
-    List<String> affectedInventory = const [],
+    List<String>? affectedInventory,
   }) async => DefectReport.fromJson(
     await api.put('/defects/$id', {
-      'batchId': batchId,
-      'productType': productType,
+      if (skuCode != null && skuCode.trim().isNotEmpty)
+        'skuCode': skuCode.trim(),
+      if (batchId != null && batchId.trim().isNotEmpty)
+        'batchId': batchId.trim(),
+      if (productType != null && productType.trim().isNotEmpty)
+        'productType': productType.trim(),
       'severity': severity,
       'description': description,
       'status': status,
-      'affectedInventory': affectedInventory,
+      ..._affectedInventoryBody(affectedInventory),
     }) as Map<String, dynamic>,
   );
 
@@ -97,8 +117,9 @@ class QualityService {
 
   Future<List<QuarantineRecord>> quarantineDefect(
     String defectId,
-    String reason,
-  ) async => _list(
+    String reason, [
+    String? inventoryRollId,
+  ]) async => _list(
     await api.post('/defects/$defectId/quarantine', {'reason': reason}),
     QuarantineRecord.fromJson,
   );

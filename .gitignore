@@ -52,6 +52,7 @@ appsettings.Local.json
 # OS generated files
 .DS_Store
 .DS_Store?
+%SystemDrive%/
 ._*
 .Spotlight-V100
 .Trashes
@@ -83,3 +84,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+
+# Gradle / Android caches
+.gradle/
+**/.gradle/

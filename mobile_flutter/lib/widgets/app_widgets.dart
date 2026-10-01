@@ -38,6 +38,85 @@ class MetricCard extends StatelessWidget {
   );
 }
 
+class DashboardMetricCard extends StatelessWidget {
+  const DashboardMetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+    required this.gradientColors,
+    super.key,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color accentColor;
+  final List<Color> gradientColors;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: gradientColors,
+      ),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: accentColor.withValues(alpha: 0.42), width: 1.2),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.25),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: accentColor, size: 22),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$value',
+              style: const TextStyle(
+                color: AppColors.strongText,
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                height: 1,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label.toUpperCase(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.mutedText,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 class StateMessage extends StatelessWidget {
   const StateMessage({
     required this.message,

@@ -57,12 +57,16 @@ class QualityRecommendation {
     required this.quarantineRequired,
     required this.affectedInventory,
     required this.riskLevel,
+    this.reason,
+    this.inventoryContext = const [],
   });
 
   final String batchId;
   final bool quarantineRequired;
   final List<String> affectedInventory;
   final String riskLevel;
+  final String? reason;
+  final List<Map<String, dynamic>> inventoryContext;
 
   factory QualityRecommendation.fromJson(Map<String, dynamic> json) =>
       QualityRecommendation(
@@ -72,6 +76,10 @@ class QualityRecommendation {
             .map((item) => item.toString())
             .toList(),
         riskLevel: json['riskLevel']?.toString() ?? 'LOW',
+        reason: json['reason']?.toString(),
+        inventoryContext: (json['inventoryContext'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .toList(),
       );
 }
 
@@ -100,16 +108,28 @@ class InventoryRoll {
     required this.id,
     required this.batchId,
     required this.status,
+    this.rollIdentifier,
+    this.currentQuantity,
+    this.initialQuantity,
+    this.rawMaterialId,
   });
 
   final String id;
   final String batchId;
   final String status;
+  final String? rollIdentifier;
+  final num? currentQuantity;
+  final num? initialQuantity;
+  final int? rawMaterialId;
 
   factory InventoryRoll.fromJson(Map<String, dynamic> json) => InventoryRoll(
     id: json['id']?.toString() ?? '',
     batchId: json['batchId'] as String? ?? '',
     status: json['status'] as String? ?? '',
+    rollIdentifier: json['rollIdentifier']?.toString(),
+    currentQuantity: json['currentQuantity'] as num?,
+    initialQuantity: json['initialQuantity'] as num?,
+    rawMaterialId: json['rawMaterialId'] as int?,
   );
 }
 

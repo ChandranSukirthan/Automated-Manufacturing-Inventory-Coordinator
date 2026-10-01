@@ -23,7 +23,8 @@ from langgraph.graph import StateGraph, START, END
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 from ai.core.config import settings
 from ai.agents.planner import planner_node
-from ai.agents.data_extraction import data_extraction_node, production_analysis_node
+from ai.agents.data_extraction import data_extraction_node
+from ai.agents.production_analysis import production_analysis_node
 from ai.agents.purchasing import purchasing_node
 from ai.agents.validation import validation_node, execution_node
 
@@ -250,6 +251,13 @@ def run_workflow(
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
+    initial_inv = {}
+    if material_id:
+        initial_inv["materialId"] = material_id
+        initial_inv["itemCode"] = material_id
+    if required_quantity:
+        initial_inv["requiredQuantity"] = required_quantity
+
     initial_state: AgentState = {
         "workflow_id": wf_id,
         "procurement_request_id": procurement_request_id,
@@ -276,8 +284,8 @@ def run_workflow(
         "preferred_region": preferred_region,
         "required_by_date": required_by_date,
         "specification": specification,
-        # Outputs (initialised empty)
-        "inventory_data": {},
+        # Outputs (initialised)
+        "inventory_data": initial_inv,
         "production_data": {},
         "supplier_rates": [],
         "historical_procurement": [],

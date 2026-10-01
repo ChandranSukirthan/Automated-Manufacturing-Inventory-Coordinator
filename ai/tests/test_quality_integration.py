@@ -205,6 +205,40 @@ def test_quality_route_returns_recommendation_without_mutation(monkeypatch: pyte
     assert response.json()["affectedInventory"] == ["ROLL001", "ROLL002"]
 
 
+def test_quality_route_accepts_defect_without_product_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import ai.routes.quality_routes as quality_routes
+
+    def fake_validation(state: dict) -> dict:
+        return {
+            **state,
+            "quality_data": {
+                **state["quality_data"],
+                "validation": {
+                    "batchId": "BATCH001",
+                    "quarantineRequired": False,
+                    "affectedInventory": ["ROLL001"],
+                    "riskLevel": "LOW",
+                },
+            },
+        }
+
+    monkeypatch.setattr(quality_routes, "run_quality_validation", fake_validation)
+    response = TestClient(app).post(
+        "/quality/recommendation",
+        json={
+            "skuCode": "RM001",
+            "severity": "LOW",
+            "description": "Minor cosmetic issue",
+            "affectedInventory": ["ROLL001"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["riskLevel"] == "LOW"
+
+
 def test_exactly_four_mandatory_agents_and_three_quality_tools() -> None:
     assert MANDATORY_AGENTS == (
         "Planner",

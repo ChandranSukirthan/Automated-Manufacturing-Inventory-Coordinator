@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 import logging
+import importlib.util
+from pathlib import Path
 
 from ai.graph.workflow import (
     run_workflow,
@@ -82,6 +84,20 @@ def run_data_extraction_workflow(material_id_or_batch: str, workflow_id: Optiona
                 {"tool": "detect_low_stock", "status": "SUCCESS"},
             ],
         }
+
+
+# Fallback if external graph.py is present
+_graph_py = Path(__file__).resolve().parent.parent / "graph.py"
+if _graph_py.exists():
+    try:
+        _spec = importlib.util.spec_from_file_location("ai_graph_module", _graph_py)
+        if _spec and _spec.loader:
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            if hasattr(_mod, "run_data_extraction_workflow"):
+                run_data_extraction_workflow = getattr(_mod, "run_data_extraction_workflow")
+    except Exception:
+        pass
 
 
 __all__ = [
