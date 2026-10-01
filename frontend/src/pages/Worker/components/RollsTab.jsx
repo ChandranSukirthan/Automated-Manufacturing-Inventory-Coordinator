@@ -34,22 +34,14 @@ export default function RollsTab({
   const [rollMaterialFilter, setRollMaterialFilter] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const materialBySku = new Map(
-    rawMaterials
-      .filter((material) => material.skuCode?.trim())
-      .map((material) => [material.skuCode.trim().toLowerCase(), material])
-  );
-  const sourceItems = inventoryItems?.length ? inventoryItems : rawMaterials;
-  const uniqueRawMaterials = sourceItems.filter((item, index, materials) => {
-    const skuCode = (item.sku || item.skuCode)?.trim().toLowerCase();
-    return skuCode && materials.findIndex((candidate) => (candidate.sku || candidate.skuCode)?.trim().toLowerCase() === skuCode) === index;
-  }).map((item) => {
-    const skuCode = (item.sku || item.skuCode).trim();
-    const rawMaterial = materialBySku.get(skuCode.toLowerCase());
+  const uniqueRawMaterials = (rawMaterials || []).filter((material, index, materials) => {
+    const skuCode = material.skuCode?.trim().toLowerCase();
+    return skuCode && materials.findIndex((candidate) => candidate.skuCode?.trim().toLowerCase() === skuCode) === index;
+  }).map((material) => {
     return {
-      id: rawMaterial?.id,
-      skuCode,
-      name: item.name || rawMaterial?.name || 'Raw Material',
+      id: material.id,
+      skuCode: material.skuCode.trim(),
+      name: material.name || 'Raw Material',
     };
   });
 
@@ -199,6 +191,7 @@ export default function RollsTab({
                   onChange={(e) => setRollRawMaterialId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition"
                 >
+                  <option value="" disabled>Select Raw Material</option>
                   {uniqueRawMaterials.map((m) => (
                     <option key={m.skuCode} value={m.id} disabled={!m.id}>
                       {m.skuCode} — {m.name}

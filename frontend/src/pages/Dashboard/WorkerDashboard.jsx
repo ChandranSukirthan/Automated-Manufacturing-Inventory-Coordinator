@@ -69,7 +69,7 @@ export default function WorkerDashboard() {
   // Roll registration
   const [rollIdentifier, setRollIdentifier] = useState('');
   const [rollQuantity, setRollQuantity] = useState('1');
-  const [rollRawMaterialId, setRollRawMaterialId] = useState(1);
+  const [rollRawMaterialId, setRollRawMaterialId] = useState('');
   const [registeredRoll, setRegisteredRoll] = useState(null);
 
   // QR lookup

@@ -115,39 +115,6 @@ namespace ManufacturingCoordinator.Data
                 await db.SaveChangesAsync();
             }
 
-            // Seed 10 active StockAlerts
-            if (await mfgDb.StockAlerts.CountAsync(a => a.Status != "Resolved") < 10)
-            {
-                var material = await db.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-STEEL-001");
-                if (material != null)
-                {
-                    var existingAlerts = await mfgDb.StockAlerts.ToListAsync();
-                    mfgDb.StockAlerts.RemoveRange(existingAlerts);
-                    await mfgDb.SaveChangesAsync();
-
-                    var newAlerts = new List<backend.Models.StockAlert>();
-                    for (int i = 1; i <= 10; i++)
-                    {
-                        newAlerts.Add(new backend.Models.StockAlert
-                        {
-                            Sku = material.SkuCode,
-                            PackagingType = material.UnitOfMeasure,
-                            QuantityRequested = 500 + (i * 50),
-                            Status = "Pending",
-                            Timestamp = DateTime.UtcNow.AddHours(-i),
-                            WorkerId = "Auto-Monitor-Bot",
-                            MaterialId = material.Id,
-                            MaterialName = material.Name,
-                            CurrentStock = 150m - (i * 5),
-                            RequiredQuantity = 500m + (i * 50),
-                            SafetyStock = 200m
-                        });
-                    }
-                    
-                    mfgDb.StockAlerts.AddRange(newAlerts);
-                    await mfgDb.SaveChangesAsync();
-                }
-            }
         }
 
         private static async Task EnsureProcurementTablesAsync(ApplicationDbContext db)
