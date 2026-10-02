@@ -88,3 +88,10 @@ __pycache__/
 # Gradle / Android caches
 .gradle/
 **/.gradle/
+
+# Test scripts
+test_db.py
+test_scm.py
+test_scm.js
+test_error.js
+test_alert.py

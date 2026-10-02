@@ -553,22 +553,28 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (candidate == null)
                 throw new KeyNotFoundException($"Candidate {candidateId} not found for ProcurementRequest {procurementRequestId}.");
 
-            // Create new verified Supplier entity in PostgreSQL
-            var supplier = new Supplier
+            var supplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.ContactEmail == dto.ContactEmail);
+            if (supplier == null)
             {
-                SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
-                Name = dto.SupplierName,
-                ContactEmail = dto.ContactEmail,
-                ContactPhone = dto.ContactPhone ?? string.Empty,
-                Address = dto.Address ?? string.Empty,
-                PaymentTerms = dto.PaymentTerms,
-                LeadTimeDays = dto.LeadTimeDays > 0 ? dto.LeadTimeDays : candidate.LeadTimeDays,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            _context.Suppliers.Add(supplier);
+                supplier = new Supplier
+                {
+                    SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
+                    Name = dto.SupplierName,
+                    ContactEmail = dto.ContactEmail,
+                    ContactPhone = dto.ContactPhone ?? string.Empty,
+                    Address = dto.Address ?? string.Empty,
+                    PaymentTerms = dto.PaymentTerms,
+                    LeadTimeDays = dto.LeadTimeDays > 0 ? dto.LeadTimeDays : candidate.LeadTimeDays,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Suppliers.Add(supplier);
+            }
+            else
+            {
+                supplier.IsActive = true;
+            }
             await _context.SaveChangesAsync();
 
             // Link candidate to newly onboarded supplier and approve
@@ -697,20 +703,29 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Auto-create a minimal Supplier record from candidate data if not already linked
             if (!candidate.SupplierId.HasValue)
             {
-                var autoSupplier = new Supplier
+                var targetEmail = candidate.SupplierName.ToLower().Replace(" ", "") + "@supplier.example.com";
+                var autoSupplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.ContactEmail == targetEmail);
+                if (autoSupplier == null)
                 {
-                    SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
-                    Name = candidate.SupplierName,
-                    ContactEmail = candidate.SupplierName.ToLower().Replace(" ", "") + "@supplier.example.com",
-                    ContactPhone = string.Empty,
-                    Address = candidate.SourceUrl ?? string.Empty,
-                    PaymentTerms = "Net 30",
-                    LeadTimeDays = candidate.LeadTimeDays > 0 ? candidate.LeadTimeDays : 7,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.Suppliers.Add(autoSupplier);
+                    autoSupplier = new Supplier
+                    {
+                        SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
+                        Name = candidate.SupplierName,
+                        ContactEmail = targetEmail,
+                        ContactPhone = string.Empty,
+                        Address = candidate.SourceUrl ?? string.Empty,
+                        PaymentTerms = "Net 30",
+                        LeadTimeDays = candidate.LeadTimeDays > 0 ? candidate.LeadTimeDays : 7,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.Suppliers.Add(autoSupplier);
+                }
+                else
+                {
+                    autoSupplier.IsActive = true;
+                }
                 await _context.SaveChangesAsync();
                 candidate.SupplierId = autoSupplier.Id;
                 await _context.SaveChangesAsync();

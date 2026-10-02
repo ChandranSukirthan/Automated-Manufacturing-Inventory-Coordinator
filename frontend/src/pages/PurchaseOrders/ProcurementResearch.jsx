@@ -417,27 +417,9 @@ export default function ProcurementResearch() {
       );
       await loadRequestDetails(currentRequest.id);
     } catch (err) {
-      console.warn('Backend verifySupplierCandidate failed, applying local verification', err);
-      if (currentRequest?.candidates) {
-        const updated = currentRequest.candidates.map((c) => {
-          if (c.id === candidateToVerify.id) {
-            return {
-              ...c,
-              supplierStatus: 'APPROVED',
-              supplierId: c.supplierId || Math.floor(Math.random() * 1000) + 10,
-              supplierName: verifyForm.supplierName,
-              isValidated: true,
-              validationRemarks: 'Supplier successfully verified & onboarded by SCM.'
-            };
-          }
-          return c;
-        });
-        setCurrentRequest((prev) => ({ ...prev, candidates: updated }));
-      }
-      setVerifyModalOpen(false);
-      setSuccessMessage(
-        `Supplier '${verifyForm.supplierName}' verified and onboarded into ERP! You can now generate the Draft Purchase Order.`
-      );
+      console.warn('Backend verifySupplierCandidate failed:', err);
+      const errMsg = err.response?.data?.message || err.message || 'Failed to verify supplier.';
+      setErrorMessage(errMsg);
     } finally {
       setActionLoading(false);
     }
@@ -462,18 +444,10 @@ export default function ProcurementResearch() {
       );
       await loadRequestDetails(currentRequest.id);
     } catch (err) {
-      console.warn('Backend createDraftPo failed, applying local fallback', err);
-      const generatedPoNum = `PO-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const generatedId = Math.floor(100 + Math.random() * 900);
-      setCurrentRequest((prev) => ({
-        ...prev,
-        generatedPurchaseOrderId: generatedId,
-        generatedPoNumber: generatedPoNum,
-        status: 'DraftPoCreated'
-      }));
-      setSuccessMessage(
-        `Draft Purchase Order ${generatedPoNum} created in ERP! Review the terms below or navigate to the PO detail view.`
-      );
+      console.warn('Backend createDraftPo failed:', err);
+      
+      const errMsg = err.response?.data?.message || err.message || 'Failed to create Draft PO. Ensure the supplier is verified.';
+      setErrorMessage(errMsg);
     } finally {
       setActionLoading(false);
     }
