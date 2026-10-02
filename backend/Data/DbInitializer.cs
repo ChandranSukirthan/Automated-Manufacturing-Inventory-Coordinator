@@ -182,6 +182,17 @@ namespace ManufacturingCoordinator.Data
                     ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""Priority"" character varying(50) DEFAULT 'Normal';
                     ALTER TABLE ""SupplierCandidates"" ADD COLUMN IF NOT EXISTS ""Availability"" character varying(100) DEFAULT 'In Stock';
 
+                    -- Ensure StockAlerts procurement columns exist
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""MaterialId"" integer;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""MaterialName"" character varying(200);
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""CurrentStock"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""RequiredQuantity"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""SafetyStock"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""OpenPurchaseQuantity"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""NetDeficit"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""Severity"" character varying(50) DEFAULT 'Medium';
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""IsRead"" boolean NOT NULL DEFAULT false;
+
                     -- Ensure PurchaseOrders tracking and delivery columns exist
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ProcurementRequestId"" integer;
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingStatus"" character varying(50) DEFAULT 'Draft';

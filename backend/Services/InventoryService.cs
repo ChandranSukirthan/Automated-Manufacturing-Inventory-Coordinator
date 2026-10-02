@@ -104,6 +104,34 @@ namespace backend.Services
                 });
                 await _context.SaveChangesAsync();
             }
+
+            // Auto-generate low stock alert if below or at reorder threshold
+            if (item.StockLevel <= item.ReorderThreshold)
+            {
+                var cleanSku = (item.Sku ?? string.Empty).Trim();
+                var hasActiveAlert = await _context.StockAlerts
+                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+                if (!hasActiveAlert)
+                {
+                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                    _context.StockAlerts.Add(new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = item.Category ?? "Standard Roll",
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Pending",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                }
+            }
+
             return item;
         }
 
@@ -114,6 +142,34 @@ namespace backend.Services
             try
             {
                 await _context.SaveChangesAsync();
+
+                // Auto-generate low stock alert if updated to be below or at reorder threshold
+                if (item.StockLevel <= item.ReorderThreshold)
+                {
+                    var cleanSku = (item.Sku ?? string.Empty).Trim();
+                    var hasActiveAlert = await _context.StockAlerts
+                        .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+                    if (!hasActiveAlert)
+                    {
+                        var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                        _context.StockAlerts.Add(new StockAlert
+                        {
+                            Sku = cleanSku,
+                            PackagingType = item.Category ?? "Standard Roll",
+                            QuantityRequested = reqQty,
+                            CurrentStock = item.StockLevel,
+                            RequiredQuantity = reqQty,
+                            SafetyStock = item.ReorderThreshold,
+                            MaterialName = item.Name,
+                            WorkerId = "Automated Low-Stock Detector",
+                            Status = "Pending",
+                            Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                            Timestamp = DateTime.UtcNow
+                        });
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
                 return true;
             }
             catch (DbUpdateConcurrencyException)
@@ -136,6 +192,46 @@ namespace backend.Services
 
         public async Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync()
         {
+            // Auto-detect and sync low-stock alerts from InventoryItems
+            var lowStockItems = await _context.InventoryItems
+                .Where(i => i.StockLevel <= i.ReorderThreshold)
+                .ToListAsync();
+
+            bool hasNew = false;
+            foreach (var item in lowStockItems)
+            {
+                var cleanSku = (item.Sku ?? string.Empty).Trim();
+                if (string.IsNullOrEmpty(cleanSku)) continue;
+
+                var exists = await _context.StockAlerts
+                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+
+                if (!exists)
+                {
+                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                    _context.StockAlerts.Add(new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = item.Category ?? "Standard Roll",
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Pending",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    hasNew = true;
+                }
+            }
+
+            if (hasNew)
+            {
+                await _context.SaveChangesAsync();
+            }
+
             var alerts = await _context.StockAlerts
                 .Where(alert => alert.Status != "Resolved")
                 .OrderByDescending(alert => alert.Timestamp)

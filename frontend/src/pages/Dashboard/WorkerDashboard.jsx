@@ -412,6 +412,8 @@ export default function WorkerDashboard() {
             alerts={alerts}
             onUpdateAlertStatus={handleUpdateAlertStatus}
             onShowAddModal={() => setShowAddAlertModal(true)}
+            onTriggerAi={handleTriggerAiWorkflow}
+            triggeringAi={triggeringAi}
           />
         )}
 
