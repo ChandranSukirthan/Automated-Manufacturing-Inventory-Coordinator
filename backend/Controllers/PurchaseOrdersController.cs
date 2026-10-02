@@ -89,12 +89,6 @@ namespace ManufacturingCoordinator.Controllers
                 var userId = GetCurrentUserId();
                 var po = await _poService.CreateAsync(dto, userId);
                 
-                var materialIds = dto.Lines.Select(l => l.RawMaterialId > 0 ? l.RawMaterialId : l.MaterialId).Distinct().ToList();
-                if (materialIds.Any())
-                {
-                    await _inventoryService.ResolveAlertsForMaterialsAsync(materialIds);
-                }
-                
                 return CreatedAtAction(nameof(GetById), new { id = po.Id }, po);
             }
             catch (KeyNotFoundException ex)
@@ -292,6 +286,13 @@ namespace ManufacturingCoordinator.Controllers
             try
             {
                 var po = await _poService.ApproveAsync(id, approverId.Value, dto?.Notes);
+                
+                var materialIds = po.OrderLines.Select(l => l.RawMaterialId > 0 ? l.RawMaterialId : l.MaterialId).Distinct().ToList();
+                if (materialIds.Any())
+                {
+                    await _inventoryService.ResolveAlertsForMaterialsAsync(materialIds);
+                }
+                
                 return Ok(po);
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }

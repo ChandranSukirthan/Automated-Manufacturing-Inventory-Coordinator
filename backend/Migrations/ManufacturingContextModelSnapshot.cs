@@ -155,12 +155,42 @@ namespace backend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("CurrentStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaterialName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("NetDeficit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OpenPurchaseQuantity")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("PackagingType")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("QuantityRequested")
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SafetyStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Sku")
                         .IsRequired()

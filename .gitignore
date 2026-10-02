@@ -17,6 +17,7 @@ obj/
 **/obj/
 backend/bin/
 backend/obj/
+backend/Migrations/
 *.user
 *.userosscache
 *.sln.docstates

@@ -753,11 +753,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var createdPo = await _poService.CreateAsync(poDto, userId ?? request.CreatedById);
 
-            // Automatically resolve active alerts for this raw material
-            if (_inventoryService != null)
-            {
-                await _inventoryService.ResolveAlertsForMaterialsAsync(new List<int> { request.RawMaterialId });
-            }
+            // Note: Alerts are resolved during Purchase Order Approval, not when a Draft PO is created.
 
             // Record structured outcome telemetry for future learning dataset (Requirement 12)
             try

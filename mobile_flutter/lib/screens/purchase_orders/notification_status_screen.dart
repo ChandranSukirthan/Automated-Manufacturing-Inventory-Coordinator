@@ -3,6 +3,8 @@ import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
 import 'po_details_screen.dart';
+import 'po_create_screen.dart';
+import 'procurement_details_screen.dart';
 
 class NotificationStatusScreen extends StatefulWidget {
   const NotificationStatusScreen({
@@ -230,27 +232,38 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                       children: [
                                         Expanded(
                                           child: ElevatedButton.icon(
-                                            onPressed: () => _handleReorderAlert(alert),
+                                            onPressed: () => _triggerAiProcurement(alert),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: cyanAccent,
-                                              foregroundColor: Colors.black,
+                                              backgroundColor: const Color(0xFF3B82F6),
+                                              foregroundColor: Colors.white,
                                               padding: const EdgeInsets.symmetric(vertical: 8),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                             ),
-                                            icon: const Icon(Icons.flash_on, size: 14),
-                                            label: const Text('Reorder via PO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            icon: const Icon(Icons.auto_awesome, size: 14),
+                                            label: const Text('AI Procure', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        OutlinedButton(
-                                          onPressed: () => _handleMarkRead(alert.id),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: Colors.white60,
-                                            side: const BorderSide(color: Colors.white24),
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        Expanded(
+                                          child: ElevatedButton.icon(
+                                            onPressed: () => _openManualPurchase(alert),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF10B981),
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            icon: const Icon(Icons.shopping_cart, size: 14),
+                                            label: const Text('Manual Purchase', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                           ),
-                                          child: const Text('Dismiss', style: TextStyle(fontSize: 11)),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          onPressed: () => _handleMarkRead(alert.id),
+                                          icon: const Icon(Icons.close),
+                                          color: Colors.white54,
+                                          iconSize: 20,
+                                          tooltip: 'Dismiss',
                                         ),
                                       ],
                                     ),
@@ -408,42 +421,53 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
     );
   }
 
-  Future<void> _handleReorderAlert(StockAlertItem alert) async {
-    final qty = alert.quantityRequested > 0 ? alert.quantityRequested : 500;
+  Future<void> _triggerAiProcurement(StockAlertItem alert) async {
+    setState(() => _loading = true);
     try {
-      final po = await widget.service.createPurchaseOrder({
-        'supplierId': 1,
-        'notes': 'Low stock replenish order for SKU ${alert.sku}',
-        'lines': [
-          {
-            'rawMaterialId': alert.rawMaterialId ?? 1,
-            'quantity': qty.toDouble(),
-            'unitPrice': 3.50,
-            'totalPrice': qty * 3.50,
-          }
-        ],
-      });
-
+      final reqData = {
+        'rawMaterialId': alert.rawMaterialId,
+        'quantity': alert.quantityRequested > 0 ? alert.quantityRequested : 100,
+      };
+      final request = await widget.service.createProcurementRequest(reqData);
+      await widget.service.startProcurementResearch(request.id);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reorder Purchase Order ${po.poNumber} created!'),
-            backgroundColor: const Color(0xFF10B981),
-          ),
+          const SnackBar(content: Text('AI Procurement Workflow Started!'), backgroundColor: Colors.green),
         );
-        _fetchNotificationTelemetry();
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => PODetailsScreen(service: widget.service, poId: po.id)),
-        );
+          MaterialPageRoute(
+            builder: (_) => ProcurementDetailsScreen(
+              service: widget.service,
+              procurementId: request.id,
+            ),
+          ),
+        ).then((_) => _fetchNotificationTelemetry());
       }
-    } catch (err) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to reorder: $err'), backgroundColor: Colors.red),
+          SnackBar(content: Text('AI Reorder failed: $e'), backgroundColor: Colors.red),
         );
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _openManualPurchase(StockAlertItem alert) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => POCreateScreen(
+          service: widget.service,
+          materialId: alert.rawMaterialId,
+          sku: alert.sku,
+          quantity: alert.quantityRequested > 0 ? alert.quantityRequested : 100,
+        ),
+      ),
+    ).then((_) => _fetchNotificationTelemetry());
   }
 
   Future<void> _handleMarkRead(int alertId) async {
