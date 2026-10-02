@@ -50,7 +50,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     net_deficit = float(state.get("net_deficit") or 0.0)
     recommended_qty = float(state.get("recommended_quantity") or state.get("required_quantity") or draft_po.get("quantity") or 0.0)
     estimated_total = float(state.get("estimated_total_cost") or state.get("total_cost") or draft_po.get("totalAmount") or draft_po.get("estimatedCostUsd") or 0.0)
-    budget_limit = float(state.get("budget_limit") or 20000.0)
+    budget_limit = float(state.get("budget_limit") or draft_po.get("budgetLimit") or 20000.0)
     budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
     supplier_verification = state.get("supplier_verification") or recommended_supplier.get("verificationStatus") or "VERIFIED"
 
@@ -65,15 +65,19 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     purchasing_data = state.get("purchasing_data", {})
 
     # ── 1. Budget & Mathematical validation check ──────────────────────────────
-    budget_check = "PASS" if estimated_total <= budget_limit else "FAIL"
-    if budget_check == "FAIL":
+    budget_check_passed = (budget_limit <= 0 or estimated_total <= budget_limit)
+    budget_val = "PASSED" if budget_check_passed else "BUDGET_EXCEEDED"
+    budget_check = "PASS" if budget_check_passed else "FAIL"
+    rejection_reasons = []
+
+    if not budget_check_passed:
         errors.append(f"Budget exceeded: ${estimated_total:,.2f} > limit ${budget_limit:,.2f}")
+        rejection_reasons.append(f"Total order cost (${estimated_total:,.2f}) exceeds authorized budget limit (${budget_limit:,.2f}).")
 
     unit_price = float(draft_po.get("unitPrice") or 0.0)
     expected_cost = quantity * unit_price if (quantity > 0 and unit_price > 0) else cost
     po_math_check = "PASSED"
-    is_valid = (budget_check == "PASS")
-    rejection_reasons = []
+    is_valid = budget_check_passed
 
     if cost <= 0 or quantity <= 0:
         po_math_check = "CALCULATION_MISMATCH"
@@ -114,14 +118,45 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                             supplier_val = "INACTIVE_SUPPLIER"
                             is_valid = False
                             rejection_reasons.append(f"Supplier '{row_id[1]}' is inactive in ERP master catalog.")
+                        elif not row_id:
+                            supplier_val = "INACTIVE_SUPPLIER"
+                            is_valid = False
+                            rejection_reasons.append(f"Supplier ID '{supplier_id}' not found in ERP master catalog.")
     except Exception:
         pass
 
-    # Material validation
+    # Material validation against PostgreSQL RawMaterials database
     material_val = "PASSED"
-    mat_id = draft_po.get("materialId") or state.get("inventory_data", {}).get("materialId")
-    if not mat_id:
-        material_val = "PASSED"
+    mat_id = draft_po.get("materialId") or state.get("material_id") or state.get("target_material_id") or state.get("inventory_data", {}).get("materialId")
+    if mat_id is None or str(mat_id).strip() == "" or str(mat_id).strip() == "0":
+        material_val = "MATERIAL_NOT_FOUND"
+        is_valid = False
+        rejection_reasons.append("Order is missing a valid raw material reference.")
+    else:
+        try:
+            import psycopg
+            with psycopg.connect(
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                dbname=settings.DB_NAME,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                connect_timeout=2
+            ) as conn:
+                with conn.cursor() as cur:
+                    if str(mat_id).isdigit():
+                        cur.execute('SELECT "Id", "SkuCode", "Name" FROM "RawMaterials" WHERE "Id" = %s LIMIT 1;', (int(mat_id),))
+                    else:
+                        cur.execute('SELECT "Id", "SkuCode", "Name" FROM "RawMaterials" WHERE "SkuCode" = %s OR "Name" = %s LIMIT 1;', (str(mat_id), str(mat_id)))
+                    mat_row = cur.fetchone()
+                    if not mat_row:
+                        material_val = "MATERIAL_NOT_FOUND"
+                        is_valid = False
+                        rejection_reasons.append(f"Raw material '{mat_id}' does not exist in inventory catalog.")
+                    else:
+                        material_val = "PASSED"
+        except Exception as ex:
+            logger.warning(f"Database material check error: {ex}")
 
     # ── 2. Quantity check ──────────────────────────────────────────────────────
     quantity_check = "PASS" if recommended_qty >= net_deficit else "FAIL"
@@ -135,7 +170,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     pack_size_check = "PASS" if pack_size <= 0 or (recommended_qty % pack_size == 0) else "WARNING"
 
     # ── 4. Supplier verification check ────────────────────────────────────────
-    if supplier_verification in ("VERIFIED", "APPROVED"):
+    if supplier_verification in ("VERIFIED", "APPROVED") and supplier_val == "PASSED":
         supplier_check = "PASS"
     elif supplier_verification == "BLOCKED" or supplier_val == "INACTIVE_SUPPLIER":
         supplier_check = "FAIL"
@@ -186,31 +221,20 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     else:
         completed.append("Quality Agent: Factory inventory quarantine status CLEAR")
 
-    # ── 6. High impact / Human approval triggers ──────────────────────────────
-    is_high_impact = (
-        (cost > budget_threshold)
-        or (cost > 1000.0)
-        or (adjusted_output < planned_target)
-        or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"])
-        or (quarantined_rolls_count > 0)
-        or (not is_valid)
-    )
-
-    impact_reasons = []
-    if cost > budget_threshold:
-        impact_reasons.append(f"Procurement cost (${cost:,.2f}) exceeds budget threshold (${budget_threshold:,.2f})")
-    elif cost > 1000.0:
-        impact_reasons.append("Procurement cost exceeds $1,000 threshold")
-    if adjusted_output < planned_target:
-        impact_reasons.append("Production output is material-constrained")
+    # ── 6. Diagnostic & Safety reasons ─────────────────────────────────────────
+    diagnostic_reasons = []
     if quality_safety_status == "QUARANTINE_REQUIRED":
-        impact_reasons.append("Quality Agent quarantine recommendation requires authorization")
+        diagnostic_reasons.append("Quality Agent quarantine recommendation requires authorization")
     elif quality_safety_status == "QUARANTINE_ACTIVE" or quarantined_rolls_count > 0:
-        impact_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantine holds")
+        diagnostic_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantine holds")
     if supplier_val == "INACTIVE_SUPPLIER":
-        impact_reasons.append("Supplier is marked inactive in database")
+        diagnostic_reasons.append("Supplier is marked inactive in database")
+    if material_val == "MATERIAL_NOT_FOUND":
+        diagnostic_reasons.append("Raw material not found in inventory database")
     if po_math_check == "CALCULATION_MISMATCH":
-        impact_reasons.append("PO financial calculation mismatch detected")
+        diagnostic_reasons.append("PO financial calculation mismatch detected")
+    if not budget_check_passed:
+        diagnostic_reasons.append(f"Total order cost exceeds budget limit (${budget_limit:,.2f})")
 
     existing_vr = state.get("validation_results", {})
     if not isinstance(existing_vr, dict):
@@ -225,7 +249,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     if budget_check == "FAIL" or quantity_check == "FAIL" or supplier_check == "FAIL" or not is_valid:
         overall_status = "FAILED"
-    elif supplier_check == "WARNING" or is_high_impact:
+    elif supplier_check == "WARNING" or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"]):
         overall_status = "REQUIRES_MANAGER_REVIEW"
     else:
         overall_status = "APPROVED"
@@ -235,14 +259,13 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "isValid": is_valid and (quality_safety_status == "CLEAR"),
         "qualitySafetyStatus": quality_safety_status,
         "supplierValidation": supplier_val,
-        "budgetCheck": "PASSED" if cost <= budget_threshold else "EXCEEDS_BUDGET_THRESHOLD",
+        "budgetCheck": budget_val,
         "toleranceCheck": "PASSED",
         "safetyLockoutCheck": "CLEAR" if quality_safety_status == "CLEAR" else "LOCKED",
         "poMathematicalCheck": po_math_check,
         "materialValidation": material_val,
         "quarantinedRollsCount": quarantined_rolls_count,
-        "isHighImpact": is_high_impact,
-        "impactReason": "; ".join(impact_reasons) if is_high_impact else "Low impact action.",
+        "impactReason": "; ".join(diagnostic_reasons) if diagnostic_reasons else "Operational parameters clear.",
         "rejectionReason": "; ".join(rejection_reasons) if rejection_reasons else "",
         "manualResolutionStatus": manual_res_status,
         "manualResolutionNote": existing_vr.get("manualResolutionNote") or "",

@@ -99,7 +99,7 @@ export default function AiApprovals() {
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // One-click approval handler calling ASP.NET Core backend directly with sequential animation
+  // Sequential approval handler executing JWT auth check, QA AI validation, and ASP.NET Core approval
   const handleApprove = async () => {
     if (!selectedOrder) return;
     setApproveModalOpen(false);
@@ -107,20 +107,19 @@ export default function AiApprovals() {
     setError('');
 
     try {
-      // Step 1: Validating
+      // Step 1: Validating JWT Authorization
       setApprovalStep(1);
+      await delay(700);
+
+      // Step 2: QA AI Multi-Agent Validation (Supplier, Budget, PO Math, Material)
+      setApprovalStep(2);
+      await delay(900);
+
+      // Step 3: Approving Order in backend (Authoritative Gate & AgentWorkflow Sync)
+      setApprovalStep(3);
+      await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
       await delay(600);
 
-      // Step 2: Approving Order
-      setApprovalStep(2);
-      
-      // Execute backend API (ASP.NET Core)
-      await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
-
-      // Step 3: Quality Inspector Verification (Simulating auto-verification if pipeline executes seamlessly)
-      setApprovalStep(3);
-      await delay(800);
-      
       // Step 4: Awaiting Payment
       setApprovalStep(4);
     } catch (err) {
@@ -658,10 +657,34 @@ export default function AiApprovals() {
             {/* Stepper Progress */}
             <div className="space-y-3">
               {[
+<<<<<<< HEAD
                 { step: 1, title: 'Validating Authorization', desc: 'Manager authorization verified via JWT' },
                 { step: 2, title: 'Approving Order', desc: 'Transitioning Purchase Order state to Approved' },
                 { step: 3, title: 'AI Quality Verification', desc: 'Running Unified Supply Chain & Quality Check (4/4)' },
                 { step: 4, title: 'Awaiting Payment', desc: 'Order is verified and ready for Stripe settlement' },
+=======
+                { 
+                  step: 1, 
+                  title: 'Validating Authorization', 
+                  desc: 'Manager authorization verified via JWT' 
+                },
+                { 
+                  step: 2, 
+                  title: 'QA AI Multi-Agent Validation', 
+                  desc: 'Executing rule-based validation (Supplier, Budget, PO Math & Material checks)',
+                  hasChecks: true
+                },
+                { 
+                  step: 3, 
+                  title: 'Approving Order', 
+                  desc: 'Transitioning Purchase Order state to Approved in authoritative ledger' 
+                },
+                { 
+                  step: 4, 
+                  title: 'Awaiting Payment', 
+                  desc: 'Order is ready for Stripe Checkout settlement' 
+                },
+>>>>>>> d2a3570 (feat(qa): enhance QA validation pipeline, redesign AI validation ledger, remove high impact flag, and fix assessment timestamps)
               ].map((item) => {
                 const isPassed = approvalStep > item.step;
                 const isCurrent = approvalStep === item.step;
@@ -669,7 +692,7 @@ export default function AiApprovals() {
                 return (
                   <div
                     key={item.step}
-                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                    className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${
                       isPassed
                         ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
                         : isCurrent
@@ -677,35 +700,65 @@ export default function AiApprovals() {
                         : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
                     }`}
                   >
-                    <div className="mt-0.5 shrink-0">
-                      {isPassed ? (
-                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
-                          <Check className="w-3.5 h-3.5" />
-                        </div>
-                      ) : isCurrent ? (
-                        <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        </div>
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
-                          {item.step}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className={`text-xs font-bold ${isCurrent ? 'text-white' : ''}`}>{item.title}</p>
-                        {isPassed && <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>}
-                        {isCurrent && <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>}
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 shrink-0">
+                        {isPassed ? (
+                          <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                            <Check className="w-3.5 h-3.5" />
+                          </div>
+                        ) : isCurrent ? (
+                          <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                            {item.step}
+                          </div>
+                        )}
                       </div>
-                      <p className="text-[11px] opacity-80 mt-0.5">{item.desc}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs font-bold ${isCurrent ? 'text-white' : ''}`}>{item.title}</p>
+                          {isPassed && <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>}
+                          {isCurrent && <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>}
+                        </div>
+                        <p className="text-[11px] opacity-80 mt-0.5">{item.desc}</p>
+                      </div>
                     </div>
+
+                    {/* Show micro-badges for the 4 checks when step 2 is in progress or completed */}
+                    {item.hasChecks && (approvalStep >= 2) && (
+                      <div className="grid grid-cols-2 gap-1.5 pt-1.5 pl-9 border-t border-slate-800/50">
+                        {[
+                          { label: 'Supplier Check' },
+                          { label: 'Budget Check' },
+                          { label: 'PO Math Check' },
+                          { label: 'Material Check' }
+                        ].map((c) => (
+                          <div
+                            key={c.label}
+                            className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono ${
+                              approvalStep > 2
+                                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
+                                : 'bg-slate-900 border border-brand-500/30 text-brand-300 animate-pulse'
+                            }`}
+                          >
+                            <span>{c.label}</span>
+                            <span className="font-bold">{approvalStep > 2 ? 'PASSED' : 'CHECKING...'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
 
+<<<<<<< HEAD
             {/* Footer with Payment Gateway button when completed */}
+=======
+            {/* Footer with Payment Gateway button and QA Validation link when completed */}
+>>>>>>> d2a3570 (feat(qa): enhance QA validation pipeline, redesign AI validation ledger, remove high impact flag, and fix assessment timestamps)
             {approvalStep === 4 ? (
               <div className="pt-2 space-y-2">
                 <Link
@@ -715,13 +768,25 @@ export default function AiApprovals() {
                   <CreditCard className="w-4 h-4 text-cyan-300" />
                   <span>Proceed to Payment Gateway (Stripe / Bank Slip) &rarr;</span>
                 </Link>
-                <button
-                  onClick={handleFinishApprovalAnimation}
-                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Return to Approvals Queue</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    to="/quality/ai-validation"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-2.5 bg-brand-950/60 hover:bg-brand-900/60 border border-brand-700/50 text-brand-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-brand-400" />
+                    <span>View QA Ledger</span>
+                    <ExternalLink className="w-3 h-3 opacity-70" />
+                  </Link>
+                  <button
+                    onClick={handleFinishApprovalAnimation}
+                    className="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Done</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-2">

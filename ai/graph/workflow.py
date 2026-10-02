@@ -70,7 +70,6 @@ def sync_to_database(state: AgentState) -> None:
             "poMathematicalCheck": val_res.get("poMathematicalCheck", "PASSED"),
             "materialValidation": val_res.get("materialValidation", "PASSED"),
             "quarantinedRollsCount": int(val_res.get("quarantinedRollsCount", 0) or 0),
-            "isHighImpact": bool(val_res.get("isHighImpact", False)),
             "impactReason": val_res.get("impactReason") or "",
             "rejectionReason": val_res.get("rejectionReason") or "",
             "manualResolutionStatus": val_res.get("manualResolutionStatus") or "NOT_REQUIRED",

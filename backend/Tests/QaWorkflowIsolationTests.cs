@@ -396,7 +396,6 @@ public class QaWorkflowIsolationTests
             ["poMathematicalCheck"] = "PASSED",
             ["materialValidation"] = "PASSED",
             ["quarantinedRollsCount"] = 0,
-            ["isHighImpact"] = false,
             ["impactReason"] = "",
             ["rejectionReason"] = "",
             ["manualResolutionStatus"] = "RESOLVED",

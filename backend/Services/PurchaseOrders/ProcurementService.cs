@@ -440,7 +440,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(pr => pr.RawMaterial)
                 .Include(pr => pr.RecommendedSupplier)
                 .Include(pr => pr.GeneratedPurchaseOrder)
-                    .ThenInclude(po => po != null ? po.Transactions : null)
+                    .ThenInclude(po => po.Transactions)
                 .Include(pr => pr.Candidates)
                 .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
 

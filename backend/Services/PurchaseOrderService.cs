@@ -747,7 +747,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 throw new InvalidOperationException($"Approval blocked: Validation failed because supplier {suppIdent} is inactive.");
             }
 
-            // 2. Order lines validation
+            // 2. Order lines and Material validation
             if (po.OrderLines == null || !po.OrderLines.Any())
             {
                 po.OrderLines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
@@ -774,6 +774,23 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 {
                     throw new InvalidOperationException("Approval blocked: PO financial calculation mismatch detected.");
                 }
+
+                // Authoritative Raw Material existence check
+                if (line.RawMaterialId <= 0)
+                {
+                    throw new InvalidOperationException("Approval blocked: Order line is missing a valid RawMaterialId.");
+                }
+                var mat = await _context.RawMaterials.FindAsync(line.RawMaterialId);
+                if (mat == null)
+                {
+                    throw new InvalidOperationException($"Approval blocked: Raw material ID {line.RawMaterialId} not found in inventory catalog.");
+                }
+            }
+
+            // Budget validation against authorized limit
+            if (po.BudgetLimit > 0 && po.TotalCost > po.BudgetLimit)
+            {
+                throw new InvalidOperationException($"Approval blocked: Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).");
             }
 
             // 3. Find associated AgentWorkflow (AI Validation / QA)
@@ -809,10 +826,20 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     var root = doc.RootElement;
 
                     // Supplier validation check
-                    if (root.TryGetProperty("supplierValidation", out var sv) && sv.GetString() == "INACTIVE_SUPPLIER")
+                    if (root.TryGetProperty("supplierValidation", out var sv) && (sv.GetString() == "INACTIVE_SUPPLIER" || sv.GetString() == "FAILED"))
                     {
                         var suppIdent = !string.IsNullOrWhiteSpace(supplier.SupplierCode) ? supplier.SupplierCode : supplier.Name;
                         throw new InvalidOperationException($"Approval blocked: Validation failed because supplier {suppIdent} is inactive.");
+                    }
+
+                    // Budget check
+                    if (root.TryGetProperty("budgetCheck", out var bc))
+                    {
+                        var bStr = bc.GetString();
+                        if (bStr == "BUDGET_EXCEEDED" || bStr == "FAIL" || bStr == "FAILED")
+                        {
+                            throw new InvalidOperationException($"Approval blocked: Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).");
+                        }
                     }
 
                     // PO Math check
@@ -825,9 +852,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     if (root.TryGetProperty("materialValidation", out var mv))
                     {
                         var matStr = mv.GetString();
-                        if (matStr != null && matStr.StartsWith("INVALID", StringComparison.OrdinalIgnoreCase))
+                        if (matStr != null && (matStr == "MATERIAL_NOT_FOUND" || matStr == "FAILED" || matStr.StartsWith("INVALID", StringComparison.OrdinalIgnoreCase)))
                         {
-                            throw new InvalidOperationException("Approval blocked: Validation failed because material is invalid.");
+                            throw new InvalidOperationException("Approval blocked: Validation failed because material is invalid or not found in catalog.");
                         }
                     }
 
@@ -903,7 +930,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var firstLine = po.OrderLines?.FirstOrDefault();
             var totalQty = po.OrderLines?.Sum(l => l.Quantity) ?? 1000m;
             var unitPrice = firstLine?.UnitPrice ?? 0m;
-            var budgetCap = po.BudgetLimit > 0 ? po.BudgetLimit : 5000m;
+            var budgetCap = po.BudgetLimit > 0 ? po.BudgetLimit : 20000m;
+            var approvalThreshold = po.ApprovalThreshold > 0 ? po.ApprovalThreshold : 5000m;
 
             try
             {
@@ -913,6 +941,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     objective = $"Validation & quality safety assessment for PO {po.PoNumber}",
                     workflowId = workflowId,
                     material_id = firstLine?.RawMaterialId.ToString() ?? "1",
+                    budget_limit = (double)budgetCap,
+                    budgetLimit = (double)budgetCap,
                     required_quantity = (double)totalQty,
                     purchasing_data = new
                     {
@@ -925,7 +955,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                             quantity = (double)totalQty,
                             unitPrice = (double)unitPrice,
                             totalAmount = (double)po.TotalCost,
-                            budgetThreshold = (double)budgetCap
+                            budgetLimit = (double)budgetCap,
+                            budgetThreshold = (double)approvalThreshold
                         }
                     }
                 };
@@ -1039,8 +1070,36 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
             }
 
-            // 5. Material & Quality / Quarantine Safety Check
+            // 5. Material Validation against PostgreSQL RawMaterials catalog
             string materialValidation = "PASSED";
+            if (po.OrderLines != null && po.OrderLines.Any())
+            {
+                foreach (var line in po.OrderLines)
+                {
+                    if (line.RawMaterialId <= 0)
+                    {
+                        materialValidation = "MATERIAL_NOT_FOUND";
+                        isValid = false;
+                        rejectionReason ??= "Order line is missing a valid RawMaterialId.";
+                        break;
+                    }
+                    var matExists = await _context.RawMaterials.AnyAsync(m => m.Id == line.RawMaterialId);
+                    if (!matExists)
+                    {
+                        materialValidation = "MATERIAL_NOT_FOUND";
+                        isValid = false;
+                        rejectionReason ??= $"Raw material ID {line.RawMaterialId} not found in inventory catalog.";
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                materialValidation = "MATERIAL_NOT_FOUND";
+                isValid = false;
+                rejectionReason ??= "Purchase order has no order lines with raw materials.";
+            }
+
             string qualitySafetyStatus = "CLEAR";
             int quarantinedRollsCount = 0;
 
@@ -1055,8 +1114,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 isValid = false;
             }
 
-            // 6. Impact Assessment
-            bool isHighImpact = po.TotalCost > 1000m || qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED" || !isValid;
+            // 6. Diagnostic & Safety Reason Assessment
             string? impactReason = null;
             if (!isValid && !string.IsNullOrWhiteSpace(rejectionReason))
             {
@@ -1065,10 +1123,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             else if (qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED")
             {
                 impactReason = $"{quarantinedRollsCount} inventory roll(s) currently held in quarantine. Quality inspection required.";
-            }
-            else if (po.TotalCost > 5000m)
-            {
-                impactReason = $"High expenditure (${po.TotalCost:N2}) requires managerial authorization.";
             }
             else
             {
@@ -1123,7 +1177,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 ["poMathematicalCheck"] = poMathematicalCheck,
                 ["materialValidation"] = materialValidation,
                 ["quarantinedRollsCount"] = quarantinedRollsCount,
-                ["isHighImpact"] = isHighImpact,
                 ["impactReason"] = impactReason,
                 ["rejectionReason"] = rejectionReason,
                 ["manualResolutionStatus"] = manualResolutionStatus,
@@ -1135,9 +1188,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var json = JsonSerializer.Serialize(validationDict);
 
             // 9. Save or Update AgentWorkflow
+            var isQaPassed = isValid && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && quarantinedRollsCount == 0;
+
             if (existingWf != null)
             {
                 existingWf.ValidationResults = json;
+                existingWf.StartedAt = DateTime.UtcNow;
                 if (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment || po.Status == PurchaseOrderStatus.Sent)
                 {
                     existingWf.Status = WorkflowStatus.Completed;
@@ -1152,11 +1208,21 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     existingWf.CompletedAt = DateTime.UtcNow;
                     existingWf.FinalOutcome = $"PO {po.PoNumber} rejected: {po.RejectionReason}";
                 }
+                else if (isQaPassed)
+                {
+                    existingWf.Status = WorkflowStatus.Completed;
+                    existingWf.ApprovalStatus = ApprovalStatus.Approved;
+                    existingWf.CompletedAt = DateTime.UtcNow;
+                    existingWf.CurrentAgent = "Validation/Safety";
+                    existingWf.FinalOutcome = $"PO {po.PoNumber} automated validation & safety checks passed (4/4)";
+                }
                 else
                 {
                     existingWf.Status = WorkflowStatus.WaitingForApproval;
                     existingWf.ApprovalStatus = ApprovalStatus.Pending;
                     existingWf.CurrentAgent = "Validation/Safety";
+                    existingWf.CompletedAt = null;
+                    existingWf.FinalOutcome = null;
                 }
                 await _context.SaveChangesAsync();
                 return existingWf;
@@ -1168,12 +1234,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     Id = Guid.NewGuid(),
                     WorkflowId = workflowId,
                     Objective = $"Autonomous validation & procurement safety assessment for PO {po.PoNumber}",
-                    CurrentAgent = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? "Execution" : "Validation/Safety",
-                    Status = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? WorkflowStatus.Completed : (po.Status == PurchaseOrderStatus.Rejected ? WorkflowStatus.Failed : WorkflowStatus.WaitingForApproval),
-                    ApprovalStatus = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
-                    StartedAt = po.CreatedAt,
-                    CompletedAt = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? po.UpdatedAt : null,
-                    FinalOutcome = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : null,
+                    CurrentAgent = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? "Execution" : "Validation/Safety",
+                    Status = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? WorkflowStatus.Completed : (po.Status == PurchaseOrderStatus.Rejected ? WorkflowStatus.Failed : WorkflowStatus.WaitingForApproval),
+                    ApprovalStatus = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
+                    StartedAt = DateTime.UtcNow,
+                    CompletedAt = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? DateTime.UtcNow : null,
+                    FinalOutcome = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
                     ValidationResults = json
                 };
                 _context.AgentWorkflows.Add(newWf);

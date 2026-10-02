@@ -171,7 +171,6 @@ namespace ManufacturingCoordinator.Api.Controllers
             string? poMathematicalCheck = null;
             string? materialValidation = null;
             int? quarantinedRollsCount = null;
-            bool? isHighImpact = null;
             string? impactReason = null;
             string? rejectionReason = null;
             string? manualResolutionStatus = null;
@@ -193,7 +192,6 @@ namespace ManufacturingCoordinator.Api.Controllers
                     poMathematicalCheck    = GetString(root, "poMathematicalCheck");
                     materialValidation     = GetString(root, "materialValidation");
                     quarantinedRollsCount  = GetInt32(root, "quarantinedRollsCount");
-                    isHighImpact           = GetBoolean(root, "isHighImpact");
                     impactReason           = GetString(root, "impactReason");
                     rejectionReason        = GetString(root, "rejectionReason");
                     manualResolutionStatus = GetString(root, "manualResolutionStatus");
@@ -207,10 +205,30 @@ namespace ManufacturingCoordinator.Api.Controllers
                 }
             }
 
+            string workflowStatus;
+            if (manualResolutionStatus == "RESOLVED")
+            {
+                workflowStatus = "Resolved";
+            }
+            else if (isValid == true && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && (quarantinedRollsCount == null || quarantinedRollsCount == 0))
+            {
+                workflowStatus = "Verified";
+            }
+            else if (isValid == false || (quarantinedRollsCount != null && quarantinedRollsCount > 0) || qualitySafetyStatus?.Contains("QUARANTINE", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                workflowStatus = "PendingReview";
+            }
+            else
+            {
+                workflowStatus = wf.Status.ToString();
+            }
+
+            var assessedTime = resolvedAt ?? wf.CompletedAt?.ToString("o") ?? wf.StartedAt.ToString("o");
+
             return new
             {
                 workflowId             = wf.WorkflowId,
-                status                 = wf.Status.ToString(),
+                status                 = workflowStatus,
                 isValid                = isValid,
                 qualitySafetyStatus    = qualitySafetyStatus,
                 supplierValidation     = supplierValidation,
@@ -218,13 +236,15 @@ namespace ManufacturingCoordinator.Api.Controllers
                 poMathematicalCheck    = poMathematicalCheck,
                 materialValidation     = materialValidation,
                 quarantinedRollsCount  = quarantinedRollsCount,
-                isHighImpact           = isHighImpact,
                 impactReason           = impactReason,
                 rejectionReason        = rejectionReason,
                 manualResolutionStatus = manualResolutionStatus,
                 manualResolutionNote   = manualResolutionNote,
                 resolvedBy             = resolvedBy,
-                resolvedAt             = resolvedAt
+                resolvedAt             = resolvedAt,
+                startedAt              = wf.StartedAt.ToString("o"),
+                completedAt            = wf.CompletedAt?.ToString("o"),
+                assessedAt             = assessedTime
             };
         }
 
