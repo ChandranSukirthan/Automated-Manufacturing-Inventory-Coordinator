@@ -57,7 +57,7 @@ export default function RolesPage() {
     },
     {
       name: 'ITAdmin',
-      title: 'IT Administrator (Student 4)',
+      title: 'IT Administrator',
       badge: 'bg-brand-500/20 text-brand-300 border-brand-500/30',
       description: 'System master role with full security administration, user provisioning, role assignments, audit inspection, and machine CRUD ownership.',
       permissions: [

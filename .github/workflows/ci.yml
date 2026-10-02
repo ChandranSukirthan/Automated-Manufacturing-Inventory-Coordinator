@@ -70,9 +70,38 @@ jobs:
         working-directory: mobile_flutter
         run: flutter test
 
+  react-tests:
+    name: React build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Run React tests
+        working-directory: frontend
+        run: pnpm test
+      - name: Build React application
+        working-directory: frontend
+        run: pnpm build
+      - name: Publish verified React build
+        uses: actions/upload-artifact@v4
+        with:
+          name: amic-react-build
+          path: frontend/dist
+          if-no-files-found: error
+
   package-mobile-artifact:
     name: Package validated Android artifact
-    needs: [backend-tests, agent-tests, flutter-tests]
+    needs: [backend-tests, agent-tests, flutter-tests, react-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/floor_worker-induri'
     runs-on: windows-latest
     steps:

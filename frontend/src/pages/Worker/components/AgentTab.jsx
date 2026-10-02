@@ -14,7 +14,7 @@ import {
 const STEPS = [
   {
     num: 1,
-    label: 'Student 1 (Floor Worker)',
+    label: 'Inventory operations',
     title: 'Data Extraction',
     desc: 'Extracts stock level, burn rate, and required replenishment',
     icon: ClipboardList,
@@ -22,7 +22,7 @@ const STEPS = [
   },
   {
     num: 2,
-    label: 'Student 4 (Production)',
+    label: 'Production operations',
     title: 'Production Analysis',
     desc: 'Analyzes machine capacity, shift schedule, and output impact',
     icon: Settings,
@@ -30,7 +30,7 @@ const STEPS = [
   },
   {
     num: 3,
-    label: 'Student 2 (Purchasing)',
+    label: 'Purchasing operations',
     title: 'Supplier Procurement',
     desc: 'Calculates optimal supplier and drafts Purchase Order',
     icon: Zap,
@@ -38,7 +38,7 @@ const STEPS = [
   },
   {
     num: 4,
-    label: 'Student 3 (Quality)',
+    label: 'Quality assurance',
     title: 'Validation & Safety',
     desc: 'Audits defect history and verifies quarantine holds',
     icon: ShieldCheck,

@@ -13,12 +13,7 @@ export default function WorkerHeader({ user, loading, onRefresh, onLogout }) {
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              Floor Worker Console
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-400 font-mono border border-cyan-500/30">
-                Student 1
-              </span>
-            </h1>
+            <h1 className="text-lg font-bold tracking-tight text-white">Floor Worker Console</h1>
             <p className="text-xs text-slate-400">
               Inventory Tracking • Barcode Scanning • Stock Logistics
             </p>

@@ -124,7 +124,7 @@ export default function AdminDashboard() {
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-600/30 via-cyan-600/20 to-slate-900/40 border border-white/10 p-8 backdrop-blur-xl">
         <div className="relative z-10 max-w-2xl space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/20 border border-brand-500/30 text-brand-300 text-xs font-semibold">
-            <span>Student 4 — IT Admin Role</span>
+            <span>IT Administrator</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Production Equipment & System Administration
@@ -225,13 +225,13 @@ export default function AdminDashboard() {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold mb-2">
               <Zap className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Multi-Agent Dispatch & Supervision (Student 1 → Student 4 → Student 2)</span>
+              <span>Multi-Agent Dispatch & Supervision</span>
             </div>
             <h3 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
               Live Floor Stock Requests & Autonomous Action Center
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Floor Worker (Student 1) alerts and deficit signals requiring supervisor validation or multi-agent procurement dispatch.
+              Floor Worker alerts and deficit signals requiring supervisor validation or multi-agent procurement dispatch.
             </p>
           </div>
 
