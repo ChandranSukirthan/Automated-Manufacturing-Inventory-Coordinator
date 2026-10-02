@@ -31,6 +31,8 @@ namespace ManufacturingCoordinator.Api.DTOs.Quality
     {
         [Required]
         public string Note { get; set; } = string.Empty;
+        public string Decision { get; set; } = "Clear";
         public bool ReleaseQuarantine { get; set; } = true;
     }
 }
+

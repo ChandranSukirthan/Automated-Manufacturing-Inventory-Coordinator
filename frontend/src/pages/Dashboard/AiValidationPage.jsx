@@ -160,7 +160,10 @@ const getWorkflowState = (item) => {
 
   // 2. Current QA & Quarantine State (Based on same workflow)
   const isResolved = manual === 'RESOLVED';
-  const hasQuarantineTrigger = safety?.includes('QUARANTINE') || safety === 'BLOCKED' || (quarantinedCount !== null && quarantinedCount > 0) || item.isValid === false;
+  const isRejected = manual === 'REJECTED';
+  const isOnHold = manual === 'ON_HOLD';
+  const isManualReviewReq = safety === 'MANUAL_REVIEW_REQUIRED' || manual === 'PENDING_REVIEW';
+  const hasQuarantineTrigger = safety?.includes('QUARANTINE') || safety === 'BLOCKED' || (quarantinedCount !== null && quarantinedCount > 0) || item.isValid === false || isManualReviewReq;
 
   let currentManualResolution = 'Not available';
   let currentQuarantineDisposition = 'Not available';
@@ -170,6 +173,20 @@ const getWorkflowState = (item) => {
   if (isResolved) {
     currentManualResolution = 'RESOLVED';
     currentQuarantineDisposition = 'RELEASED';
+  } else if (isRejected) {
+    currentManualResolution = 'REJECTED';
+    currentQuarantineDisposition = 'REJECTED';
+    isSafetyBlocked = true;
+  } else if (isOnHold) {
+    currentManualResolution = 'ON HOLD';
+    currentQuarantineDisposition = 'ACTIVE';
+    isSafetyBlocked = true;
+    needsReview = true;
+  } else if (isManualReviewReq) {
+    currentManualResolution = 'PENDING REVIEW';
+    currentQuarantineDisposition = quarantinedCount > 0 ? 'ACTIVE' : 'NONE';
+    isSafetyBlocked = true;
+    needsReview = true;
   } else if (manual === 'NOT_REQUIRED' || (safety === 'CLEAR' && (quarantinedCount === 0 || quarantinedCount === null) && item.isValid !== false)) {
     currentManualResolution = 'NOT REQUIRED';
     currentQuarantineDisposition = 'NONE';
@@ -188,8 +205,12 @@ const getWorkflowState = (item) => {
   if (safety || hasExplicitValid || quarantinedCount !== null) {
     if (isResolved) {
       safetyGateState = 'RESOLVED';
+    } else if (isRejected) {
+      safetyGateState = 'REJECTED';
+    } else if (isOnHold) {
+      safetyGateState = 'ON_HOLD';
     } else if (isSafetyBlocked) {
-      safetyGateState = 'BLOCKED';
+      safetyGateState = safety === 'MANUAL_REVIEW_REQUIRED' ? 'MANUAL REVIEW REQUIRED' : 'BLOCKED';
     } else {
       safetyGateState = 'CLEAR';
     }
@@ -245,8 +266,9 @@ export default function AiValidationPage() {
   // Manual Resolution Modal State
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState(null);
+  const [inspectorDecision, setInspectorDecision] = useState('Clear'); // 'Clear' | 'Reject' | 'Keep on Hold'
   const [resolutionNote, setResolutionNote] = useState('');
-  const [releaseQuarantineCheck, setReleaseQuarantineCheck] = useState(true);
+  const [releaseQuarantineCheck, setReleaseQuarantineCheck] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState('');
   const [resolveSuccess, setResolveSuccess] = useState('');
@@ -336,8 +358,9 @@ export default function AiValidationPage() {
 
   const openResolveModal = (wf) => {
     setSelectedWorkflow(wf);
+    setInspectorDecision('Clear');
     setResolutionNote('');
-    setReleaseQuarantineCheck(true);
+    setReleaseQuarantineCheck(false);
     setResolveError('');
     setResolveModalOpen(true);
   };
@@ -345,7 +368,7 @@ export default function AiValidationPage() {
   const handleResolveSubmit = async (e) => {
     e.preventDefault();
     if (!selectedWorkflow || !resolutionNote.trim()) {
-      setResolveError('A manual resolution note is required.');
+      setResolveError('A manual resolution inspection note is required.');
       return;
     }
     setResolving(true);
@@ -353,10 +376,12 @@ export default function AiValidationPage() {
     try {
       await dashboardService.resolveAiValidation(selectedWorkflow.workflowId, {
         note: resolutionNote.trim(),
+        decision: inspectorDecision,
         releaseQuarantine: releaseQuarantineCheck
       });
       setResolveModalOpen(false);
-      setResolveSuccess(`Workflow ${selectedWorkflow.workflowId} successfully resolved.`);
+      const actionText = inspectorDecision === 'Clear' ? 'cleared' : inspectorDecision === 'Reject' ? 'rejected' : 'placed on hold';
+      setResolveSuccess(`Workflow ${selectedWorkflow.workflowId} successfully ${actionText} by QA Inspector.`);
       setTimeout(() => setResolveSuccess(''), 5000);
       refreshAll();
     } catch (err) {
@@ -376,7 +401,7 @@ export default function AiValidationPage() {
       const state = getWorkflowState(item);
       if (state.safetyGateState === 'CLEAR') {
         clearCount++;
-      } else if (state.safetyGateState === 'BLOCKED') {
+      } else if (state.safetyGateState === 'BLOCKED' || state.safetyGateState === 'MANUAL REVIEW REQUIRED') {
         blockedCount++;
       } else if (state.safetyGateState === 'RESOLVED') {
         resolvedCount++;
@@ -390,6 +415,36 @@ export default function AiValidationPage() {
       resolved: resolvedCount
     };
   }, [aiValidationHistory]);
+
+  // Dedicated Pending Review Items calculation
+  const pendingReviewItems = useMemo(() => {
+    const list = [];
+    if (
+      aiValidation &&
+      (aiValidation.manualResolutionStatus === 'PENDING_REVIEW' ||
+       aiValidation.qualitySafetyStatus === 'MANUAL_REVIEW_REQUIRED' ||
+       aiValidation.status === 'ManualReviewRequired' ||
+       aiValidation.status === 'PendingReview') &&
+      aiValidation.manualResolutionStatus !== 'RESOLVED'
+    ) {
+      list.push(aiValidation);
+    }
+
+    aiValidationHistory.forEach((item) => {
+      if (
+        (item.manualResolutionStatus === 'PENDING_REVIEW' ||
+         item.qualitySafetyStatus === 'MANUAL_REVIEW_REQUIRED' ||
+         item.status === 'ManualReviewRequired' ||
+         item.status === 'PendingReview') &&
+        item.manualResolutionStatus !== 'RESOLVED' &&
+        !list.some((existing) => existing.workflowId === item.workflowId)
+      ) {
+        list.push(item);
+      }
+    });
+
+    return list;
+  }, [aiValidation, aiValidationHistory]);
 
   // Filtered History
   const filteredHistory = useMemo(() => {
@@ -950,6 +1005,113 @@ export default function AiValidationPage() {
           </div>
         )}
       </section>
+
+      {/* 2.5 DEDICATED PENDING MANUAL QA REVIEWS SECTION (Human-in-the-Loop Quality Gate) */}
+      {pendingReviewItems.length > 0 && (
+        <section className="rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-slate-900/90 to-slate-950/90 p-6 sm:p-8 backdrop-blur-md space-y-6 shadow-2xl animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-amber-500/20 pb-4 gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-amber-400 font-mono text-xs font-bold uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Human-in-the-Loop Safety Review</span>
+                </span>
+                <span className="text-slate-600">•</span>
+                <span className="text-xs text-amber-300 font-mono">
+                  {pendingReviewItems.length} Pending Inspection{pendingReviewItems.length > 1 ? 's' : ''}
+                </span>
+              </div>
+              <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                <span>Pending Manual QA Reviews</span>
+              </h2>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Multi-agent validation passed automated rule checks but detected historical quality risk on raw material. Authoritative QA Inspector review required.
+              </p>
+            </div>
+
+            <span className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 shrink-0">
+              <Clock className="w-3.5 h-3.5 animate-pulse" />
+              <span>Approval Blocked Pending Sign-Off</span>
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {pendingReviewItems.map((item) => {
+              const poNum = extractPoNumber(item);
+              const hr = item.historicalRisk || {};
+              const matName = hr.material || 'Industrial Raw Iron';
+              const rollIdent = hr.relatedRoll || 'IRON-ROLL-001';
+              const issueText = hr.issue || item.impactReason || 'Previous quality defect detected on historical inventory roll';
+              const severityText = hr.severity || 'Medium';
+
+              return (
+                <div
+                  key={item.workflowId}
+                  className="p-5 rounded-2xl bg-slate-950/80 border border-amber-500/30 hover:border-amber-500/50 transition-all space-y-4 shadow-lg"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs">
+                        QA
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-white text-sm font-mono">{poNum}</span>
+                          <span className="text-[11px] text-blue-300 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            {item.workflowId}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Automated checks: <strong className="text-emerald-400">4 / 4 Passed</strong> • Historical Risk Flagged
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        {item.status || 'ManualReviewRequired'}
+                      </span>
+                      <button
+                        onClick={() => openResolveModal(item)}
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 transition-all"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Review &amp; Decision</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Historical Risk Context Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">PO Raw Material</span>
+                      <span className="font-bold text-white block truncate">{matName}</span>
+                      <span className="text-[10px] text-slate-500 block">Current order specification</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Related Historical Roll</span>
+                      <span className="font-bold text-amber-300 font-mono block truncate">{rollIdent}</span>
+                      <span className="text-[10px] text-slate-500 block">Flagged historical inventory</span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">Severity Rating</span>
+                      <span className="font-bold text-amber-400 font-mono block">{severityText}</span>
+                      <span className="text-[10px] text-slate-500 block">AI defect classification</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/20 text-xs space-y-1">
+                    <span className="font-bold text-amber-300 uppercase text-[10px] block">Historical Defect &amp; Risk Evidence:</span>
+                    <p className="text-slate-200 leading-relaxed font-sans">{issueText}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 3. EXECUTIVE METRICS CARDS */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1646,86 +1808,186 @@ export default function AiValidationPage() {
         );
       })()}
 
-      {/* 6. MANUAL RESOLUTION MODAL */}
-      {resolveModalOpen && selectedWorkflow && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-6 shadow-2xl animate-in fade-in">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                  <UserCheck className="w-5 h-5" />
+      {/* 6. ENHANCED MANUAL QA REVIEW & DECISION MODAL */}
+      {resolveModalOpen && selectedWorkflow && (() => {
+        const poNum = extractPoNumber(selectedWorkflow);
+        const hr = selectedWorkflow.historicalRisk || {};
+        const matName = hr.material || 'Industrial Raw Iron';
+        const rollIdent = hr.relatedRoll || 'IRON-ROLL-001';
+        const issueText = hr.issue || selectedWorkflow.impactReason || 'Previous quality defect detected on historical inventory roll';
+        const severityText = hr.severity || 'Medium';
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <UserCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Manual QA Safety Review &amp; Decision</h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      PO {poNum} • {selectedWorkflow.workflowId}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Manual QA Review &amp; Resolution</h3>
-                  <p className="text-xs text-slate-400 font-mono">Workflow {selectedWorkflow.workflowId}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setResolveModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {resolveError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{resolveError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleResolveSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Inspector Audit &amp; Resolution Note *
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={resolutionNote}
-                  onChange={(e) => setResolutionNote(e.target.value)}
-                  placeholder="Describe the physical inspection results, lab clearance, or mitigation rationale authorizing approval..."
-                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-
-              <label className="flex items-start gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={releaseQuarantineCheck}
-                  onChange={(e) => setReleaseQuarantineCheck(e.target.checked)}
-                  className="mt-0.5 accent-blue-500 w-4 h-4"
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-white block">Release Quarantined Fabric Rolls</span>
-                  <span className="text-slate-400">
-                    Automatically unblock affected inventory rolls linked to this workflow.
-                  </span>
-                </div>
-              </label>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
-                  type="button"
                   onClick={() => setResolveModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs font-medium hover:bg-slate-800"
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={resolving}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center gap-2 disabled:opacity-50"
-                >
-                  {resolving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Authorize &amp; Resolve</span>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              {/* Risk Context Card */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2.5 text-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Historical Quality Risk Evidence
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Material:</span>
+                    <span className="font-bold text-white">{matName}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block">Historical Roll:</span>
+                    <span className="font-bold text-amber-300 font-mono">{rollIdent}</span>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400">Historical Issue:</span>
+                    <span className="text-[10px] font-mono text-amber-300">Severity: {severityText}</span>
+                  </div>
+                  <p className="text-slate-200 text-xs leading-relaxed">{issueText}</p>
+                </div>
+              </div>
+
+              {resolveError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{resolveError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleResolveSubmit} className="space-y-4">
+                {/* 3 Inspector Decisions */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Inspector Decision *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'Clear', label: 'Clear', desc: 'Clear for approval', icon: ShieldCheck, color: 'emerald' },
+                      { id: 'Reject', label: 'Reject', desc: 'Block & reject PO', icon: X, color: 'rose' },
+                      { id: 'Keep on Hold', label: 'Keep on Hold', desc: 'Maintain hold', icon: Clock, color: 'amber' }
+                    ].map((opt) => {
+                      const isSelected = inspectorDecision === opt.id;
+                      const Icon = opt.icon;
+
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setInspectorDecision(opt.id)}
+                          className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                            isSelected
+                              ? opt.id === 'Clear'
+                                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300 shadow-md shadow-emerald-600/20'
+                                : opt.id === 'Reject'
+                                ? 'bg-rose-600/20 border-rose-500 text-rose-300 shadow-md shadow-rose-600/20'
+                                : 'bg-amber-600/20 border-amber-500 text-amber-300 shadow-md shadow-amber-600/20'
+                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <Icon className={`w-4 h-4 ${isSelected ? (opt.id === 'Clear' ? 'text-emerald-400' : opt.id === 'Reject' ? 'text-rose-400' : 'text-amber-400') : 'text-slate-500'}`} />
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs block text-white">{opt.label}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">{opt.desc}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Inspector Notes */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Inspection Notes &amp; Rationale *
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={resolutionNote}
+                    onChange={(e) => setResolutionNote(e.target.value)}
+                    placeholder={
+                      inspectorDecision === 'Clear'
+                        ? 'e.g. Physical inspection completed on raw iron batch. No oxidation or micro-fractures detected.'
+                        : inspectorDecision === 'Reject'
+                        ? 'e.g. Surface defect confirmed upon visual inspection. Substandard batch; reject PO.'
+                        : 'e.g. Awaiting ultrasonic testing report from lab before releasing order hold.'
+                    }
+                    className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+
+                {inspectorDecision === 'Clear' && (
+                  <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer text-xs transition-colors hover:border-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={releaseQuarantineCheck}
+                      onChange={(e) => setReleaseQuarantineCheck(e.target.checked)}
+                      className="mt-0.5 accent-emerald-500 w-3.5 h-3.5"
+                    />
+                    <div>
+                      <span className="font-bold text-white block text-[11px]">Release Quarantined Inventory Rolls</span>
+                      <span className="text-slate-400 text-[10px] leading-relaxed">
+                        Optional: Check this only if you also want to release the affected historical roll from physical quarantine. Leaving unchecked will clear this PO while keeping historical rolls quarantined.
+                      </span>
+                    </div>
+                  </label>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setResolveModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs font-medium hover:bg-slate-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={resolving}
+                    className={`px-5 py-2 rounded-xl text-white text-xs font-bold shadow-lg flex items-center gap-2 disabled:opacity-50 transition-all ${
+                      inspectorDecision === 'Clear'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                        : inspectorDecision === 'Reject'
+                        ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                        : 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                    }`}
+                  >
+                    {resolving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>
+                      {inspectorDecision === 'Clear'
+                        ? 'Authorize Clearance'
+                        : inspectorDecision === 'Reject'
+                        ? 'Confirm Rejection'
+                        : 'Save Hold Decision'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

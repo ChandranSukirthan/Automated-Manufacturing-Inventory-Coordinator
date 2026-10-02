@@ -125,35 +125,110 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             var resolvedTime = DateTime.UtcNow.ToString("o");
-            resultsDict["manualResolutionStatus"] = "RESOLVED";
+            var decision = dto.Decision?.Trim();
+
+            var supplierPassed = !resultsDict.TryGetValue("supplierValidation", out var sv) || sv?.ToString() == "PASSED";
+            var budgetPassed = !resultsDict.TryGetValue("budgetCheck", out var bc) || bc?.ToString() == "PASSED";
+            var poMathPassed = !resultsDict.TryGetValue("poMathematicalCheck", out var pm) || pm?.ToString() == "PASSED";
+            var materialPassed = !resultsDict.TryGetValue("materialValidation", out var mv) || mv?.ToString() == "PASSED";
+            var allFourChecksPassed = supplierPassed && budgetPassed && poMathPassed && materialPassed;
+
+            if (string.Equals(decision, "Reject", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(decision, "QARejected", StringComparison.OrdinalIgnoreCase))
+            {
+                resultsDict["manualResolutionStatus"] = "REJECTED";
+                resultsDict["qualitySafetyStatus"] = "REJECTED";
+                resultsDict["isValid"] = false;
+                resultsDict["rejectionReason"] = $"Manual QA Review rejected by QA Inspector: {dto.Note.Trim()}";
+            }
+            else if (string.Equals(decision, "Keep on Hold", StringComparison.OrdinalIgnoreCase) || 
+                     string.Equals(decision, "OnHold", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(decision, "Hold", StringComparison.OrdinalIgnoreCase))
+            {
+                resultsDict["manualResolutionStatus"] = "ON_HOLD";
+                resultsDict["qualitySafetyStatus"] = "ON_HOLD";
+                resultsDict["isValid"] = false;
+                resultsDict["rejectionReason"] = $"Manual QA Review placed on hold: {dto.Note.Trim()}";
+            }
+            else
+            {
+                // Clear / QACleared
+                resultsDict["manualResolutionStatus"] = "RESOLVED";
+                resultsDict["qualitySafetyStatus"] = "CLEAR";
+                resultsDict["isValid"] = allFourChecksPassed;
+                if (allFourChecksPassed)
+                {
+                    resultsDict["rejectionReason"] = null;
+                }
+            }
+
             resultsDict["manualResolutionNote"] = dto.Note.Trim();
             resultsDict["resolvedBy"] = userName;
             resultsDict["resolvedAt"] = resolvedTime;
 
-            // Preserve original AI finding and reason in ValidationResults
-            if (!resultsDict.ContainsKey("qualitySafetyStatus") || resultsDict["qualitySafetyStatus"] == null)
-            {
-                resultsDict["qualitySafetyStatus"] = "QUARANTINE_REQUIRED";
-            }
-
             wf.ValidationResults = JsonSerializer.Serialize(resultsDict);
 
-            // Release active quarantines if requested
-            if (dto.ReleaseQuarantine)
+            // Release active quarantines ONLY if explicitly requested and decision was Clear
+            if (dto.ReleaseQuarantine && resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")
             {
+                string? targetRoll = null;
+                string? targetMaterial = null;
+
+                if (resultsDict.TryGetValue("historicalRisk", out var hrObj) && hrObj != null)
+                {
+                    if (hrObj is JsonElement hrElem && hrElem.ValueKind == JsonValueKind.Object)
+                    {
+                        if (hrElem.TryGetProperty("relatedRoll", out var rr)) targetRoll = rr.GetString();
+                        if (hrElem.TryGetProperty("material", out var mat)) targetMaterial = mat.GetString();
+                    }
+                    else if (hrObj is Dictionary<string, object?> hrDict)
+                    {
+                        if (hrDict.TryGetValue("relatedRoll", out var rr)) targetRoll = rr?.ToString();
+                        if (hrDict.TryGetValue("material", out var mat)) targetMaterial = mat?.ToString();
+                    }
+                    else if (hrObj is string hrStr && !string.IsNullOrWhiteSpace(hrStr))
+                    {
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(hrStr);
+                            if (doc.RootElement.TryGetProperty("relatedRoll", out var rr)) targetRoll = rr.GetString();
+                            if (doc.RootElement.TryGetProperty("material", out var mat)) targetMaterial = mat.GetString();
+                        }
+                        catch { }
+                    }
+                }
+
                 var activeQuarantines = await _context.Quarantines
+                    .Include(q => q.DefectReport)
                     .Where(q => q.Status == QuarantineStatus.Active)
                     .ToListAsync(cancellationToken);
 
                 foreach (var q in activeQuarantines)
                 {
-                    q.Status = QuarantineStatus.Released;
-                    q.ReleasedAt = DateTime.UtcNow;
-
-                    var roll = await _context.InventoryRolls.FirstOrDefaultAsync(r => r.Id == q.InventoryRollId, cancellationToken);
-                    if (roll != null)
+                    bool isRelevant = false;
+                    if (!string.IsNullOrEmpty(targetRoll) && (q.InventoryRollId == targetRoll || q.InventoryRollId.Contains(targetRoll, StringComparison.OrdinalIgnoreCase)))
                     {
-                        roll.Status = InventoryStatus.Available;
+                        isRelevant = true;
+                    }
+                    else if (!string.IsNullOrEmpty(targetMaterial) && q.DefectReport != null && q.DefectReport.Description.Contains(targetMaterial, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isRelevant = true;
+                    }
+                    else if (string.IsNullOrEmpty(targetRoll) && string.IsNullOrEmpty(targetMaterial))
+                    {
+                        isRelevant = true;
+                    }
+
+                    if (isRelevant)
+                    {
+                        q.Status = QuarantineStatus.Released;
+                        q.ReleasedAt = DateTime.UtcNow;
+
+                        var roll = await _context.InventoryRolls.FirstOrDefaultAsync(r => r.Id == q.InventoryRollId, cancellationToken);
+                        if (roll != null)
+                        {
+                            roll.Status = InventoryStatus.Available;
+                        }
                     }
                 }
             }
@@ -178,6 +253,7 @@ namespace ManufacturingCoordinator.Api.Controllers
             string? resolvedBy = null;
             string? resolvedAt = null;
             bool? isValid = null;
+            object? historicalRisk = null;
 
             if (!string.IsNullOrWhiteSpace(wf.ValidationResults))
             {
@@ -198,6 +274,11 @@ namespace ManufacturingCoordinator.Api.Controllers
                     manualResolutionNote   = GetString(root, "manualResolutionNote");
                     resolvedBy             = GetString(root, "resolvedBy");
                     resolvedAt             = GetString(root, "resolvedAt");
+
+                    if (root.TryGetProperty("historicalRisk", out var hrElem) && hrElem.ValueKind == JsonValueKind.Object)
+                    {
+                        historicalRisk = JsonSerializer.Deserialize<object>(hrElem.GetRawText());
+                    }
                 }
                 catch
                 {
@@ -210,9 +291,21 @@ namespace ManufacturingCoordinator.Api.Controllers
             {
                 workflowStatus = "Resolved";
             }
+            else if (manualResolutionStatus == "REJECTED")
+            {
+                workflowStatus = "Rejected";
+            }
+            else if (manualResolutionStatus == "ON_HOLD")
+            {
+                workflowStatus = "OnHold";
+            }
             else if (isValid == true && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && (quarantinedRollsCount == null || quarantinedRollsCount == 0))
             {
                 workflowStatus = "Verified";
+            }
+            else if (qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || manualResolutionStatus == "PENDING_REVIEW")
+            {
+                workflowStatus = "ManualReviewRequired";
             }
             else if (isValid == false || (quarantinedRollsCount != null && quarantinedRollsCount > 0) || qualitySafetyStatus?.Contains("QUARANTINE", StringComparison.OrdinalIgnoreCase) == true)
             {
@@ -242,6 +335,7 @@ namespace ManufacturingCoordinator.Api.Controllers
                 manualResolutionNote   = manualResolutionNote,
                 resolvedBy             = resolvedBy,
                 resolvedAt             = resolvedAt,
+                historicalRisk         = historicalRisk,
                 startedAt              = wf.StartedAt.ToString("o"),
                 completedAt            = wf.CompletedAt?.ToString("o"),
                 assessedAt             = assessedTime

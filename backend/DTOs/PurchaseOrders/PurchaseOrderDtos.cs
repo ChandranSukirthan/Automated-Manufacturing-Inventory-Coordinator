@@ -112,6 +112,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string Currency { get; set; } = "USD";
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
+        public decimal BudgetLimit { get; set; }
         public bool RequiresApproval { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

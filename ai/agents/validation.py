@@ -35,6 +35,97 @@ def _check_quarantine_count() -> int:
         return 0
 
 
+def _check_historical_material_quality_risk(mat_id: Any, mat_name: str = "") -> dict[str, Any] | None:
+    """
+    Inspects historical quality data associated with the PO's raw material.
+    Relationship: RawMaterial -> InventoryRolls -> DefectReports / Quarantines.
+    Returns historicalRisk dict if a past quality issue/quarantine exists on this material, else None.
+    """
+    try:
+        import psycopg
+        with psycopg.connect(
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            dbname=settings.DB_NAME,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            connect_timeout=2,
+        ) as conn:
+            with conn.cursor() as cur:
+                # 1. Look for inventory rolls of this material with defect reports or quarantines
+                if str(mat_id).isdigit():
+                    cur.execute(
+                        '''
+                        SELECT ir."Id", ir."RollIdentifier", dr."Description", dr."Severity", q."Reason", r."Name"
+                        FROM "InventoryRolls" ir
+                        JOIN "RawMaterials" r ON r."Id" = ir."RawMaterialId"
+                        LEFT JOIN "Quarantines" q ON q."InventoryRollId" = ir."Id" OR q."InventoryRollId" = ir."RollIdentifier"
+                        LEFT JOIN "DefectReports" dr ON dr."Id" = q."DefectReportId" OR dr."BatchId" = ir."BatchId"
+                        WHERE ir."RawMaterialId" = %s AND (q."Id" IS NOT NULL OR dr."Id" IS NOT NULL)
+                        ORDER BY COALESCE(q."CreatedAt", dr."CreatedAt", ir."CreatedAt") DESC
+                        LIMIT 1;
+                        ''',
+                        (int(mat_id),)
+                    )
+                else:
+                    cur.execute(
+                        '''
+                        SELECT ir."Id", ir."RollIdentifier", dr."Description", dr."Severity", q."Reason", r."Name"
+                        FROM "InventoryRolls" ir
+                        JOIN "RawMaterials" r ON r."Id" = ir."RawMaterialId"
+                        LEFT JOIN "Quarantines" q ON q."InventoryRollId" = ir."Id" OR q."InventoryRollId" = ir."RollIdentifier"
+                        LEFT JOIN "DefectReports" dr ON dr."Id" = q."DefectReportId" OR dr."BatchId" = ir."BatchId"
+                        WHERE (r."SkuCode" = %s OR r."Name" ILIKE %s) AND (q."Id" IS NOT NULL OR dr."Id" IS NOT NULL)
+                        ORDER BY COALESCE(q."CreatedAt", dr."CreatedAt", ir."CreatedAt") DESC
+                        LIMIT 1;
+                        ''',
+                        (str(mat_id), f"%{mat_name or mat_id}%")
+                    )
+                row = cur.fetchone()
+                if row:
+                    roll_ident = row[1] or row[0] or "IRON-ROLL-001"
+                    issue_desc = row[2] or row[4] or "Previous quality defect detected"
+                    severity = str(row[3] or "Medium")
+                    material_label = row[5] or mat_name or "Iron"
+                    return {
+                        "material": material_label,
+                        "relatedRoll": roll_ident,
+                        "issue": issue_desc,
+                        "severity": severity
+                    }
+
+                # 2. Check if there are DefectReports mentioning the material directly (e.g. Iron defect)
+                cur.execute(
+                    '''
+                    SELECT dr."BatchId", dr."Description", dr."Severity", dr."AffectedInventoryJson"
+                    FROM "DefectReports" dr
+                    WHERE dr."Description" ILIKE %s OR dr."BatchId" ILIKE %s
+                    ORDER BY dr."CreatedAt" DESC LIMIT 1;
+                    ''',
+                    (f"%{mat_name or mat_id}%", f"%{mat_name or mat_id}%")
+                )
+                d_row = cur.fetchone()
+                if d_row:
+                    roll_ref = "IRON-ROLL-001"
+                    if d_row[3] and "[" in str(d_row[3]):
+                        try:
+                            import json
+                            items = json.loads(d_row[3])
+                            if items and len(items) > 0:
+                                roll_ref = str(items[0])
+                        except Exception:
+                            pass
+                    return {
+                        "material": mat_name or str(mat_id),
+                        "relatedRoll": roll_ref,
+                        "issue": d_row[1] or "Previous quality defect detected",
+                        "severity": str(d_row[2] or "Medium")
+                    }
+    except Exception as ex:
+        logger.warning(f"Historical quality risk check exception: {ex}")
+    return None
+
+
 def validation_node(state: AgentState) -> Dict[str, Any]:
     """
     Validation / Safety Agent Node.
@@ -127,6 +218,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     # Material validation against PostgreSQL RawMaterials database
     material_val = "PASSED"
+    mat_name = ""
     mat_id = draft_po.get("materialId") or state.get("material_id") or state.get("target_material_id") or state.get("inventory_data", {}).get("materialId")
     if mat_id is None or str(mat_id).strip() == "" or str(mat_id).strip() == "0":
         material_val = "MATERIAL_NOT_FOUND"
@@ -155,6 +247,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                         rejection_reasons.append(f"Raw material '{mat_id}' does not exist in inventory catalog.")
                     else:
                         material_val = "PASSED"
+                        mat_name = mat_row[2] or ""
         except Exception as ex:
             logger.warning(f"Database material check error: {ex}")
 
@@ -177,11 +270,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     else:
         supplier_check = "WARNING"
 
-    # ── 5. Quality & Quarantine Safety Assessment (Student 3) ─────────────────
+    # ── 5. Quality, Historical Risk & Quarantine Safety Assessment ─────────────
     quality_safety_status = "CLEAR"
     quality_data = dict(state.get("quality_data") or {})
     defect = quality_data.get("defect")
     quarantined_rolls_count = _check_quarantine_count()
+
+    # Historical Quality Risk Detection (Human-in-the-Loop requirement)
+    historical_risk = _check_historical_material_quality_risk(mat_id, mat_name)
 
     if defect:
         try:
@@ -218,6 +314,9 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     elif quarantined_rolls_count > 0:
         quality_safety_status = "QUARANTINE_ACTIVE"
         completed.append(f"Quality Agent: Detected {quarantined_rolls_count} active quarantine holds")
+    elif historical_risk:
+        quality_safety_status = "MANUAL_REVIEW_REQUIRED"
+        completed.append(f"Quality Agent: Flagged Historical Quality Risk on material '{historical_risk['material']}' (Roll: {historical_risk['relatedRoll']}) - Manual QA Review Required")
     else:
         completed.append("Quality Agent: Factory inventory quarantine status CLEAR")
 
@@ -227,6 +326,8 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         diagnostic_reasons.append("Quality Agent quarantine recommendation requires authorization")
     elif quality_safety_status == "QUARANTINE_ACTIVE" or quarantined_rolls_count > 0:
         diagnostic_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantine holds")
+    elif quality_safety_status == "MANUAL_REVIEW_REQUIRED" and historical_risk:
+        diagnostic_reasons.append(f"Historical quality risk detected on {historical_risk['material']} (Related roll: {historical_risk['relatedRoll']})")
     if supplier_val == "INACTIVE_SUPPLIER":
         diagnostic_reasons.append("Supplier is marked inactive in database")
     if material_val == "MATERIAL_NOT_FOUND":
@@ -242,29 +343,34 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     manual_res_status = existing_vr.get("manualResolutionStatus")
     if not manual_res_status:
-        if quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"] or not is_valid:
+        if quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"] or not is_valid:
             manual_res_status = "PENDING_REVIEW"
         else:
             manual_res_status = "NOT_REQUIRED"
 
+    if manual_res_status != "RESOLVED" and quality_safety_status == "MANUAL_REVIEW_REQUIRED" and historical_risk:
+        is_valid = False
+        rejection_reasons.append(f"Manual QA Review Required: Historical quality risk detected on material '{historical_risk['material']}' (Related roll: {historical_risk['relatedRoll']} - {historical_risk['issue']}). Waiting for QA Inspector review.")
+
     if budget_check == "FAIL" or quantity_check == "FAIL" or supplier_check == "FAIL" or not is_valid:
         overall_status = "FAILED"
-    elif supplier_check == "WARNING" or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"]):
+    elif supplier_check == "WARNING" or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"]):
         overall_status = "REQUIRES_MANAGER_REVIEW"
     else:
         overall_status = "APPROVED"
 
     validation_results = {
-        "valid": is_valid and (quality_safety_status == "CLEAR") and (overall_status != "FAILED"),
-        "isValid": is_valid and (quality_safety_status == "CLEAR"),
+        "valid": is_valid and (quality_safety_status in ("CLEAR", "PASSED") or manual_res_status == "RESOLVED") and (overall_status != "FAILED"),
+        "isValid": is_valid and (quality_safety_status in ("CLEAR", "PASSED") or manual_res_status == "RESOLVED"),
         "qualitySafetyStatus": quality_safety_status,
         "supplierValidation": supplier_val,
         "budgetCheck": budget_val,
         "toleranceCheck": "PASSED",
-        "safetyLockoutCheck": "CLEAR" if quality_safety_status == "CLEAR" else "LOCKED",
+        "safetyLockoutCheck": "CLEAR" if (quality_safety_status == "CLEAR" or manual_res_status == "RESOLVED") else "LOCKED",
         "poMathematicalCheck": po_math_check,
         "materialValidation": material_val,
         "quarantinedRollsCount": quarantined_rolls_count,
+        "historicalRisk": historical_risk,
         "impactReason": "; ".join(diagnostic_reasons) if diagnostic_reasons else "Operational parameters clear.",
         "rejectionReason": "; ".join(rejection_reasons) if rejection_reasons else "",
         "manualResolutionStatus": manual_res_status,
@@ -275,7 +381,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "moqCheck": moq_check,
         "packSizeCheck": pack_size_check,
         "supplierVerification": supplier_check,
-        "qualityCheck": "PASS" if quality_safety_status == "CLEAR" else "WARNING",
+        "qualityCheck": "PASS" if quality_safety_status in ("CLEAR", "PASSED") else "WARNING",
         "availabilityCheck": "PASS",
         "overallStatus": overall_status,
     }

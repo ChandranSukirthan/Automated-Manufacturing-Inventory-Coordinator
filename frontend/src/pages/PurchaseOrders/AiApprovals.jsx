@@ -21,7 +21,8 @@ import {
   ChevronRight,
   CreditCard,
   Mail,
-  Send
+  Send,
+  Lock
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -92,10 +93,10 @@ export default function AiApprovals() {
     fetchPendingOrders();
   }, []);
 
-  // Approval animation steps
+  // Approval animation steps & QA failure state
   const [animatingApproval, setAnimatingApproval] = useState(false);
   const [approvalStep, setApprovalStep] = useState(0); 
-  // 1: Approved, 2: Payment Processing, 3: Payment Successful, 4: Supplier Notification, 5: PO Sent
+  const [validationFailure, setValidationFailure] = useState(null);
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -104,34 +105,154 @@ export default function AiApprovals() {
     if (!selectedOrder) return;
     setApproveModalOpen(false);
     setAnimatingApproval(true);
+    setValidationFailure(null);
     setError('');
 
     try {
       // Step 1: Validating JWT Authorization
       setApprovalStep(1);
-      await delay(700);
+      await delay(600);
 
       // Step 2: QA AI Multi-Agent Validation (Supplier, Budget, PO Math, Material)
       setApprovalStep(2);
-      await delay(900);
+      await delay(700);
+
+      // Execute backend approval gate
+      await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
+      await delay(500);
 
       // Step 3: Approving Order in backend (Authoritative Gate & AgentWorkflow Sync)
       setApprovalStep(3);
-      await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
-      await delay(600);
+      await delay(500);
 
       // Step 4: Awaiting Payment
       setApprovalStep(4);
     } catch (err) {
-      setAnimatingApproval(false);
-      setApprovalStep(0);
-      setError(parseErrorMessage(err, 'Failed to approve purchase order.'));
+      const errMsg = parseErrorMessage(err, 'Failed to approve purchase order.');
+      
+      // Parse potential budget limit or total cost from backend message if not on object
+      let poTotal = selectedOrder.totalCost || 0;
+      let budgetLimit = selectedOrder.budgetLimit || 0;
+
+      const totalMatch = errMsg.match(/Total order cost \(\$?([0-9,.]+)\)/i);
+      if (totalMatch && (!poTotal || poTotal === 0)) {
+        poTotal = parseFloat(totalMatch[1].replace(/,/g, ''));
+      }
+
+      const budgetMatch = errMsg.match(/budget limit \(\$?([0-9,.]+)\)/i);
+      if (budgetMatch && (!budgetLimit || budgetLimit === 0)) {
+        budgetLimit = parseFloat(budgetMatch[1].replace(/,/g, ''));
+      }
+
+      const exceededBy = Math.max(0, poTotal - budgetLimit);
+
+      // Determine the checks status and diagnostic breakdown
+      let checks = {
+        supplier: 'PASSED',
+        budget: 'PASSED',
+        poMath: 'PASSED',
+        material: 'PASSED'
+      };
+
+      let diagnostic = null;
+      const lowerErr = errMsg.toLowerCase();
+
+      const firstLine = selectedOrder.orderLines?.[0] || {};
+      const matName = firstLine.rawMaterialName || 'Industrial Raw Iron';
+      const isIron = matName.toLowerCase().includes('iron') || (firstLine.rawMaterialSku || '').toLowerCase().includes('iron');
+
+      if (lowerErr.includes('manual review') || lowerErr.includes('historical') || lowerErr.includes('quarantine') || lowerErr.includes('hold') || lowerErr.includes('rejected') || lowerErr.includes('quality inspector')) {
+        // All 4 automated checks PASSED, but historical quality risk requires manual review
+        checks = {
+          supplier: 'PASSED',
+          budget: 'PASSED',
+          poMath: 'PASSED',
+          material: 'PASSED'
+        };
+
+        const relatedRoll = isIron ? 'IRON-ROLL-001' : 'HISTORICAL-ROLL-001';
+        const isRejected = lowerErr.includes('rejected');
+        const isOnHold = lowerErr.includes('hold');
+
+        diagnostic = {
+          isHistoricalRisk: true,
+          issue: isRejected 
+            ? 'QA validation was rejected by Quality Inspector.' 
+            : isOnHold 
+            ? 'QA validation is on hold pending physical inspection.' 
+            : 'Previous quality defect detected on historical inventory roll.',
+          material: matName,
+          relatedRoll: relatedRoll,
+          severity: 'Medium',
+          qaStatus: isRejected ? 'Rejected by QA Inspector' : isOnHold ? 'On Hold — Inspection Pending' : 'Waiting for manual inspection',
+          action: 'Waiting for QA Inspector review. Please wait for QA to clear this material risk in the QA Validation Ledger before approval.',
+          detail: errMsg
+        };
+      } else if (lowerErr.includes('budget') || lowerErr.includes('exceed') || (budgetLimit > 0 && poTotal > budgetLimit)) {
+        checks.budget = 'FAILED';
+        diagnostic = {
+          issue: 'Budget exceeded.',
+          poTotal,
+          budgetLimit: budgetLimit > 0 ? budgetLimit : (selectedOrder.approvalThreshold || 15000),
+          exceededBy: exceededBy > 0 ? exceededBy : (poTotal - (selectedOrder.approvalThreshold || 15000)),
+          action: 'Please correct the PO or authorized budget and submit for approval again.'
+        };
+      } else if (lowerErr.includes('supplier') || lowerErr.includes('inactive')) {
+        checks.supplier = 'FAILED';
+        diagnostic = {
+          issue: 'Supplier is inactive or invalid.',
+          poTotal,
+          budgetLimit,
+          action: 'Please activate the supplier or reassign an active supplier to this order.',
+          detail: errMsg
+        };
+      } else if (lowerErr.includes('calculation') || lowerErr.includes('mismatch') || lowerErr.includes('math') || lowerErr.includes('financial')) {
+        checks.poMath = 'FAILED';
+        diagnostic = {
+          issue: 'PO financial calculation mismatch detected.',
+          poTotal,
+          budgetLimit,
+          action: 'Please verify line quantities and unit prices and update order totals.',
+          detail: errMsg
+        };
+      } else if (lowerErr.includes('material') || lowerErr.includes('catalog') || lowerErr.includes('rawmaterial')) {
+        checks.material = 'FAILED';
+        diagnostic = {
+          issue: 'Raw material uncataloged or invalid.',
+          poTotal,
+          budgetLimit,
+          action: 'Please ensure all materials are valid and active in the inventory catalog.',
+          detail: errMsg
+        };
+      } else {
+        // General failure or internal error
+        const cleanIssue = errMsg
+          .replace(/^Approval blocked:\s*/i, '')
+          .replace(/^An error occurred while saving the entity changes\..*/i, 'System verification failed while saving approval state.') || 'Quality safety or policy check issue.';
+        
+        diagnostic = {
+          issue: cleanIssue,
+          poTotal,
+          budgetLimit,
+          exceededBy: undefined,
+          action: 'Please correct the PO or resolve QA flags and submit for approval again.',
+          detail: errMsg
+        };
+      }
+
+      setValidationFailure({
+        checks,
+        diagnostic
+      });
+      // Keep approvalStep at 2 so Step 2 shows the issue, Step 3 shows BLOCKED, and Step 4 shows LOCKED
+      setApprovalStep(2);
     }
   };
 
   const handleFinishApprovalAnimation = async () => {
     setAnimatingApproval(false);
     setApprovalStep(0);
+    setValidationFailure(null);
     setSelectedOrder(null);
     await fetchPendingOrders();
   };
@@ -363,13 +484,15 @@ export default function AiApprovals() {
           <div className="grid grid-cols-1 gap-6">
             {orders.map((po) => {
               const firstLine = po.orderLines?.[0] || {};
-              const materialName = firstLine.rawMaterialName || 'Industrial Grade Raw Material';
-              const materialSku = firstLine.rawMaterialSku || `RM-${firstLine.rawMaterialId || '01'}`;
-              const qty = firstLine.quantity || 2000;
-              const unitPrice = firstLine.unitPrice || 4.5;
-              const totalAmount = po.totalCost || qty * unitPrice;
-              const budgetLimit = po.budgetLimit || 15000;
-              const budgetPercentage = Math.round((totalAmount / budgetLimit) * 100);
+              const materialName = firstLine.rawMaterialName || po.rawMaterialName || 'Industrial Grade Raw Material';
+              const materialSku = firstLine.rawMaterialSku || po.rawMaterialSku || `RM-${firstLine.rawMaterialId || '01'}`;
+              const qty = Number(firstLine.quantity !== undefined ? firstLine.quantity : po.quantity) || 0;
+              const unitPrice = Number(firstLine.unitPrice !== undefined ? firstLine.unitPrice : po.unitPrice) || 0;
+              const totalAmount = Number(po.totalCost !== undefined ? po.totalCost : (qty * unitPrice)) || 0;
+              const budgetLimit = Number(po.budgetLimit !== undefined ? po.budgetLimit : 15000) || 15000;
+              const isBudgetPassed = budgetLimit > 0 ? totalAmount <= budgetLimit : true;
+              const budgetPercentage = budgetLimit > 0 ? Math.round((totalAmount / budgetLimit) * 100) : 100;
+              const exceededAmount = Math.max(0, totalAmount - budgetLimit);
 
               const wfMatch = po.notes?.match(/(WF-[A-Za-z0-9_-]+)/);
               const workflowId = wfMatch ? wfMatch[1] : (po.poNumber.startsWith('PO-DRAFT-') ? `WF-${po.poNumber.replace('PO-DRAFT-', '')}` : `WF-${po.poNumber}`);
@@ -481,8 +604,8 @@ export default function AiApprovals() {
                     {/* Budget & Compliance Result */}
                     <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
                       <span className="font-bold text-slate-300 flex items-center gap-1.5 uppercase text-[10px] tracking-wider">
-                        <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Budget & Validation Result</span>
+                        <DollarSign className={`w-3.5 h-3.5 ${isBudgetPassed ? 'text-emerald-400' : 'text-rose-400'}`} />
+                        <span>Budget &amp; Validation Result</span>
                       </span>
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">Budget Limit:</span>
@@ -492,13 +615,13 @@ export default function AiApprovals() {
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">Budget Utilization:</span>
-                        <span className="font-bold text-emerald-400 font-mono">
-                          {budgetPercentage}% utilized (Passed)
+                        <span className={`font-bold font-mono ${isBudgetPassed ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {budgetPercentage}% utilized ({isBudgetPassed ? 'Passed' : `Exceeded by +$${exceededAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`})
                         </span>
                       </div>
                       <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                         <div
-                          className="bg-emerald-500 h-full rounded-full"
+                          className={`${isBudgetPassed ? 'bg-emerald-500' : 'bg-rose-500'} h-full rounded-full transition-all`}
                           style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
                         />
                       </div>
@@ -507,7 +630,7 @@ export default function AiApprovals() {
                       {(() => {
                         const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
                         const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
-                        const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
+                        const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus.includes('MANUAL_REVIEW') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
 
                         return (
                           <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${
@@ -532,7 +655,7 @@ export default function AiApprovals() {
                       </span>
                       <div className="text-[11px] text-slate-400 space-y-1">
                         <p>• calculate_burn_rate(SKU) → 180.5 kg/day</p>
-                        <p>• validate_budget({totalAmount}, {budgetLimit}) → APPROVED</p>
+                        <p>• validate_budget(${totalAmount.toFixed(2)}, ${budgetLimit.toFixed(2)}) → <span className={isBudgetPassed ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{isBudgetPassed ? 'APPROVED' : 'BUDGET_EXCEEDED'}</span></p>
                         <p>• check_qa_safety_status() → {po.manualResolutionStatus === 'RESOLVED' ? 'RESOLVED' : 'CLEAR / VERIFIED'}</p>
                         <p>• enforce_backend_gate() → AUTHORITATIVE POSTGRESQL VERIFIED</p>
                       </div>
@@ -656,110 +779,349 @@ export default function AiApprovals() {
 
             {/* Stepper Progress */}
             <div className="space-y-3">
-              {[
-<<<<<<< HEAD
-                { step: 1, title: 'Validating Authorization', desc: 'Manager authorization verified via JWT' },
-                { step: 2, title: 'Approving Order', desc: 'Transitioning Purchase Order state to Approved' },
-                { step: 3, title: 'AI Quality Verification', desc: 'Running Unified Supply Chain & Quality Check (4/4)' },
-                { step: 4, title: 'Awaiting Payment', desc: 'Order is verified and ready for Stripe settlement' },
-=======
-                { 
-                  step: 1, 
-                  title: 'Validating Authorization', 
-                  desc: 'Manager authorization verified via JWT' 
-                },
-                { 
-                  step: 2, 
-                  title: 'QA AI Multi-Agent Validation', 
-                  desc: 'Executing rule-based validation (Supplier, Budget, PO Math & Material checks)',
-                  hasChecks: true
-                },
-                { 
-                  step: 3, 
-                  title: 'Approving Order', 
-                  desc: 'Transitioning Purchase Order state to Approved in authoritative ledger' 
-                },
-                { 
-                  step: 4, 
-                  title: 'Awaiting Payment', 
-                  desc: 'Order is ready for Stripe Checkout settlement' 
-                },
->>>>>>> d2a3570 (feat(qa): enhance QA validation pipeline, redesign AI validation ledger, remove high impact flag, and fix assessment timestamps)
-              ].map((item) => {
-                const isPassed = approvalStep > item.step;
-                const isCurrent = approvalStep === item.step;
-
-                return (
-                  <div
-                    key={item.step}
-                    className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${
-                      isPassed
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                        : isCurrent
-                        ? 'bg-brand-500/15 border-brand-500/40 text-brand-200 ring-1 ring-brand-500/30'
-                        : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 shrink-0">
-                        {isPassed ? (
-                          <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
-                            <Check className="w-3.5 h-3.5" />
-                          </div>
-                        ) : isCurrent ? (
-                          <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          </div>
-                        ) : (
-                          <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
-                            {item.step}
-                          </div>
-                        )}
+              {/* Step 1: Validating Authorization */}
+              <div
+                className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${
+                  approvalStep >= 2
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : approvalStep === 1
+                    ? 'bg-brand-500/15 border-brand-500/40 text-brand-200 ring-1 ring-brand-500/30'
+                    : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {approvalStep >= 2 ? (
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                        <Check className="w-3.5 h-3.5" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className={`text-xs font-bold ${isCurrent ? 'text-white' : ''}`}>{item.title}</p>
-                          {isPassed && <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>}
-                          {isCurrent && <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>}
-                        </div>
-                        <p className="text-[11px] opacity-80 mt-0.5">{item.desc}</p>
+                    ) : approvalStep === 1 ? (
+                      <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       </div>
-                    </div>
-
-                    {/* Show micro-badges for the 4 checks when step 2 is in progress or completed */}
-                    {item.hasChecks && (approvalStep >= 2) && (
-                      <div className="grid grid-cols-2 gap-1.5 pt-1.5 pl-9 border-t border-slate-800/50">
-                        {[
-                          { label: 'Supplier Check' },
-                          { label: 'Budget Check' },
-                          { label: 'PO Math Check' },
-                          { label: 'Material Check' }
-                        ].map((c) => (
-                          <div
-                            key={c.label}
-                            className={`flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono ${
-                              approvalStep > 2
-                                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
-                                : 'bg-slate-900 border border-brand-500/30 text-brand-300 animate-pulse'
-                            }`}
-                          >
-                            <span>{c.label}</span>
-                            <span className="font-bold">{approvalStep > 2 ? 'PASSED' : 'CHECKING...'}</span>
-                          </div>
-                        ))}
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        1
                       </div>
                     )}
                   </div>
-                );
-              })}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold ${approvalStep === 1 ? 'text-white' : ''}`}>Validating Authorization</p>
+                      {approvalStep >= 2 && <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>}
+                      {approvalStep === 1 && <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>}
+                    </div>
+                    <p className="text-[11px] opacity-80 mt-0.5">Manager authorization verified via JWT</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2: QA AI Multi-Agent Validation */}
+              <div
+                className={`flex flex-col gap-2 p-3.5 rounded-xl border transition-all ${
+                  validationFailure
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-200 ring-1 ring-amber-500/30'
+                    : approvalStep > 2
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : approvalStep === 2
+                    ? 'bg-brand-500/15 border-brand-500/40 text-brand-200 ring-1 ring-brand-500/30'
+                    : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {validationFailure ? (
+                      <div className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-amber-500/30">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                      </div>
+                    ) : approvalStep > 2 ? (
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+                    ) : approvalStep === 2 ? (
+                      <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        2
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold ${validationFailure ? 'text-amber-300' : approvalStep === 2 ? 'text-white' : ''}`}>
+                        QA AI Multi-Agent Validation
+                      </p>
+                      {validationFailure ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Completed with Issue</span>
+                        </span>
+                      ) : approvalStep > 2 ? (
+                        <span className="text-[10px] text-emerald-400 font-semibold uppercase">4 / 4 Passed</span>
+                      ) : approvalStep === 2 ? (
+                        <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] opacity-80 mt-0.5">
+                      Executing rule-based validation (Supplier, Budget, PO Math & Material checks)
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4 QA Checks Micro-Grid */}
+                {approvalStep >= 2 && (
+                  <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-800/60">
+                    {[
+                      {
+                        label: 'Supplier Check',
+                        status: validationFailure ? validationFailure.checks.supplier : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                      },
+                      {
+                        label: 'Budget Check',
+                        status: validationFailure ? validationFailure.checks.budget : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                      },
+                      {
+                        label: 'PO Math Check',
+                        status: validationFailure ? validationFailure.checks.poMath : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                      },
+                      {
+                        label: 'Material Check',
+                        status: validationFailure ? validationFailure.checks.material : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                      }
+                    ].map((c) => {
+                      const isFail = c.status === 'FAILED';
+                      const isPass = c.status === 'PASSED';
+
+                      return (
+                        <div
+                          key={c.label}
+                          className={`flex items-center justify-between px-2.5 py-1.5 rounded text-[11px] font-mono transition-all ${
+                            isFail
+                              ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300 font-bold'
+                              : isPass
+                              ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-semibold'
+                              : 'bg-slate-900 border border-brand-500/30 text-brand-300 animate-pulse'
+                          }`}
+                        >
+                          <span className="truncate">{c.label}</span>
+                          <span className="shrink-0">{c.status}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Exact Diagnostic Block When A Check Fails or QA Review is Required */}
+                {validationFailure && validationFailure.diagnostic && (
+                  validationFailure.diagnostic.isHistoricalRisk ? (
+                    <div className="mt-2 p-4 rounded-xl bg-slate-950/90 border border-amber-500/40 text-slate-200 space-y-3 font-sans animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs uppercase tracking-wider">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>⚠️ QA REVIEW REQUIRED</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Material:</span>
+                          <span className="text-white font-bold block mt-0.5 font-mono">{validationFailure.diagnostic.material || 'Iron'}</span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Related Historical Roll:</span>
+                          <span className="text-amber-300 font-bold block mt-0.5 font-mono">{validationFailure.diagnostic.relatedRoll || 'IRON-ROLL-001'}</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Issue:</span>
+                          {validationFailure.diagnostic.severity && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono">
+                              Severity: {validationFailure.diagnostic.severity}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-200 text-xs leading-relaxed">
+                          {validationFailure.diagnostic.issue}
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold text-slate-400">QA Status:</span>
+                        <span className="text-amber-400 font-bold font-mono text-xs flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{validationFailure.diagnostic.qaStatus}</span>
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/80">
+                        <span className="font-bold text-white block mb-0.5 text-xs">Action Required:</span>
+                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                          {validationFailure.diagnostic.action}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 p-3.5 rounded-xl bg-slate-950/90 border border-rose-500/40 text-rose-200 space-y-2.5 font-sans animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center gap-1.5 text-rose-400 font-bold text-xs uppercase tracking-wide">
+                        <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>Approval Blocked</span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-start gap-1.5">
+                          <span className="font-bold text-white shrink-0">Issue:</span>
+                          <span className="text-rose-300">{validationFailure.diagnostic.issue}</span>
+                        </div>
+
+                        {validationFailure.checks.budget === 'FAILED' && validationFailure.diagnostic.poTotal !== undefined && validationFailure.diagnostic.budgetLimit !== undefined && (
+                          <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
+                            <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                              <p className="text-slate-400 text-[10px]">PO Total:</p>
+                              <p className="text-white font-bold text-xs">
+                                ${validationFailure.diagnostic.poTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                              <p className="text-slate-400 text-[10px]">Budget Limit:</p>
+                              <p className="text-emerald-400 font-bold text-xs">
+                                ${validationFailure.diagnostic.budgetLimit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            {validationFailure.diagnostic.exceededBy > 0 && (
+                              <div className="col-span-2 p-2 rounded-lg bg-rose-950/50 border border-rose-500/30 flex items-center justify-between">
+                                <span className="text-rose-300 font-semibold text-[11px]">Exceeded By:</span>
+                                <span className="text-rose-400 font-bold text-xs font-mono">
+                                  +${validationFailure.diagnostic.exceededBy?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-slate-800/80">
+                          <span className="font-bold text-white block mb-0.5">Action Required:</span>
+                          <p className="text-slate-300 text-[11px] leading-relaxed">
+                            {validationFailure.diagnostic.action}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Step 3: Approving Order */}
+              <div
+                className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${
+                  validationFailure
+                    ? 'bg-slate-950/30 border-slate-800/40 text-slate-500 opacity-60'
+                    : approvalStep > 3
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : approvalStep === 3
+                    ? 'bg-brand-500/15 border-brand-500/40 text-brand-200 ring-1 ring-brand-500/30'
+                    : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {validationFailure ? (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    ) : approvalStep > 3 ? (
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+                    ) : approvalStep === 3 ? (
+                      <div className="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-bold animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        3
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold ${approvalStep === 3 && !validationFailure ? 'text-white' : ''}`}>Approving Order</p>
+                      {validationFailure ? (
+                        <span className="text-[10px] text-rose-400 font-mono font-bold flex items-center gap-1 uppercase">
+                          <Lock className="w-3 h-3" /> BLOCKED
+                        </span>
+                      ) : approvalStep > 3 ? (
+                        <span className="text-[10px] text-emerald-400 font-semibold uppercase">Completed</span>
+                      ) : approvalStep === 3 ? (
+                        <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] opacity-80 mt-0.5">
+                      {validationFailure ? 'Approval halted due to QA AI validation failure' : 'Transitioning Purchase Order state to Approved'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4: Awaiting Payment */}
+              <div
+                className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${
+                  validationFailure
+                    ? 'bg-slate-950/30 border-slate-800/40 text-slate-500 opacity-60'
+                    : approvalStep === 4
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-slate-950/40 border-slate-800/60 text-slate-500'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 shrink-0">
+                    {validationFailure ? (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    ) : approvalStep === 4 ? (
+                      <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs font-bold shadow-md shadow-emerald-500/30">
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-center text-xs">
+                        4
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold ${approvalStep === 4 && !validationFailure ? 'text-white' : ''}`}>Awaiting Payment</p>
+                      {validationFailure ? (
+                        <span className="text-[10px] text-slate-500 font-mono font-bold flex items-center gap-1 uppercase">
+                          <Lock className="w-3 h-3" /> LOCKED
+                        </span>
+                      ) : approvalStep === 4 ? (
+                        <span className="text-[10px] text-emerald-400 font-semibold uppercase">Ready</span>
+                      ) : null}
+                    </div>
+                    <p className="text-[11px] opacity-80 mt-0.5">
+                      {validationFailure
+                        ? 'Payment gateway inaccessible while validation issues persist'
+                        : 'Order is verified and ready for Stripe Checkout settlement'}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-<<<<<<< HEAD
-            {/* Footer with Payment Gateway button when completed */}
-=======
-            {/* Footer with Payment Gateway button and QA Validation link when completed */}
->>>>>>> d2a3570 (feat(qa): enhance QA validation pipeline, redesign AI validation ledger, remove high impact flag, and fix assessment timestamps)
-            {approvalStep === 4 ? (
+            {/* Modal Actions Footer */}
+            {validationFailure ? (
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={handleFinishApprovalAnimation}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>Close & Fix PO</span>
+                </button>
+              </div>
+            ) : approvalStep === 4 ? (
               <div className="pt-2 space-y-2">
                 <Link
                   to={`/purchase-orders/${selectedOrder?.id}`}
@@ -768,25 +1130,13 @@ export default function AiApprovals() {
                   <CreditCard className="w-4 h-4 text-cyan-300" />
                   <span>Proceed to Payment Gateway (Stripe / Bank Slip) &rarr;</span>
                 </Link>
-                <div className="grid grid-cols-2 gap-2">
-                  <Link
-                    to="/quality/ai-validation"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="py-2.5 bg-brand-950/60 hover:bg-brand-900/60 border border-brand-700/50 text-brand-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-brand-400" />
-                    <span>View QA Ledger</span>
-                    <ExternalLink className="w-3 h-3 opacity-70" />
-                  </Link>
-                  <button
-                    onClick={handleFinishApprovalAnimation}
-                    className="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Done</span>
-                  </button>
-                </div>
+                <button
+                  onClick={handleFinishApprovalAnimation}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Done</span>
+                </button>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-2">

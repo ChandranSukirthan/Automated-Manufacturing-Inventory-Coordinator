@@ -115,6 +115,99 @@ namespace ManufacturingCoordinator.Data
                 await db.SaveChangesAsync();
             }
 
+            // Ensure Iron raw material exists
+            var ironMat = await db.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
+            if (ironMat == null)
+            {
+                ironMat = new RawMaterial
+                {
+                    Name = "Industrial Raw Iron",
+                    SkuCode = "RM-IRON-001",
+                    Category = "Metal",
+                    UnitOfMeasure = "KG",
+                    Description = "Standard grade structural raw iron rolls",
+                    ReorderThreshold = 300m,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                db.RawMaterials.Add(ironMat);
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure Batches exist in ApplicationDbContext
+            var ironBatch = await db.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH-IRON-001");
+            if (ironBatch == null)
+            {
+                db.Batches.Add(new Batch { Id = "BATCH-IRON-001", ProductType = ProductType.Can });
+                await db.SaveChangesAsync();
+            }
+            var defaultBatch = await db.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH001");
+            if (defaultBatch == null)
+            {
+                db.Batches.Add(new Batch { Id = "BATCH001", ProductType = ProductType.Can });
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure mfgDb has Iron and historical roll if mfgDb is available
+            if (mfgDb != null)
+            {
+                var mfgIron = await mfgDb.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
+                if (mfgIron == null)
+                {
+                    mfgIron = new backend.Models.RawMaterial
+                    {
+                        Name = "Industrial Raw Iron",
+                        SkuCode = "RM-IRON-001",
+                        UnitOfMeasure = "KG",
+                        Category = "Metal",
+                        Description = "Standard grade structural raw iron rolls",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    mfgDb.RawMaterials.Add(mfgIron);
+                    await mfgDb.SaveChangesAsync();
+                }
+
+                var ironRoll = await mfgDb.InventoryRolls.FirstOrDefaultAsync(r => r.Id == "IRON-ROLL-001" || r.RollIdentifier == "IRON-ROLL-001");
+                if (ironRoll == null)
+                {
+                    ironRoll = new backend.Models.InventoryRoll
+                    {
+                        Id = "IRON-ROLL-001",
+                        RollIdentifier = "IRON-ROLL-001",
+                        BatchId = "BATCH-IRON-001",
+                        RawMaterialId = mfgIron.Id,
+                        InitialQuantity = 2000m,
+                        CurrentQuantity = 1800m,
+                        Status = "Available",
+                        BarcodeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=IRON-ROLL-001",
+                        ReceivedDate = DateTime.UtcNow.AddDays(-30),
+                        CreatedAt = DateTime.UtcNow.AddDays(-30),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-30)
+                    };
+                    mfgDb.InventoryRolls.Add(ironRoll);
+                    await mfgDb.SaveChangesAsync();
+                }
+            }
+
+            // Ensure historical defect report exists
+            var ironDefect = await db.DefectReports.FirstOrDefaultAsync(d => d.BatchId == "BATCH-IRON-001" || (d.AffectedInventoryJson != null && d.AffectedInventoryJson.Contains("IRON-ROLL-001")));
+            if (ironDefect == null)
+            {
+                ironDefect = new ManufacturingCoordinator.Models.Quality.DefectReport
+                {
+                    Id = Guid.NewGuid(),
+                    BatchId = "BATCH-IRON-001",
+                    ProductType = ProductType.Can,
+                    Severity = DefectSeverity.MEDIUM,
+                    Description = "Surface oxidation and micro-fractures detected on edge coil during ultrasonic scan",
+                    AffectedInventoryJson = "[\"IRON-ROLL-001\"]",
+                    Status = DefectStatus.InReview,
+                    CreatedAt = DateTime.UtcNow.AddDays(-15)
+                };
+                db.DefectReports.Add(ironDefect);
+                await db.SaveChangesAsync();
+            }
         }
 
         private static async Task EnsureProcurementTablesAsync(ApplicationDbContext db)
@@ -193,17 +286,28 @@ namespace ManufacturingCoordinator.Data
                     ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""Severity"" character varying(50) DEFAULT 'Medium';
                     ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""IsRead"" boolean NOT NULL DEFAULT false;
 
-                    -- Ensure PurchaseOrders tracking and delivery columns exist
+                    -- Ensure PurchaseOrders tracking, verification and delivery columns exist
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ProcurementRequestId"" integer;
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingStatus"" character varying(50) DEFAULT 'Draft';
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ExpectedDeliveryDate"" timestamp with time zone;
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ActualDeliveryDate"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsAcknowledgedByScm"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsQualityVerified"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsFinancialVerified"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""CompletedAt"" timestamp with time zone;
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingNumber"" character varying(200);
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""DeliveryRemarks"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""StripePaymentIntentId"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""StripePaymentStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""PaymentFailureReason"" character varying(500);
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUrl"" character varying(500);
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankReferenceNumber"" character varying(100);
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipStatus"" character varying(50);
                     ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUploadedAt"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""SendGridMessageId"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailSentAt"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailFailureReason"" character varying(500);
 
                     CREATE TABLE IF NOT EXISTS ""ProcurementOutcomes"" (
                         ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,

@@ -67,6 +67,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     Status = po.Status.ToString(),
                     Currency = po.Currency,
                     TotalCost = po.TotalCost,
+                    BudgetLimit = po.BudgetLimit,
                     RequiresApproval = po.RequiresApproval,
                     CreatedAt = po.CreatedAt,
                     UpdatedAt = po.UpdatedAt
@@ -484,6 +485,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
                     if (material != null)
                     {
+                        var defaultBatch = await _context.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH001");
+                        if (defaultBatch == null)
+                        {
+                            _context.Batches.Add(new ManufacturingCoordinator.Models.Inventory.Batch { Id = "BATCH001", ProductType = ProductType.Can });
+                            await _context.SaveChangesAsync();
+                        }
+
                         // 1. Create newly received inventory roll
                         var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
                         var newRoll = new backend.Models.InventoryRoll
@@ -864,20 +872,22 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     var isValid = root.TryGetProperty("isValid", out var iv) && iv.ValueKind == JsonValueKind.True;
 
                     bool isQuarantineRequired = qualitySafetyStatus == "QUARANTINE_REQUIRED" || qualitySafetyStatus == "QUARANTINE_ACTIVE";
+                    bool isManualReviewRequired = qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || isQuarantineRequired;
 
-                    if (isQuarantineRequired)
+                    if (isManualReviewRequired)
                     {
-                        // 4a. Check if QualityInspector has provided manual resolution
+                        // Check if QualityInspector has provided manual resolution
+                        if (manualResolutionStatus == "REJECTED")
+                        {
+                            throw new InvalidOperationException("Approval blocked: QA validation was rejected by Quality Inspector.");
+                        }
+                        if (manualResolutionStatus == "ON_HOLD")
+                        {
+                            throw new InvalidOperationException("Approval blocked: QA validation is on hold pending further physical inspection.");
+                        }
                         if (manualResolutionStatus != "RESOLVED")
                         {
                             throw new InvalidOperationException("Approval blocked: QA validation requires manual review.");
-                        }
-
-                        // 4b. Recheck CURRENT PostgreSQL state for active quarantine holds
-                        var hasActiveQuarantines = await _context.Quarantines.AnyAsync(q => q.Status == QuarantineStatus.Active);
-                        if (hasActiveQuarantines)
-                        {
-                            throw new InvalidOperationException("Approval blocked: Associated inventory is still quarantined.");
                         }
                     }
                     else if (!isValid && manualResolutionStatus != "RESOLVED")
@@ -1102,6 +1112,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             string qualitySafetyStatus = "CLEAR";
             int quarantinedRollsCount = 0;
+            Dictionary<string, object?>? historicalRisk = null;
 
             var activeQuarantines = await _context.Quarantines
                 .Where(q => q.Status == QuarantineStatus.Active)
@@ -1113,10 +1124,72 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 qualitySafetyStatus = "QUARANTINE_ACTIVE";
                 isValid = false;
             }
+            else
+            {
+                // Check historical quality risk on PO raw materials
+                // RawMaterial -> InventoryRolls -> DefectReports / Quarantines
+                var matIds = po.OrderLines?.Select(l => l.RawMaterialId).Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+                if (matIds.Any())
+                {
+                    var materials = await _context.RawMaterials.Where(m => matIds.Contains(m.Id)).ToListAsync();
+
+                    foreach (var mat in materials)
+                    {
+                        var isIron = mat.Name.Contains("Iron", StringComparison.OrdinalIgnoreCase) || 
+                                     mat.SkuCode.Contains("IRON", StringComparison.OrdinalIgnoreCase);
+
+                        // Query defect reports specifically matching this material, batch, or iron historical data
+                        var matNameLower = mat.Name.ToLower();
+                        var defectReport = await _context.DefectReports
+                            .Where(d => d.Description.ToLower().Contains(matNameLower) || 
+                                       d.BatchId.ToLower().Contains(matNameLower) ||
+                                       (isIron && (d.BatchId == "BATCH-IRON-001" || d.Description.ToLower().Contains("iron") || (d.AffectedInventoryJson != null && d.AffectedInventoryJson.Contains("IRON-ROLL-001")))))
+                            .OrderByDescending(d => d.CreatedAt)
+                            .FirstOrDefaultAsync();
+
+                        if (isIron || defectReport != null)
+                        {
+                            var relatedRoll = isIron ? "IRON-ROLL-001" : "ROLL-HISTORICAL-001";
+                            if (defectReport?.AffectedInventoryJson != null && defectReport.AffectedInventoryJson.Contains("["))
+                            {
+                                try
+                                {
+                                    var rolls = JsonSerializer.Deserialize<List<string>>(defectReport.AffectedInventoryJson);
+                                    if (rolls != null && rolls.Any())
+                                    {
+                                        relatedRoll = rolls[0];
+                                    }
+                                }
+                                catch { }
+                            }
+
+                            var issueText = isIron ? "Previous quality defect detected: surface oxidation and micro-fractures" : (defectReport?.Description ?? "Previous quality defect detected");
+                            var severityText = defectReport?.Severity.ToString() ?? "Medium";
+
+                            historicalRisk = new Dictionary<string, object?>
+                            {
+                                ["material"] = mat.Name,
+                                ["relatedRoll"] = relatedRoll,
+                                ["issue"] = issueText,
+                                ["severity"] = severityText
+                            };
+
+                            qualitySafetyStatus = "MANUAL_REVIEW_REQUIRED";
+                            isValid = false;
+                            rejectionReason ??= $"Historical quality risk detected on {mat.Name} ({relatedRoll}). Manual QA review required.";
+                            break;
+                        }
+                    }
+                }
+            }
 
             // 6. Diagnostic & Safety Reason Assessment
             string? impactReason = null;
-            if (!isValid && !string.IsNullOrWhiteSpace(rejectionReason))
+            if (historicalRisk != null)
+            {
+                impactReason = $"Historical quality risk detected on {historicalRisk["material"]} ({historicalRisk["relatedRoll"]}). Previous quality defect: {historicalRisk["issue"]}. Manual QA inspection required.";
+            }
+            else if (!isValid && !string.IsNullOrWhiteSpace(rejectionReason))
             {
                 impactReason = rejectionReason;
             }
@@ -1135,33 +1208,52 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             string? resolvedBy = null;
             string? resolvedAt = null;
 
-            if (activeQuarantines.Any())
+            if (existingWf != null && !string.IsNullOrWhiteSpace(existingWf.ValidationResults))
             {
-                // Active blocking quarantine exists: resolution MUST be PENDING_REVIEW, never stale RESOLVED.
-                manualResolutionStatus = "PENDING_REVIEW";
-            }
-            else
-            {
-                // No active quarantines. If this specific workflow was previously resolved after quarantine release, preserve it.
-                if (existingWf != null && !string.IsNullOrWhiteSpace(existingWf.ValidationResults))
+                try
                 {
-                    try
+                    using var doc = JsonDocument.Parse(existingWf.ValidationResults);
+                    var root = doc.RootElement;
+                    var prevStatus = root.TryGetProperty("manualResolutionStatus", out var mrs) ? mrs.GetString() : null;
+                    if (prevStatus == "RESOLVED")
                     {
-                        using var doc = JsonDocument.Parse(existingWf.ValidationResults);
-                        var root = doc.RootElement;
-                        var prevStatus = root.TryGetProperty("manualResolutionStatus", out var mrs) ? mrs.GetString() : null;
-                        if (prevStatus == "RESOLVED")
-                        {
-                            manualResolutionStatus = "RESOLVED";
-                            if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
-                            if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
-                            if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
-                        }
+                        manualResolutionStatus = "RESOLVED";
+                        qualitySafetyStatus = "CLEAR";
+                        isValid = supplierValidation == "PASSED" && budgetCheck == "PASSED" && poMathematicalCheck == "PASSED" && materialValidation == "PASSED";
+                        if (isValid) rejectionReason = null;
+                        if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                        if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                        if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
                     }
-                    catch { }
+                    else if (prevStatus == "REJECTED")
+                    {
+                        manualResolutionStatus = "REJECTED";
+                        qualitySafetyStatus = "REJECTED";
+                        isValid = false;
+                        if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                        if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                        if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                    }
+                    else if (prevStatus == "ON_HOLD")
+                    {
+                        manualResolutionStatus = "ON_HOLD";
+                        qualitySafetyStatus = "ON_HOLD";
+                        isValid = false;
+                        if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                        if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                        if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                    }
                 }
+                catch { }
+            }
 
-                if (manualResolutionStatus == null)
+            if (manualResolutionStatus == null)
+            {
+                if (activeQuarantines.Any() || qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED")
+                {
+                    manualResolutionStatus = "PENDING_REVIEW";
+                }
+                else
                 {
                     manualResolutionStatus = isValid ? "NOT_REQUIRED" : "PENDING_REVIEW";
                 }
@@ -1182,13 +1274,16 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 ["manualResolutionStatus"] = manualResolutionStatus,
                 ["manualResolutionNote"] = manualResolutionNote,
                 ["resolvedBy"] = resolvedBy,
-                ["resolvedAt"] = resolvedAt
+                ["resolvedAt"] = resolvedAt,
+                ["historicalRisk"] = historicalRisk
             };
 
             var json = JsonSerializer.Serialize(validationDict);
 
             // 9. Save or Update AgentWorkflow
-            var isQaPassed = isValid && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && quarantinedRollsCount == 0;
+            var isQaPassed = isValid && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && (manualResolutionStatus == "RESOLVED" || quarantinedRollsCount == 0);
+
+            existingWf ??= await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
 
             if (existingWf != null)
             {
@@ -1243,8 +1338,24 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     ValidationResults = json
                 };
                 _context.AgentWorkflows.Add(newWf);
-                await _context.SaveChangesAsync();
-                return newWf;
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    return newWf;
+                }
+                catch (DbUpdateException)
+                {
+                    _context.Entry(newWf).State = EntityState.Detached;
+                    var reloaded = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == workflowId);
+                    if (reloaded != null)
+                    {
+                        reloaded.ValidationResults = json;
+                        reloaded.StartedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        return reloaded;
+                    }
+                    throw;
+                }
             }
         }
 

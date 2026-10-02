@@ -76,6 +76,7 @@ def sync_to_database(state: AgentState) -> None:
             "manualResolutionNote": val_res.get("manualResolutionNote") or "",
             "resolvedBy": val_res.get("resolvedBy") or "",
             "resolvedAt": val_res.get("resolvedAt") or None,
+            "historicalRisk": val_res.get("historicalRisk") or None,
         })
 
     try:

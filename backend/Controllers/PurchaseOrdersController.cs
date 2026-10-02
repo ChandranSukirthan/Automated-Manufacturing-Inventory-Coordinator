@@ -23,14 +23,22 @@ namespace ManufacturingCoordinator.Controllers
         private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private readonly IAgentIntegrationService _agentIntegrationService;
         private readonly ApplicationDbContext _context;
+        private readonly Microsoft.Extensions.Logging.ILogger<PurchaseOrdersController> _logger;
 
-        public PurchaseOrdersController(IPurchaseOrderService poService, IInventoryService inventoryService, Microsoft.Extensions.Configuration.IConfiguration configuration, IAgentIntegrationService agentIntegrationService, ApplicationDbContext context)
+        public PurchaseOrdersController(
+            IPurchaseOrderService poService, 
+            IInventoryService inventoryService, 
+            Microsoft.Extensions.Configuration.IConfiguration configuration, 
+            IAgentIntegrationService agentIntegrationService, 
+            ApplicationDbContext context,
+            Microsoft.Extensions.Logging.ILogger<PurchaseOrdersController> logger)
         {
             _poService = poService;
             _inventoryService = inventoryService;
             _configuration = configuration;
             _agentIntegrationService = agentIntegrationService;
             _context = context;
+            _logger = logger;
         }
 
         // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -303,6 +311,18 @@ namespace ManufacturingCoordinator.Controllers
             }
             catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
             catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            {
+                var detail = ex.InnerException?.Message ?? ex.Message;
+                _logger.LogError(ex, "DbUpdateException approving PO {Id}: {Detail}", id, detail);
+                return BadRequest(new { message = $"Database constraint error: {detail}" });
+            }
+            catch (Exception ex)
+            {
+                var detail = ex.InnerException?.Message ?? ex.Message;
+                _logger.LogError(ex, "Unexpected error approving PO {Id}: {Detail}", id, detail);
+                return BadRequest(new { message = detail });
+            }
         }
 
         /// <summary>
