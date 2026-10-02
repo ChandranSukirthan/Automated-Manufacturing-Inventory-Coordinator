@@ -122,7 +122,7 @@ export default function QualityDashboard() {
         id: `q-${q.id}`,
         type: 'QUARANTINE HOLD',
         title: `Quarantine #${q.id.substring(0, 8)}`,
-        subtitle: `Roll: ${q.inventoryRollId} · Batch: ${q.batchId}`,
+        subtitle: `Roll: ${q.inventoryRollId}`,
         description: q.reason || 'Inventory under active quarantine restriction.',
         severity: 'critical',
         path: `/quality/quarantine/${q.id}`,
@@ -189,7 +189,7 @@ export default function QualityDashboard() {
         id: `act-q-${q.id}`,
         type: q.status === 'Released' ? 'Quarantine Released' : 'Quarantine Placed',
         ref: `QR-${q.id.substring(0, 6)}`,
-        detail: `Roll ${q.inventoryRollId} (${q.batchId})`,
+        detail: `Roll ${q.inventoryRollId}`,
         status: q.status,
         timestamp: q.createdAt,
         path: `/quality/quarantine/${q.id}`
@@ -289,7 +289,7 @@ export default function QualityDashboard() {
           </div>
           <p className="text-3xl font-extrabold text-rose-400 mt-3 tracking-tight">{activeQuarantines.length}</p>
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 text-xs">
-            <span className="text-slate-400">{summary.quarantinedBatches || 0} batches held</span>
+            <span className="text-slate-400">{summary.quarantinedRolls || summary.quarantinedBatches || activeQuarantines.length || 0} items held</span>
             <span className="text-emerald-400 font-semibold">{releasedQuarantines.length} released</span>
           </div>
         </div>

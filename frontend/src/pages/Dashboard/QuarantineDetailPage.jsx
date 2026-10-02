@@ -127,11 +127,6 @@ export default function QuarantineDetailPage() {
           </div>
 
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Batch ID</span>
-            <div className="mt-1 text-base font-semibold font-mono text-slate-200">{record.batchId}</div>
-          </div>
-
-          <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Linked Defect ID</span>
             <div className="mt-1 text-sm font-mono text-blue-400">
               <Link to={`/quality/defects/${record.defectReportId}`} className="hover:underline">

@@ -157,9 +157,10 @@ export default function AiApprovals() {
       let diagnostic = null;
       const lowerErr = errMsg.toLowerCase();
 
-      const firstLine = selectedOrder.orderLines?.[0] || {};
-      const matName = firstLine.rawMaterialName || 'Industrial Raw Iron';
-      const isIron = matName.toLowerCase().includes('iron') || (firstLine.rawMaterialSku || '').toLowerCase().includes('iron');
+      const histRisk = selectedOrder.historicalRisk;
+      const relatedRoll = histRisk?.relatedRoll || (isIron ? 'IRON-ROLL-001' : 'HISTORICAL-ROLL-001');
+      const histMat = histRisk?.material || matName;
+      const inspectorNote = selectedOrder.manualResolutionNote || selectedOrder.rejectionReason;
 
       if (lowerErr.includes('manual review') || lowerErr.includes('historical') || lowerErr.includes('quarantine') || lowerErr.includes('hold') || lowerErr.includes('rejected') || lowerErr.includes('quality inspector')) {
         // All 4 automated checks PASSED, but historical quality risk requires manual review
@@ -170,22 +171,30 @@ export default function AiApprovals() {
           material: 'PASSED'
         };
 
-        const relatedRoll = isIron ? 'IRON-ROLL-001' : 'HISTORICAL-ROLL-001';
-        const isRejected = lowerErr.includes('rejected');
-        const isOnHold = lowerErr.includes('hold');
+        const isRejected = lowerErr.includes('rejected') || selectedOrder.manualResolutionStatus === 'REJECTED';
+        const isOnHold = lowerErr.includes('hold') || selectedOrder.manualResolutionStatus === 'ON_HOLD';
 
         diagnostic = {
           isHistoricalRisk: true,
           issue: isRejected 
-            ? 'QA validation was rejected by Quality Inspector.' 
+            ? (selectedOrder.rejectionReason || 'QA validation was rejected by Quality Inspector.') 
             : isOnHold 
-            ? 'QA validation is on hold pending physical inspection.' 
-            : 'Previous quality defect detected on historical inventory roll.',
-          material: matName,
+            ? (selectedOrder.rejectionReason || 'QA validation is on hold pending physical inspection.') 
+            : (histRisk?.issue || 'Previous quality defect detected on historical inventory roll.'),
+          material: histMat,
           relatedRoll: relatedRoll,
-          severity: 'Medium',
-          qaStatus: isRejected ? 'Rejected by QA Inspector' : isOnHold ? 'On Hold — Inspection Pending' : 'Waiting for manual inspection',
-          action: 'Waiting for QA Inspector review. Please wait for QA to clear this material risk in the QA Validation Ledger before approval.',
+          severity: histRisk?.severity || 'Medium',
+          inspectorNote: inspectorNote,
+          qaStatus: isRejected 
+            ? `Rejected by ${selectedOrder.resolvedBy || 'QA Inspector'}` 
+            : isOnHold 
+            ? `On Hold — ${selectedOrder.resolvedBy || 'QA Inspector'}` 
+            : 'Waiting for manual inspection',
+          action: isRejected
+            ? 'Order cannot be approved because QA Inspector rejected the material risk. Please request revision or reject the order.'
+            : isOnHold
+            ? 'Order is on hold pending physical inspection. Please wait for QA Inspector to clear the hold in QA Validation Ledger.'
+            : 'Waiting for QA Inspector review. Please wait for QA to clear this material risk in the QA Validation Ledger before approval.',
           detail: errMsg
         };
       } else if (lowerErr.includes('budget') || lowerErr.includes('exceed') || (budgetLimit > 0 && poTotal > budgetLimit)) {
@@ -496,7 +505,40 @@ export default function AiApprovals() {
 
               const wfMatch = po.notes?.match(/(WF-[A-Za-z0-9_-]+)/);
               const workflowId = wfMatch ? wfMatch[1] : (po.poNumber.startsWith('PO-DRAFT-') ? `WF-${po.poNumber.replace('PO-DRAFT-', '')}` : `WF-${po.poNumber}`);
-              const riskLevel = totalAmount > 10000 ? 'Moderate' : 'Low Risk';
+
+              const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
+              const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
+              const isRejected = po.manualResolutionStatus === 'REJECTED';
+              const isOnHold = po.manualResolutionStatus === 'ON_HOLD';
+              const isPendingReview = (safetyStatus.includes('MANUAL_REVIEW') || safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved && !isRejected && !isOnHold;
+              const isBlocked = (isRejected || isOnHold || isPendingReview);
+
+              let riskBadge = {
+                text: totalAmount > 10000 ? 'Risk Level: Moderate' : 'Risk Level: Low Risk',
+                classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+              };
+
+              if (isRejected) {
+                riskBadge = {
+                  text: 'QA Gate: Rejected',
+                  classes: 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                };
+              } else if (isOnHold) {
+                riskBadge = {
+                  text: 'QA Gate: On Hold',
+                  classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                };
+              } else if (isPendingReview) {
+                riskBadge = {
+                  text: 'QA Review Required',
+                  classes: 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                };
+              } else if (isResolved) {
+                riskBadge = {
+                  text: 'QA Gate: Cleared',
+                  classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                };
+              }
 
               return (
                 <div
@@ -525,9 +567,9 @@ export default function AiApprovals() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${riskBadge.classes}`}>
                         <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Risk Level: {riskLevel}</span>
+                        <span>{riskBadge.text}</span>
                       </span>
                       <StatusBadge status={po.status} />
                     </div>
@@ -626,22 +668,110 @@ export default function AiApprovals() {
                         />
                       </div>
 
-                      {/* QA Safety Gate Resolution Badge */}
+                      {/* QA Safety Gate Resolution Badge & Detailed Inspector Notes */}
                       {(() => {
-                        const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
-                        const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
-                        const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus.includes('MANUAL_REVIEW') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
+                        if (isResolved) {
+                          return (
+                            <div className="p-2.5 rounded-lg border bg-emerald-950/40 border-emerald-500/40 text-emerald-300 text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>QA Safety Gate:</span>
+                                </span>
+                                <span className="font-bold text-emerald-400">Cleared &amp; Resolved</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                Resolved by <span className="font-semibold text-emerald-300">{po.resolvedBy || 'QA Inspector'}</span>
+                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                              </p>
+                              {po.manualResolutionNote && (
+                                <p className="text-[11px] text-slate-300 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
+                                  &ldquo;{po.manualResolutionNote}&rdquo;
+                                </p>
+                              )}
+                              <p className="text-[10px] text-emerald-400 font-semibold">
+                                ✓ QA issue resolved by QA Inspector — Clear for Manager Approval
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (isRejected) {
+                          return (
+                            <div className="p-2.5 rounded-lg border bg-rose-950/40 border-rose-500/40 text-rose-300 text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold flex items-center gap-1.5 text-rose-400">
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  <span>QA Safety Gate:</span>
+                                </span>
+                                <span className="font-bold text-rose-400">Approval Blocked (Rejected)</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                Rejected by <span className="font-semibold text-rose-300">{po.resolvedBy || 'QA Inspector'}</span>
+                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                              </p>
+                              {(po.manualResolutionNote || po.rejectionReason) && (
+                                <p className="text-[11px] text-rose-200/90 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
+                                  &ldquo;{po.manualResolutionNote || po.rejectionReason}&rdquo;
+                                </p>
+                              )}
+                              <p className="text-[10px] text-rose-400 font-semibold">
+                                🔒 Order rejected during QA manual safety review
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (isOnHold) {
+                          return (
+                            <div className="p-2.5 rounded-lg border bg-amber-950/40 border-amber-500/40 text-amber-300 text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold flex items-center gap-1.5 text-amber-400">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>QA Safety Gate:</span>
+                                </span>
+                                <span className="font-bold text-amber-400">Approval Blocked (On Hold)</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                Placed on Hold by <span className="font-semibold text-amber-300">{po.resolvedBy || 'QA Inspector'}</span>
+                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                              </p>
+                              {(po.manualResolutionNote || po.rejectionReason) && (
+                                <p className="text-[11px] text-amber-200/90 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
+                                  &ldquo;{po.manualResolutionNote || po.rejectionReason}&rdquo;
+                                </p>
+                              )}
+                              <p className="text-[10px] text-amber-400 font-semibold">
+                                🔒 Pending physical inspection &amp; QA clearance
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        if (isPendingReview) {
+                          return (
+                            <div className="p-2.5 rounded-lg border bg-amber-950/40 border-amber-500/40 text-amber-300 text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold flex items-center gap-1.5 text-amber-400">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>QA Safety Gate:</span>
+                                </span>
+                                <span className="font-bold text-amber-400">Review Required</span>
+                              </div>
+                              <p className="text-[11px] text-slate-300">
+                                Historical quality risk detected on material roll.
+                              </p>
+                              <p className="text-[10px] text-amber-400 font-semibold">
+                                🔒 Approval Blocked — Waiting for QA Inspector manual review
+                              </p>
+                            </div>
+                          );
+                        }
 
                         return (
-                          <div className={`p-2.5 rounded-lg border text-xs flex items-center justify-between gap-2 ${
-                            isBlocked ? 'bg-rose-950/40 border-rose-500/40 text-rose-300' : 'bg-slate-950/80 border-slate-800 text-emerald-400'
-                          }`}>
+                          <div className="p-2.5 rounded-lg border bg-slate-950/80 border-slate-800 text-emerald-400 text-xs flex items-center justify-between gap-2">
                             <span className="font-semibold">QA Safety Gate:</span>
-                            <span className="font-bold">
-                              {isBlocked
-                                ? 'Approval Blocked — QA/Safety issue unresolved'
-                                : 'QA/Safety Issue Resolved — Approval may proceed'}
-                            </span>
+                            <span className="font-bold">Verified &amp; Clear — Approval may proceed</span>
                           </div>
                         );
                       })()}
@@ -656,7 +786,17 @@ export default function AiApprovals() {
                       <div className="text-[11px] text-slate-400 space-y-1">
                         <p>• calculate_burn_rate(SKU) → 180.5 kg/day</p>
                         <p>• validate_budget(${totalAmount.toFixed(2)}, ${budgetLimit.toFixed(2)}) → <span className={isBudgetPassed ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{isBudgetPassed ? 'APPROVED' : 'BUDGET_EXCEEDED'}</span></p>
-                        <p>• check_qa_safety_status() → {po.manualResolutionStatus === 'RESOLVED' ? 'RESOLVED' : 'CLEAR / VERIFIED'}</p>
+                        <p>• check_qa_safety_status() → <span className={isResolved ? 'text-emerald-400 font-bold' : isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400'}>{
+                          isResolved 
+                            ? 'RESOLVED (CLEARED BY QA)' 
+                            : isRejected 
+                            ? 'REJECTED BY QA' 
+                            : isOnHold 
+                            ? 'ON_HOLD (QA HOLD)' 
+                            : isPendingReview 
+                            ? 'MANUAL_REVIEW_REQUIRED' 
+                            : 'CLEAR / VERIFIED'
+                        }</span></p>
                         <p>• enforce_backend_gate() → AUTHORITATIVE POSTGRESQL VERIFIED</p>
                       </div>
                     </div>
@@ -954,6 +1094,15 @@ export default function AiApprovals() {
                           <span>{validationFailure.diagnostic.qaStatus}</span>
                         </span>
                       </div>
+
+                      {validationFailure.diagnostic.inspectorNote && (
+                        <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Inspector Notes:</span>
+                          <p className="text-slate-200 text-xs italic bg-slate-950/70 p-2 rounded border border-slate-800">
+                            &ldquo;{validationFailure.diagnostic.inspectorNote}&rdquo;
+                          </p>
+                        </div>
+                      )}
 
                       <div className="pt-2 border-t border-slate-800/80">
                         <span className="font-bold text-white block mb-0.5 text-xs">Action Required:</span>

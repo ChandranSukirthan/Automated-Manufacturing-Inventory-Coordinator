@@ -151,6 +151,16 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public List<OrderLineResponseDto> OrderLines { get; set; } = new();
         public List<PurchaseOrderApprovalDto> Approvals { get; set; } = new();
         public List<PaymentTransactionDto> Transactions { get; set; } = new();
+        public string? QualitySafetyStatus { get; set; }
+        public string? ManualResolutionStatus { get; set; }
+        public string? ManualResolutionNote { get; set; }
+        public string? ResolvedBy { get; set; }
+        public DateTime? ResolvedAt { get; set; }
+        public string? SupplierValidation { get; set; }
+        public string? BudgetValidation { get; set; }
+        public string? PoMathematicalCheck { get; set; }
+        public string? MaterialValidation { get; set; }
+        public object? HistoricalRisk { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

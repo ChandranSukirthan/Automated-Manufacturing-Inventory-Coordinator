@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Administration;
+using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Api.DTOs.Quality;
 
 namespace ManufacturingCoordinator.Api.Controllers
@@ -167,6 +169,33 @@ namespace ManufacturingCoordinator.Api.Controllers
             resultsDict["resolvedAt"] = resolvedTime;
 
             wf.ValidationResults = JsonSerializer.Serialize(resultsDict);
+
+            // Sync with PurchaseOrder entity if found
+            PurchaseOrder? linkedPo = null;
+            var poNumMatch = Regex.Match(wf.WorkflowId, @"(PO-\d{4}-\d+)");
+            if (poNumMatch.Success)
+            {
+                linkedPo = await _context.PurchaseOrders.FirstOrDefaultAsync(p => p.PoNumber == poNumMatch.Value, cancellationToken);
+            }
+            if (linkedPo == null)
+            {
+                linkedPo = await _context.PurchaseOrders.FirstOrDefaultAsync(p => p.Notes != null && p.Notes.Contains(wf.WorkflowId), cancellationToken);
+            }
+            if (linkedPo != null)
+            {
+                if (resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")
+                {
+                    linkedPo.RejectionReason = null;
+                }
+                else if (resultsDict["manualResolutionStatus"]?.ToString() == "REJECTED")
+                {
+                    linkedPo.RejectionReason = $"QA validation rejected by {userName}: {dto.Note.Trim()}";
+                }
+                else if (resultsDict["manualResolutionStatus"]?.ToString() == "ON_HOLD")
+                {
+                    linkedPo.RejectionReason = $"QA validation on hold: {dto.Note.Trim()}";
+                }
+            }
 
             // Release active quarantines ONLY if explicitly requested and decision was Clear
             if (dto.ReleaseQuarantine && resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")

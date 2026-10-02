@@ -94,7 +94,6 @@ export default function QuarantineManagementPage() {
     .filter((record) => {
       const recordSeverity = severityFor(record);
       const text = [
-        record.batchId,
         record.inventoryRollId,
         record.reason,
         record.status,
@@ -113,7 +112,6 @@ export default function QuarantineManagementPage() {
       const values = {
         createdAt: [new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime()],
         severity: [severityFor(left), severityFor(right)],
-        batchId: [left.batchId, right.batchId],
         status: [left.status, right.status]
       }[sort.key] || [new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime()];
 
@@ -252,7 +250,7 @@ export default function QuarantineManagementPage() {
               setQuery(e.target.value);
               setPage(1);
             }}
-            placeholder="Search roll, batch, containment reason..."
+            placeholder="Search roll ID, containment reason..."
             className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
           />
         </div>
@@ -326,7 +324,6 @@ export default function QuarantineManagementPage() {
               <thead>
                 <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   <th className="px-4 py-3.5">Roll / Inventory</th>
-                  <th className="px-4 py-3.5">Batch ID</th>
                   <th className="px-4 py-3.5">Severity</th>
                   <th className="px-4 py-3.5">Reason</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -344,9 +341,6 @@ export default function QuarantineManagementPage() {
                   <tr key={r.id} className="hover:bg-slate-800/40 transition-colors group">
                     <td className="px-4 py-3.5 font-mono font-semibold text-cyan-300">
                       {r.inventoryRollId}
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-slate-300">
-                      {r.batchId}
                     </td>
                     <td className="px-4 py-3.5">
                       <SeverityBadge severity={severityFor(r)} />
@@ -394,7 +388,7 @@ export default function QuarantineManagementPage() {
                   <StatusBadge status={r.status} />
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-mono text-slate-400">Batch: {r.batchId}</span>
+                  <span className="text-slate-400 text-[11px]">Severity:</span>
                   <SeverityBadge severity={severityFor(r)} />
                 </div>
                 <p className="text-xs text-slate-300 line-clamp-2">{r.reason}</p>
@@ -453,10 +447,6 @@ export default function QuarantineManagementPage() {
 
             {/* Quarantine Context Summary */}
             <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 font-semibold">Batch Number:</span>
-                <span className="text-white font-mono">{selectedRecord.batchId}</span>
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 font-semibold">Severity:</span>
                 <SeverityBadge severity={severityFor(selectedRecord)} />

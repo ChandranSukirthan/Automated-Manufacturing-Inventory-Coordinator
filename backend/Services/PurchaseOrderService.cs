@@ -87,7 +87,69 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(p => p.Transactions)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            return po is null ? null : MapToDto(po);
+            if (po is null) return null;
+
+            var dto = MapToDto(po);
+
+            // Enrich with QA Validation / AgentWorkflow data
+            try
+            {
+                AgentWorkflow? wf = null;
+                if (!string.IsNullOrEmpty(po.Notes))
+                {
+                    var match = Regex.Match(po.Notes, @"(WF-[A-Za-z0-9_-]+)");
+                    if (match.Success)
+                    {
+                        var wfId = match.Groups[1].Value;
+                        wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
+                    }
+                }
+
+                if (wf == null)
+                {
+                    var candidates = new[] { $"WF-QA-{po.PoNumber}", $"WF-{po.PoNumber}", $"WF-2026-{(100 + po.Id):D3}", $"WF-{po.Id}" };
+                    wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => candidates.Contains(w.WorkflowId));
+                }
+
+                // If not found and PO is in PendingApproval status, generate QA assessment
+                if ((wf == null || string.IsNullOrWhiteSpace(wf.ValidationResults)) && po.Status == PurchaseOrderStatus.PendingApproval)
+                {
+                    wf = await EnsurePoValidationWorkflowAsync(po);
+                }
+
+                if (wf != null && !string.IsNullOrWhiteSpace(wf.ValidationResults))
+                {
+                    using var doc = JsonDocument.Parse(wf.ValidationResults);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("qualitySafetyStatus", out var qs)) dto.QualitySafetyStatus = qs.GetString();
+                    if (root.TryGetProperty("manualResolutionStatus", out var mr)) dto.ManualResolutionStatus = mr.GetString();
+                    if (root.TryGetProperty("manualResolutionNote", out var mn)) dto.ManualResolutionNote = mn.GetString();
+                    if (root.TryGetProperty("resolvedBy", out var rb)) dto.ResolvedBy = rb.GetString();
+                    if (root.TryGetProperty("resolvedAt", out var ra))
+                    {
+                        if (DateTime.TryParse(ra.GetString(), out var dt)) dto.ResolvedAt = dt;
+                    }
+                    if (root.TryGetProperty("supplierValidation", out var sv)) dto.SupplierValidation = sv.GetString();
+                    if (root.TryGetProperty("budgetCheck", out var bc)) dto.BudgetValidation = bc.GetString();
+                    if (root.TryGetProperty("poMathematicalCheck", out var pm)) dto.PoMathematicalCheck = pm.GetString();
+                    if (root.TryGetProperty("materialValidation", out var mv)) dto.MaterialValidation = mv.GetString();
+                    if (root.TryGetProperty("rejectionReason", out var rr))
+                    {
+                        var str = rr.GetString();
+                        if (!string.IsNullOrEmpty(str) && string.IsNullOrEmpty(dto.RejectionReason)) dto.RejectionReason = str;
+                    }
+                    if (root.TryGetProperty("historicalRisk", out var hr))
+                    {
+                        dto.HistoricalRisk = hr.Clone();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to enrich QA validation details for PO {PoId}", po.Id);
+            }
+
+            return dto;
         }
 
         // ── Create ────────────────────────────────────────────────────────────────

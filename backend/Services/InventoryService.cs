@@ -43,30 +43,71 @@ namespace backend.Services
         public async Task<IEnumerable<InventoryItemDto>> GetInventoryItemsAsync()
         {
             var items = await _context.InventoryItems.ToListAsync();
-            var skuCodes = items
-                .Where(item => !string.IsNullOrWhiteSpace(item.Sku))
-                .Select(item => item.Sku.Trim())
-                .ToList();
-            var existingSkus = await _context.RawMaterials
-                .Where(material => skuCodes.Contains(material.SkuCode))
-                .Select(material => material.SkuCode)
-                .ToListAsync();
-            var missingMaterials = items
-                .Where(item => !string.IsNullOrWhiteSpace(item.Sku) && !existingSkus.Contains(item.Sku.Trim()))
-                .GroupBy(item => item.Sku.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .Select(item => new RawMaterial
-                {
-                    SkuCode = item.Sku.Trim(),
-                    Name = item.Name,
-                    Category = item.Category,
-                    UnitOfMeasure = "UNITS",
-                    ReorderThreshold = item.ReorderThreshold
-                })
-                .ToList();
-            if (missingMaterials.Count > 0)
+            var rawMaterials = await _context.RawMaterials.ToListAsync();
+            var rolls = await _context.InventoryRolls.ToListAsync();
+            var stockLevels = await _context.StockLevels.ToListAsync();
+
+            bool changed = false;
+
+            // 1. Sync from InventoryItems to RawMaterials if missing
+            var existingMatSkus = rawMaterials
+                .Where(m => !string.IsNullOrWhiteSpace(m.SkuCode))
+                .Select(m => m.SkuCode.Trim().ToLowerInvariant())
+                .ToHashSet();
+
+            foreach (var item in items.Where(i => !string.IsNullOrWhiteSpace(i.Sku)))
             {
-                _context.RawMaterials.AddRange(missingMaterials);
+                if (!existingMatSkus.Contains(item.Sku.Trim().ToLowerInvariant()))
+                {
+                    var newMat = new RawMaterial
+                    {
+                        SkuCode = item.Sku.Trim(),
+                        Name = item.Name,
+                        Category = item.Category,
+                        UnitOfMeasure = "UNITS",
+                        ReorderThreshold = item.ReorderThreshold,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.RawMaterials.Add(newMat);
+                    rawMaterials.Add(newMat);
+                    existingMatSkus.Add(item.Sku.Trim().ToLowerInvariant());
+                    changed = true;
+                }
+            }
+
+            // 2. Sync from RawMaterials to InventoryItems if missing
+            var existingItemSkus = items
+                .Where(i => !string.IsNullOrWhiteSpace(i.Sku))
+                .Select(i => i.Sku.Trim().ToLowerInvariant())
+                .ToHashSet();
+
+            foreach (var mat in rawMaterials.Where(m => !string.IsNullOrWhiteSpace(m.SkuCode)))
+            {
+                if (!existingItemSkus.Contains(mat.SkuCode.Trim().ToLowerInvariant()))
+                {
+                    // Compute actual stock from rolls or stock levels
+                    var rollQty = rolls.Where(r => r.RawMaterialId == mat.Id).Sum(r => (int)r.CurrentQuantity);
+                    var levelQty = (int)(stockLevels.FirstOrDefault(s => s.RawMaterialId == mat.Id)?.TotalQuantity ?? 0);
+                    var initialStock = Math.Max(rollQty, Math.Max(levelQty, mat.ReorderThreshold > 0 ? (int)(mat.ReorderThreshold * 2) : 500));
+
+                    var newItem = new InventoryItem
+                    {
+                        Sku = mat.SkuCode.Trim(),
+                        Name = mat.Name,
+                        Category = mat.Category ?? "Metal",
+                        StockLevel = initialStock,
+                        ReorderThreshold = mat.ReorderThreshold > 0 ? (int)mat.ReorderThreshold : 50
+                    };
+                    _context.InventoryItems.Add(newItem);
+                    items.Add(newItem);
+                    existingItemSkus.Add(mat.SkuCode.Trim().ToLowerInvariant());
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
                 await _context.SaveChangesAsync();
             }
 
@@ -407,6 +448,23 @@ namespace backend.Services
             material.UpdatedAt = DateTime.UtcNow;
             _context.RawMaterials.Add(material);
             await _context.SaveChangesAsync();
+
+            // Sync with InventoryItems
+            if (!string.IsNullOrWhiteSpace(material.SkuCode) &&
+                !await _context.InventoryItems.AnyAsync(i => i.Sku.ToLower() == material.SkuCode.Trim().ToLower()))
+            {
+                var initialStock = material.ReorderThreshold > 0 ? (int)(material.ReorderThreshold * 2) : 500;
+                _context.InventoryItems.Add(new InventoryItem
+                {
+                    Sku = material.SkuCode.Trim(),
+                    Name = material.Name,
+                    Category = material.Category ?? "Metal",
+                    StockLevel = initialStock,
+                    ReorderThreshold = material.ReorderThreshold > 0 ? (int)material.ReorderThreshold : 50
+                });
+                await _context.SaveChangesAsync();
+            }
+
             return material;
         }
 
@@ -416,6 +474,7 @@ namespace backend.Services
             var existing = await _context.RawMaterials.FindAsync(id);
             if (existing == null) return false;
 
+            var oldSku = existing.SkuCode;
             existing.Name = material.Name;
             existing.SkuCode = material.SkuCode;
             existing.Description = material.Description;
@@ -423,6 +482,15 @@ namespace backend.Services
             existing.UnitOfMeasure = material.UnitOfMeasure;
             existing.ReorderThreshold = material.ReorderThreshold;
             existing.UpdatedAt = DateTime.UtcNow;
+
+            var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku.ToLower() == oldSku.ToLower());
+            if (item != null)
+            {
+                item.Name = material.Name;
+                item.Sku = material.SkuCode;
+                item.Category = material.Category ?? item.Category;
+                item.ReorderThreshold = (int)material.ReorderThreshold;
+            }
 
             await _context.SaveChangesAsync();
             return true;
@@ -432,6 +500,12 @@ namespace backend.Services
         {
             var existing = await _context.RawMaterials.FindAsync(id);
             if (existing == null) return false;
+
+            var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku.ToLower() == existing.SkuCode.ToLower());
+            if (item != null)
+            {
+                _context.InventoryItems.Remove(item);
+            }
 
             _context.RawMaterials.Remove(existing);
             await _context.SaveChangesAsync();
