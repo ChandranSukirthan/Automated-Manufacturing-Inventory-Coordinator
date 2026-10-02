@@ -10,6 +10,7 @@ import 'defect_form_screen.dart';
 import 'quarantine_screen.dart';
 import 'quarantine_history_screen.dart';
 import 'role_dashboard_screen.dart';
+import 'floor_worker_home_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -37,6 +38,7 @@ class _HomeShellState extends State<HomeShell> {
       builder: (_) => _ProfilePopup(
         fullName: user.fullName,
         email: user.email,
+        role: user.role,
         onSaveName: widget.appState.updateProfile,
         onSignOut: widget.appState.logout,
       ),
@@ -54,6 +56,13 @@ class _HomeShellState extends State<HomeShell> {
         onSignOut: widget.appState.logout,
         userName: user.fullName,
         userEmail: user.email,
+      );
+    }
+    if (user.role == 'FloorWorker') {
+      return FloorWorkerHomeScreen(
+        employeeId: user.employeeId ?? '',
+        qualityService: widget.qualityService,
+        onOpenProfile: _showProfilePopup,
       );
     }
     final isQualityInspector = user.isQualityInspector;
@@ -153,12 +162,14 @@ class _ProfilePopup extends StatefulWidget {
   const _ProfilePopup({
     required this.fullName,
     required this.email,
+    required this.role,
     required this.onSaveName,
     required this.onSignOut,
   });
 
   final String fullName;
   final String email;
+  final String role;
   final Future<dynamic> Function(String fullName) onSaveName;
   final Future<void> Function() onSignOut;
 
@@ -357,9 +368,9 @@ class _ProfilePopupState extends State<_ProfilePopup> {
                   ),
                 ),
                 const SizedBox(height: 3),
-                const Text(
-                  'QA',
-                  style: TextStyle(
+                Text(
+                  widget.role == 'FloorWorker' ? 'Floor Worker' : widget.role,
+                  style: const TextStyle(
                     color: AppColors.mutedText,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

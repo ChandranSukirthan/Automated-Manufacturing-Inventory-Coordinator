@@ -5,6 +5,7 @@ using backend.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -16,16 +17,35 @@ using ManufacturingCoordinator.Services.PurchaseOrders;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The development API is used from the Android emulator.  Keep diagnostics on
+// the console instead of relying on the Windows Event Log, which may not be
+// available on a student development machine and must never abort a response.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
 // Load .env file (if exists)
 Env.Load();
 
-// Map environment variables to configuration
-var dbHost = Env.GetString("DB_HOST", "localhost");
-var dbPort = Env.GetString("DB_PORT", "5432");
-var dbName = Env.GetString("DB_NAME", "inventory_coordinator");
-var dbUser = Env.GetString("DB_USER", "postgres");
-var dbPass = Env.GetString("DB_PASSWORD", "123456789");
-builder.Configuration["ConnectionStrings:DefaultConnection"] = $"Host={dbHost};Port={dbPort};Database={dbName};Username={dbUser};Password={dbPass}";
+// Let appsettings.json provide the default connection and use .env values only
+// when they are explicitly supplied. Previously, absent .env values silently
+// replaced the configured credentials with hard-coded defaults.
+var configuredConnection = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is not configured.");
+var connection = new NpgsqlConnectionStringBuilder(configuredConnection);
+
+var dbHost = Env.GetString("DB_HOST");
+var dbPort = Env.GetString("DB_PORT");
+var dbName = Env.GetString("DB_NAME");
+var dbUser = Env.GetString("DB_USER");
+var dbPass = Env.GetString("DB_PASSWORD");
+
+if (!string.IsNullOrWhiteSpace(dbHost)) connection.Host = dbHost;
+if (int.TryParse(dbPort, out var parsedDbPort)) connection.Port = parsedDbPort;
+if (!string.IsNullOrWhiteSpace(dbName)) connection.Database = dbName;
+if (!string.IsNullOrWhiteSpace(dbUser)) connection.Username = dbUser;
+if (!string.IsNullOrWhiteSpace(dbPass)) connection.Password = dbPass;
+
+builder.Configuration["ConnectionStrings:DefaultConnection"] = connection.ConnectionString;
 
 builder.Configuration["EmailSettings:EmailUser"] = Env.GetString("EMAIL_USER") ?? builder.Configuration["EmailSettings:EmailUser"];
 builder.Configuration["EmailSettings:EmailPass"] = Env.GetString("EMAIL_PASS") ?? builder.Configuration["EmailSettings:EmailPass"];
@@ -49,6 +69,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDbContext<ManufacturingContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
 );
+
+builder.Services.AddMemoryCache();
 
 // Register Inventory & Agent Services (Student 1)
 builder.Services.AddScoped<IInventoryService, InventoryService>();
@@ -166,11 +188,24 @@ using (var scope = app.Services.CreateScope())
 {
     try
     {
-        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
-        mfgContext?.Database.EnsureCreated();
-
         var appContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        appContext.Database.EnsureCreated();
+        // The application migrations own the shared schema. Do this before
+        // seeding so the Floor Worker delivery screen has its purchase-order
+        // tables on both fresh and existing development databases.
+        await appContext.Database.MigrateAsync();
+        await appContext.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""EmployeeId"" character varying(16);
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_EmployeeId""
+                ON ""Users"" (""EmployeeId"")
+                WHERE ""EmployeeId"" IS NOT NULL;
+        ");
+
+        var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
+        if (mfgContext != null)
+        {
+            await StudentAInventorySeeder.SeedAsync(mfgContext);
+        }
+
         await DbInitializer.SeedAsync(app.Services);
     }
     catch (Exception ex)

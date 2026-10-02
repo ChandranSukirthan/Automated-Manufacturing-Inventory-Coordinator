@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import inventoryService from '../../services/inventoryService';
+import { parseErrorMessage } from '../../utils/errorHandler';
 
 // ── Sub-components ──────────────────────────────────────────────
 import WorkerHeader from '../Worker/components/WorkerHeader';
@@ -255,7 +256,12 @@ export default function WorkerDashboard() {
       setAiWorkflowResult(result);
       showNotification('Replenishment workflow initiated!');
       await loadData();
-    } catch { setError('Failed to trigger AI workflow.'); }
+    } catch (workflowError) {
+      setError(parseErrorMessage(
+        workflowError,
+        'Unable to start the AI workflow. Ensure the AI service is running, then try again.',
+      ));
+    }
     finally { setTriggeringAi(false); }
   };
 
@@ -314,6 +320,15 @@ export default function WorkerDashboard() {
             <span>{successMsg}</span>
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => navigate('/worker/replenishment')}
+          className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/5 px-4 py-3 text-left text-sm text-cyan-100 transition hover:border-cyan-400/50 hover:bg-cyan-500/10 sm:flex sm:items-center sm:justify-between"
+        >
+          <span className="font-semibold">Need material urgently?</span>
+          <span className="mt-1 block text-xs text-cyan-300 sm:mt-0">Open the replenishment request and workflow-status workspace →</span>
+        </button>
 
         {/* KPI Cards */}
         <KpiCards

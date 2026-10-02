@@ -12,6 +12,7 @@ using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
+using ManufacturingCoordinator.Api.Services;
 using RawMaterial = backend.Models.RawMaterial;
 
 namespace ManufacturingCoordinator.Data
@@ -24,13 +25,14 @@ namespace ManufacturingCoordinator.Data
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
 
-            // 1. Seed Users for all roles
+            // 1. Seed roles. The verified development worker avoids an email-OTP
+            // dependency during local testing; registered Floor Workers start at EMP0001.
             var seedUsers = new[]
             {
                 ("admin@amic.com", "System Admin", "Admin@123", UserRole.ITAdmin),
-                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker),
                 ("manager@amic.com", "Supply Chain Manager", "Manager@123", UserRole.SupplyChainManager),
-                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector)
+                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector),
+                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker)
             };
 
             foreach (var (email, name, pwd, role) in seedUsers)
@@ -44,6 +46,10 @@ namespace ManufacturingCoordinator.Data
                     existing.Role = role;
                     existing.IsEmailVerified = true;
                     existing.IsActive = true;
+                    if (role == UserRole.FloorWorker)
+                    {
+                        existing.EmployeeId = "EMP0000";
+                    }
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -54,12 +60,15 @@ namespace ManufacturingCoordinator.Data
                         Email = email,
                         PasswordHash = hash,
                         Role = role,
+                        EmployeeId = role == UserRole.FloorWorker ? "EMP0000" : null,
                         IsEmailVerified = true,
                         IsActive = true
                     });
                 }
             }
             await db.SaveChangesAsync();
+
+            await FloorWorkerEmployeeIdGenerator.AssignMissingAsync(db);
 
             await SeedEntitiesAsync(db);
         }
@@ -123,10 +132,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-001",
-                        Name = "Apex Industrial Metals",
-                        ContactEmail = "orders@apeximetals.com",
+                        Name = "Lanka Flexible Packaging Supplies",
+                        ContactEmail = "orders@lankaflexible.example",
                         ContactPhone = "+1-555-0192",
-                        Address = "100 Industrial Parkway, Chicago, IL",
+                        Address = "Colombo Export Processing Zone, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 7,
                         IsActive = true,
@@ -136,10 +145,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-002",
-                        Name = "Global Precision Fasteners",
-                        ContactEmail = "procurement@globalfasteners.com",
+                        Name = "Ceylon Food-Pack Materials",
+                        ContactEmail = "procurement@ceylonfoodpack.example",
                         ContactPhone = "+1-555-0283",
-                        Address = "450 Logistics Way, Detroit, MI",
+                        Address = "Colombo Logistics Park, Sri Lanka",
                         PaymentTerms = "Net 60",
                         LeadTimeDays = 14,
                         IsActive = true,
@@ -149,10 +158,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-003",
-                        Name = "Polymer & Composites Direct",
-                        ContactEmail = "sales@polymerdirect.com",
+                        Name = "Island Polymer & Paper Mills",
+                        ContactEmail = "sales@islandpolymer.example",
                         ContactPhone = "+1-555-0374",
-                        Address = "78 Polymer Row, Akron, OH",
+                        Address = "Kelaniya Industrial Estate, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 10,
                         IsActive = true,
@@ -184,7 +193,7 @@ namespace ManufacturingCoordinator.Data
                         ApprovalThreshold = 5000m,
                         RequiresApproval = true,
                         TotalCost = 6750m,
-                        Notes = "Q1 replenishment order",
+                        Notes = "Packaging-material replenishment order",
                         StripePaymentIntentId = "pi_mock_seed_001",
                         StripePaymentStatus = "succeeded",
                         EmailStatus = "Sent",
@@ -196,7 +205,7 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "Batch 1 Steel Sheets",
+                                Description = "Laminated barrier film replenishment",
                                 Quantity = 1500m,
                                 UnitPrice = 4.50m,
                                 TotalPrice = 6750m,
@@ -243,7 +252,7 @@ namespace ManufacturingCoordinator.Data
                         ApprovalThreshold = 5000m,
                         RequiresApproval = true,
                         TotalCost = 9000m,
-                        Notes = "AI Recommended: High burn rate forecast requires urgent steel coils.",
+                        Notes = "AI Recommended: high burn rate forecast requires urgent packaging material replenishment.",
                         CreatedAt = DateTime.UtcNow.AddHours(-2),
                         UpdatedAt = DateTime.UtcNow.AddHours(-1),
                         OrderLines = new List<OrderLine>
@@ -251,7 +260,7 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "High-volume steel coil replenishment",
+                                Description = "High-volume flexible packaging material replenishment",
                                 Quantity = 2000m,
                                 UnitPrice = 4.50m,
                                 TotalPrice = 9000m,

@@ -9,7 +9,7 @@ namespace ManufacturingCoordinator.Api.Controllers
 {
     [ApiController]
     [Route("api/quarantine")]
-    [Authorize(Roles = "QualityInspector")]
+    [Authorize(Roles = "QualityInspector,SupplyChainManager,ITAdmin")]
     public class QuarantineController : ControllerBase
     {
         private readonly IQuarantineService _service;
@@ -33,6 +33,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/release")]
+        [Authorize(Roles = "QualityInspector,ITAdmin")]
         public async Task<IActionResult> Release(Guid id)
         {
             var quarantine = await _service.ReleaseAsync(id);

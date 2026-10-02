@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from ai.core.state import WorkflowStatus, ApprovalStatus
@@ -10,10 +10,15 @@ from ai.graph.workflow import (
     WORKFLOW_SESSIONS,
 )
 from ai.tools.production_tools import (
+    get_production_schedule,
     query_production_schedule,
     calculate_machine_uptime,
     check_maintenance_requirement,
     calculate_production_impact,
+)
+from ai.core.request_context import (
+    reset_authorization_header,
+    set_authorization_header,
 )
 
 router = APIRouter(prefix="/api/workflows", tags=["Agent Workflows"])
@@ -24,43 +29,52 @@ tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 class RunWorkflowRequest(BaseModel):
     objective: str = Field(
         ...,
-        example="Replenish BoxPouch film because inventory is low.",
+        json_schema_extra={"example": "Replenish BoxPouch film because inventory is low."},
         description="The business objective for the Planner agent."
     )
-    workflowId: Optional[str] = Field(None, example="WF-1004")
-    material_id: Optional[str] = Field(None, example="RM-STEEL-001")
-    required_quantity: Optional[float] = Field(None, example=2000.0)
+    workflowId: Optional[str] = Field(None, json_schema_extra={"example": "WF-1004"})
+    material_id: Optional[str] = Field(None, json_schema_extra={"example": "RM-STEEL-001"})
+    required_quantity: Optional[float] = Field(None, json_schema_extra={"example": 2000.0})
 
 
 class RejectWorkflowRequest(BaseModel):
-    reason: Optional[str] = Field("Rejected by human administrator", example="Exceeds daily budget")
+    reason: Optional[str] = Field(
+        "Rejected by human administrator",
+        json_schema_extra={"example": "Exceeds daily budget"},
+    )
 
 
 class MaintenanceCheckRequest(BaseModel):
-    uptime: float = Field(..., example=480.0)
-    maintenanceInterval: float = Field(..., example=500.0)
-    machineId: str = Field("M001", example="M001")
+    uptime: float = Field(..., json_schema_extra={"example": 480.0})
+    maintenanceInterval: float = Field(..., json_schema_extra={"example": 500.0})
+    machineId: str = Field("M001", json_schema_extra={"example": "M001"})
 
 
 class ProductionImpactRequest(BaseModel):
-    target: int = Field(..., example=10000)
-    availableMaterial: int = Field(..., example=6000)
+    target: int = Field(..., json_schema_extra={"example": 10000})
+    availableMaterial: int = Field(..., json_schema_extra={"example": 6000})
 
 
 # Workflow Endpoints
 @router.post("/run", status_code=status.HTTP_201_CREATED)
 @router.post("/trigger", status_code=status.HTTP_201_CREATED)
-def trigger_workflow(request: RunWorkflowRequest):
+def trigger_workflow(
+    request: RunWorkflowRequest,
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Triggers a multi-agent autonomous workflow via the Planner/Coordinator agent.
     """
-    result = run_workflow(
-        objective=request.objective,
-        workflow_id=request.workflowId,
-        material_id=request.material_id,
-        required_quantity=request.required_quantity
-    )
-    return result
+    context_token = set_authorization_header(authorization)
+    try:
+        return run_workflow(
+            objective=request.objective,
+            workflow_id=request.workflowId,
+            material_id=request.material_id,
+            required_quantity=request.required_quantity,
+        )
+    finally:
+        reset_authorization_header(context_token)
 
 
 @router.get("")
@@ -115,9 +129,9 @@ def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest):
 
 # Production Tool Direct Endpoints
 @tools_router.get("/production-schedule")
-def tool_query_schedule(machineId: str = "M001"):
-    """Tool 1: query_production_schedule()"""
-    return query_production_schedule(machine_id=machineId)
+def tool_get_production_schedule(shiftName: str = "Next shift"):
+    """Return the allow-listed, read-only schedule for a selected shift."""
+    return get_production_schedule.invoke({"shiftName": shiftName})
 
 
 @tools_router.get("/machine-uptime")

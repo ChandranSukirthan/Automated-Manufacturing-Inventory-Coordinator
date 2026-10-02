@@ -26,6 +26,7 @@ namespace ManufacturingCoordinator.Controllers
 
         /// <summary>GET /api/purchase-orders — list all purchase orders (summary view)</summary>
         [HttpGet]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(IEnumerable<PurchaseOrderSummaryDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<IEnumerable<PurchaseOrderSummaryDto>>> GetAll()
@@ -36,6 +37,7 @@ namespace ManufacturingCoordinator.Controllers
 
         /// <summary>GET /api/purchase-orders/{id} — full PO details including order lines and audit history</summary>
         [HttpGet("{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

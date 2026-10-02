@@ -8,6 +8,8 @@ using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
+using PackagingType = backend.Models.PackagingType;
+using RawMaterial = backend.Models.RawMaterial;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -89,6 +91,46 @@ public class DefectReportServiceTests
         Assert.Equal("BATCH222", created.BatchId);
         Assert.Equal(["ROLL21"], created.AffectedInventory);
         Assert.Equal(1, await db.DefectReports.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithCatalogueSku_AllowsReportingBeforeRollRegistration()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        var packagingType = new PackagingType
+        {
+            Name = "Box Pouch",
+            ShortCode = "BP"
+        };
+        db.PackagingTypes.Add(packagingType);
+        await db.SaveChangesAsync();
+        db.RawMaterials.Add(new RawMaterial
+        {
+            SkuCode = "BP-LAM-001",
+            Name = "Laminated Barrier Film",
+            Category = "Box Pouch",
+            MaterialCode = "LAM",
+            PackagingTypeId = packagingType.Id,
+            UnitOfMeasure = "KG"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new DefectReportService(db);
+        var created = await service.CreateAsync(new CreateDefectReportDto
+        {
+            SkuCode = "BP-LAM-001",
+            Severity = DefectSeverity.MEDIUM,
+            Description = "Sealing film shows pinholes.",
+            Status = DefectStatus.Open
+        }, null);
+
+        Assert.Equal("BP-LAM-001", created.SkuCode);
+        Assert.StartsWith("SKU-BP-LAM-001-", created.BatchId);
+        Assert.Empty(created.AffectedInventory);
     }
 
     [Fact]

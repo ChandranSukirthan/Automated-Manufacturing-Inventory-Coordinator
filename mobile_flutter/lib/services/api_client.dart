@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -23,7 +24,7 @@ class ApiClient {
           (baseUrl ??
                   const String.fromEnvironment(
                     'API_BASE_URL',
-                    defaultValue: 'http://10.0.2.2:5070/api',
+                    defaultValue: 'http://172.20.10.6:5070/api',
                   ))
               .replaceAll(RegExp(r'/$'), '');
 
@@ -32,6 +33,7 @@ class ApiClient {
   Future<void> Function()? onSessionExpired;
 
   Future<dynamic> get(String path) => _request('GET', path);
+  Future<Uint8List> getBytes(String path) => _getBytes(path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
@@ -86,6 +88,35 @@ class ApiClient {
     return jsonDecode(response.body);
   }
 
+  Future<Uint8List> _getBytes(String path, [bool retry = true]) async {
+    final session = await storage.read();
+    final headers = <String, String>{};
+    if (session != null && session.accessToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${session.accessToken}';
+    }
+
+    http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse('$baseUrl$path'), headers: headers)
+          .timeout(requestTimeout);
+    } catch (_) {
+      throw const ApiException(
+        'Could not connect to the server. Check the API URL and network.',
+      );
+    }
+
+    if (response.statusCode == 401 && retry && session != null) {
+      final refreshed = await _refresh(session.refreshToken);
+      if (refreshed) return _getBytes(path, false);
+      await onSessionExpired?.call();
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_message(response), statusCode: response.statusCode);
+    }
+    return response.bodyBytes;
+  }
+
   Future<bool> _refresh(String refreshToken) async {
     try {
       final response = await http.post(
@@ -105,6 +136,7 @@ class ApiClient {
           ...data,
           'user': {
             'id': oldSession.user.id,
+            'employeeId': oldSession.user.employeeId,
             'fullName': oldSession.user.fullName,
             'email': oldSession.user.email,
             'role': oldSession.user.role,

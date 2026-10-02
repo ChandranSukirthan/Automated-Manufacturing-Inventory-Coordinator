@@ -1,16 +1,20 @@
 using System;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace backend.Models
 {
     public class InventoryRoll
     {
-        public string Id { get; set; } = string.Empty;
+        public int Id { get; set; }
         
         // Foreign Key
         public int RawMaterialId { get; set; }
-        
-        public string? BatchId { get; set; } = "BATCH001";
+
+        // Batch tracking belongs to the production context. The legacy
+        // inventory table does not store this value.
+        [NotMapped]
+        public string? BatchId { get; set; }
         
         [JsonIgnore]
         public RawMaterial? RawMaterial { get; set; }

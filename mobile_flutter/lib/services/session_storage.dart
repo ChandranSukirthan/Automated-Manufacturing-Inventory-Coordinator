@@ -19,6 +19,7 @@ class SessionStorage {
         'refreshToken': session.refreshToken,
         'user': {
           'id': session.user.id,
+          'employeeId': session.user.employeeId,
           'fullName': session.user.fullName,
           'email': session.user.email,
           'role': session.user.role,

@@ -15,6 +15,12 @@ namespace backend.Models
 
         public string Category { get; set; } = string.Empty; // e.g., 'BoxPouch', 'Bottle'
 
+        // Kept alongside the legacy display fields so every SKU can be traced
+        // back to its database-backed packaging type and raw material.
+        public int? PackagingTypeId { get; set; }
+        public int? RawMaterialId { get; set; }
+        public int? SkuNumber { get; set; }
+
         public int StockLevel { get; set; }
 
         public int ReorderThreshold { get; set; }

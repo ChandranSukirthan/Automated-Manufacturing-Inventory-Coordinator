@@ -104,7 +104,12 @@ def test_end_to_end_workflow_with_human_approval():
     objective = "Replenish BoxPouch film because inventory is low."
 
     # Step 1: Run workflow up to human approval gate
-    state = run_workflow(objective=objective, workflow_id=wf_id)
+    state = run_workflow(
+        objective=objective,
+        workflow_id=wf_id,
+        material_id="CR-001",
+        required_quantity=2000.0,
+    )
 
     assert state["workflow_id"] == wf_id
     assert state["status"] == WorkflowStatus.WaitingForApproval
@@ -145,7 +150,9 @@ def test_api_tool_production_impact():
 def test_api_trigger_and_approve_workflow():
     payload = {
         "objective": "Replenish BoxPouch film because inventory is low.",
-        "workflowId": "WF-API-TEST"
+        "workflowId": "WF-API-TEST",
+        "material_id": "CR-001",
+        "required_quantity": 2000.0,
     }
     response = client.post("/api/workflows/run", json=payload)
     assert response.status_code == 201

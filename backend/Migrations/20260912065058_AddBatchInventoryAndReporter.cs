@@ -30,7 +30,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "InventoryRolls",
+                name: "QualityInventoryRolls",
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
@@ -39,9 +39,9 @@ namespace ManufacturingCoordinator.Api.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_InventoryRolls", x => x.Id);
+                    table.PrimaryKey("PK_QualityInventoryRolls", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_InventoryRolls_Batches_BatchId",
+                        name: "FK_QualityInventoryRolls_Batches_BatchId",
                         column: x => x.BatchId,
                         principalTable: "Batches",
                         principalColumn: "Id",
@@ -54,8 +54,8 @@ namespace ManufacturingCoordinator.Api.Migrations
                 column: "ReportedByUserId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_InventoryRolls_BatchId_Status",
-                table: "InventoryRolls",
+                name: "IX_QualityInventoryRolls_BatchId_Status",
+                table: "QualityInventoryRolls",
                 columns: new[] { "BatchId", "Status" });
 
             migrationBuilder.AddForeignKey(
@@ -75,7 +75,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                 table: "DefectReports");
 
             migrationBuilder.DropTable(
-                name: "InventoryRolls");
+                name: "QualityInventoryRolls");
 
             migrationBuilder.DropTable(
                 name: "Batches");

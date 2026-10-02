@@ -43,6 +43,11 @@ namespace backend.Services
                 response.EnsureSuccessStatusCode();
 
                 var result = await response.Content.ReadFromJsonAsync<AgentPredictionResponseDto>();
+                if (result == null)
+                {
+                    throw new HttpRequestException("The AI agent returned an empty response.");
+                }
+
                 return result;
             }
             catch (Exception ex)

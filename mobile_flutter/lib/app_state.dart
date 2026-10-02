@@ -61,7 +61,13 @@ class AppState extends ChangeNotifier {
       session = AuthSession(
         accessToken: currentSession.accessToken,
         refreshToken: currentSession.refreshToken,
-        user: updatedUser,
+        user: UserSummary(
+          id: updatedUser.id,
+          employeeId: updatedUser.employeeId,
+          fullName: updatedUser.fullName,
+          email: updatedUser.email,
+          role: updatedUser.role,
+        ),
       );
       await storage.save(session!);
       notifyListeners();

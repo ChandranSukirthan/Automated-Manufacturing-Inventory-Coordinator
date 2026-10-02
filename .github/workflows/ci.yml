@@ -1,0 +1,126 @@
+name: AMIC Continuous Integration
+
+on:
+  push:
+    branches: [floor_worker-induri]
+  pull_request:
+    branches: [floor_worker-induri]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amic-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: ASP.NET Core build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore backend/Tests/backend.Tests.csproj
+      - name: Build
+        run: dotnet build backend/Tests/backend.Tests.csproj --configuration Release --no-restore
+      - name: Run xUnit tests
+        run: dotnet test backend/Tests/backend.Tests.csproj --configuration Release --no-build --no-restore --logger "trx;LogFileName=backend-tests.trx"
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/Tests/TestResults/*.trx
+          if-no-files-found: ignore
+
+  agent-tests:
+    name: FastAPI and LangGraph tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r ai/requirements.txt
+      - name: Run PyTest suite
+        env:
+          PYTHONPATH: ${{ github.workspace }};${{ github.workspace }}\ai
+        run: python -m pytest ai/tests -q
+
+  flutter-tests:
+    name: Flutter analysis and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Fetch packages
+        working-directory: mobile_flutter
+        run: flutter pub get
+      - name: Static analysis
+        working-directory: mobile_flutter
+        run: flutter analyze
+      - name: Run widget and unit tests
+        working-directory: mobile_flutter
+        run: flutter test
+
+  react-tests:
+    name: React build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install web dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Run React tests
+        working-directory: frontend
+        run: pnpm test
+      - name: Build React application
+        working-directory: frontend
+        run: pnpm build
+      - name: Publish verified React build
+        uses: actions/upload-artifact@v4
+        with:
+          name: amic-react-build
+          path: frontend/dist
+          if-no-files-found: error
+
+  package-mobile-artifact:
+    name: Package validated Android artifact
+    needs: [backend-tests, agent-tests, flutter-tests, react-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/floor_worker-induri'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java for the Android build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Build debug APK
+        working-directory: mobile_flutter
+        run: flutter pub get && flutter build apk --debug
+      - name: Publish deployable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: amic-mobile-debug-apk
+          path: mobile_flutter/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

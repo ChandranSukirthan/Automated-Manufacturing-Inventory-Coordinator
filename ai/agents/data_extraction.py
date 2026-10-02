@@ -1,4 +1,5 @@
 from typing import Dict, Any
+from ai.agents.data_extraction_agent import run_data_extraction_agent
 from ai.core.state import AgentState, WorkflowStatus
 from ai.tools.inventory_tools import (
     get_inventory_levels,
@@ -6,37 +7,65 @@ from ai.tools.inventory_tools import (
     calculate_burn_rate,
     detect_low_stock
 )
+from ai.tools.production_tools import get_production_schedule
+
+
+_PRODUCT_DEFAULTS = {
+    "BoxPouch": {"batch_id": "AUTO-BP-001", "material_sku": "BP-FILM-001"},
+    "TeaBag": {"batch_id": "AUTO-TB-001", "material_sku": "TB-PAPER-001"},
+    "Can": {"batch_id": "AUTO-CAN-001", "material_sku": "CAN-ALLOY-001"},
+    "Bottle": {"batch_id": "AUTO-BOT-001", "material_sku": "BOT-RESIN-001"},
+}
+
+
+def _extraction_request_from_state(state: AgentState) -> dict[str, str]:
+    """Build a validated, read-only request for the data-extraction agent."""
+
+    supplied = state.get("data_extraction_request")
+    if isinstance(supplied, dict):
+        return {key: str(value) for key, value in supplied.items()}
+
+    objective = str(state.get("objective", "")).lower()
+    if "tea bag" in objective or "teabag" in objective:
+        product_type = "TeaBag"
+    elif "bottle" in objective:
+        product_type = "Bottle"
+    elif "can packaging" in objective or " can " in f" {objective} ":
+        product_type = "Can"
+    else:
+        product_type = "BoxPouch"
+    return {"product_type": product_type, **_PRODUCT_DEFAULTS[product_type]}
 
 
 def data_extraction_node(state: AgentState) -> Dict[str, Any]:
+    """Run the two-tool Data Extraction Agent and map its JSON to shared state.
+
+    This node deliberately owns only Student A's tool allow-list:
+    ``query_production_db`` and ``get_inventory_levels``. Equipment telemetry
+    belongs to the Production Scheduling & Equipment component, not this agent.
     """
-    Student 1 (Floor Worker): Data Extraction Agent Node
-    Strictly responsible ONLY for inventory retrieval and burn-rate telemetry:
-    - get_inventory_levels()
-    - query_inventory_history()
-    - calculate_burn_rate()
-    - detect_low_stock()
-    Does NOT touch production machines or schedule planning (which belongs to Student 4).
-    """
+    # Student 1 (Floor Worker): Data Extraction Agent Node.
+    # It retrieves inventory, burn-rate telemetry, and the next-shift material
+    # plan without creating orders or altering production machines.
     completed = list(state.get("completed_steps", []))
     errors = list(state.get("errors", []))
     tool_results = dict(state.get("tool_results", {}))
+    extraction = run_data_extraction_agent(_extraction_request_from_state(state))
+    tool_results["data_extraction_agent"] = extraction
+    if extraction.get("status") != "COMPLETED":
+        return {
+            "current_agent": "Data Extraction",
+            "status": WorkflowStatus.Failed,
+            "tool_results": tool_results,
+            "errors": errors + list(extraction.get("errors", [])),
+            "final_outcome": "Workflow aborted: data extraction returned a safe failure.",
+        }
 
     try:
-        import re
-        import psycopg
-        from ai.core.config import settings
-
         inv_input = state.get("inventory_data", {})
-        obj = state.get("objective", "")
-        material_match = re.search(r"\b(RM[A-Z0-9_-]*)\b", obj, re.IGNORECASE)
-
-        material_id = (
-            inv_input.get("materialId")
-            or inv_input.get("itemCode")
-            or (material_match.group(1).upper() if material_match else None)
-            or "RM-STEEL-001"
-        )
+        material_id = inv_input.get("materialId") or inv_input.get("itemCode")
+        if not material_id:
+            raise ValueError("A material must be selected before the AI workflow can run.")
 
         # Tool 1: get_inventory_levels()
         levels = get_inventory_levels.invoke({"materialId": material_id})
@@ -46,71 +75,48 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
 
         # Tool 3: calculate_burn_rate()
         burn = calculate_burn_rate.invoke({
-            "consumption": history.get("consumption", 2400.0),
-            "periodDays": history.get("periodDays", 30),
+            "consumption": history["consumption"],
+            "periodDays": history["periodDays"],
             "materialId": material_id
         })
-
         # Tool 4: detect_low_stock()
         low_stock_analysis = detect_low_stock.invoke({
-            "currentStock": levels.get("currentStock", 350.0),
-            "minimumStock": levels.get("minimumStock", 200.0),
-            "burnRate": burn.get("burnRate", 80.0),
-            "supplierLeadTime": 7.0,
+            "currentStock": levels["currentStock"],
+            "minimumStock": levels["minimumStock"],
+            "burnRate": burn["burnRate"],
+            "supplierLeadTime": 0.0,
             "materialId": material_id
         })
+        # Read-only schedule context for the Floor Worker's next shift.
+        schedule = get_production_schedule.invoke({"shiftName": "Next shift"})
 
-        curr_stock = levels.get("currentStock", 350.0)
-        min_stock = levels.get("minimumStock", 200.0)
-        max_stock = levels.get("maximumStock", 1000.0)
-        req_qty = inv_input.get("requiredQuantity") or max(500, int(max_stock - curr_stock))
 
-        # Query real material name from PostgreSQL RawMaterials table
-        item_name = levels.get("itemName") or "Industrial Raw Material"
-        try:
-            with psycopg.connect(
-                host=settings.DB_HOST,
-                port=settings.DB_PORT,
-                dbname=settings.DB_NAME,
-                user=settings.DB_USER,
-                password=settings.DB_PASSWORD,
-                connect_timeout=2
-            ) as conn:
-                with conn.cursor() as cur:
-                    cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (material_id, f"%{material_id}%"))
-                    row = cur.fetchone()
-                    if row:
-                        item_name = row[0]
-        except Exception:
-            if "STEEL" in material_id:
-                item_name = "Cold Rolled Steel Sheet"
-            elif "ALUM" in material_id:
-                item_name = "High-Tensile Aluminum Rod"
-            elif "POLY" in material_id:
-                item_name = "Industrial Polypropylene Pellets"
+        curr_stock = levels["currentStock"]
+        min_stock = levels["minimumStock"]
+        max_stock = levels["maximumStock"]
+        req_qty = inv_input.get("requiredQuantity") or max(0, max_stock - curr_stock)
 
-        inventory_data = {
+        inventory_data: Dict[str, Any] = {
             "materialId": material_id,
             "itemCode": material_id,
-            "itemName": item_name,
             "currentStock": curr_stock,
             "availableQuantity": curr_stock,
             "minimumStock": min_stock,
             "maximumStock": max_stock,
             "reorderThreshold": min_stock,
-            "burnRate": burn.get("burnRate", 80.0),
-            "burnRatePerHour": round(burn.get("burnRate", 80.0) / 8.0, 2),
-            "daysRemaining": low_stock_analysis.get("daysRemaining", 4.375),
-            "lowStock": low_stock_analysis.get("lowStock", True),
-            "status": "LOW_STOCK" if low_stock_analysis.get("lowStock", True) else "NORMAL",
+            "burnRate": burn["burnRate"],
+            "daysRemaining": low_stock_analysis["daysRemaining"],
+            "lowStock": low_stock_analysis["lowStock"],
+            "status": "LOW_STOCK" if low_stock_analysis["lowStock"] else "NORMAL",
             "requiredQuantity": req_qty,
-            "unit": "KG"
+            "productionSchedule": schedule,
         }
 
         tool_results["get_inventory_levels"] = levels
         tool_results["query_inventory_history"] = history
         tool_results["calculate_burn_rate"] = burn
         tool_results["detect_low_stock"] = low_stock_analysis
+        tool_results["get_production_schedule"] = schedule
 
         completed.append("Data Extraction: Analyzed inventory levels, burn rate & days remaining")
 
@@ -126,6 +132,7 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         return {
             "current_agent": "Data Extraction",
             "status": WorkflowStatus.Failed,
-            "errors": errors + [f"Data extraction exception: {str(ex)}"],
-            "final_outcome": "Safe failure: Exception encountered during data extraction."
+            "tool_results": tool_results,
+            "errors": errors + [str(ex)],
+            "final_outcome": "Workflow aborted: data extraction returned a safe failure.",
         }

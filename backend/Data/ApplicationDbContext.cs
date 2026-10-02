@@ -27,6 +27,7 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
         public DbSet<OrderLine> OrderLines { get; set; } = null!;
         public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
+        public DbSet<PackagingType> PackagingTypes { get; set; } = null!;
         public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
@@ -58,6 +59,12 @@ namespace ManufacturingCoordinator.Data
                 entity.Property(u => u.FullName)
                     .IsRequired()
                     .HasMaxLength(150);
+
+                entity.Property(u => u.EmployeeId)
+                    .HasMaxLength(16);
+
+                entity.HasIndex(u => u.EmployeeId)
+                    .IsUnique();
 
                 entity.Property(u => u.Email)
                     .IsRequired()
@@ -192,6 +199,12 @@ namespace ManufacturingCoordinator.Data
             {
                 entity.HasKey(d => d.Id);
 
+                entity.Property(d => d.SkuCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(d => d.SkuCode);
+
                 entity.Property(d => d.BatchId)
                     .IsRequired()
                     .HasMaxLength(80);
@@ -234,6 +247,10 @@ namespace ManufacturingCoordinator.Data
 
             modelBuilder.Entity<ManufacturingCoordinator.Models.Inventory.InventoryRoll>(entity =>
             {
+                // Student A's stock rolls already use the InventoryRolls table.
+                // Quality-control rolls have a different shape, so keep them in
+                // their own table instead of colliding with inventory tracking.
+                entity.ToTable("QualityInventoryRolls");
                 entity.HasKey(i => i.Id);
                 entity.Property(i => i.Id).HasMaxLength(120);
                 entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
@@ -598,6 +615,22 @@ namespace ManufacturingCoordinator.Data
                 entity.HasKey(rm => rm.Id);
                 entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
                 entity.HasIndex(rm => rm.SkuCode).IsUnique();
+                entity.Property(rm => rm.MaterialCode).IsRequired().HasMaxLength(20);
+                entity.HasIndex(rm => new { rm.PackagingTypeId, rm.MaterialCode });
+                entity.HasOne(rm => rm.PackagingType)
+                    .WithMany(pt => pt.RawMaterials)
+                    .HasForeignKey(rm => rm.PackagingTypeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PackagingType>(entity =>
+            {
+                entity.ToTable("PackagingTypes");
+                entity.HasKey(pt => pt.Id);
+                entity.Property(pt => pt.Name).IsRequired().HasMaxLength(100);
+                entity.Property(pt => pt.ShortCode).IsRequired().HasMaxLength(12);
+                entity.HasIndex(pt => pt.Name).IsUnique();
+                entity.HasIndex(pt => pt.ShortCode).IsUnique();
             });
 
             // ---- AuditLog (Student 4) ----
