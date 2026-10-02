@@ -89,6 +89,10 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         public DateTime? ExpectedDeliveryDate { get; set; }
         public DateTime? ActualDeliveryDate { get; set; }
 
+        public bool IsAcknowledgedByScm { get; set; } = false;
+        public bool IsQualityVerified { get; set; } = false;
+        public bool IsFinancialVerified { get; set; } = false;
+
         [MaxLength(200)]
         public string? TrackingNumber { get; set; }
 

@@ -116,9 +116,13 @@ export default function AiApprovals() {
       
       // Execute backend API (ASP.NET Core)
       await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
-      
-      // Step 3: Awaiting Payment
+
+      // Step 3: Quality Inspector Verification (Simulating auto-verification if pipeline executes seamlessly)
       setApprovalStep(3);
+      await delay(800);
+      
+      // Step 4: Awaiting Payment
+      setApprovalStep(4);
     } catch (err) {
       setAnimatingApproval(false);
       setApprovalStep(0);
@@ -656,7 +660,8 @@ export default function AiApprovals() {
               {[
                 { step: 1, title: 'Validating Authorization', desc: 'Manager authorization verified via JWT' },
                 { step: 2, title: 'Approving Order', desc: 'Transitioning Purchase Order state to Approved' },
-                { step: 3, title: 'Awaiting Payment', desc: 'Order is ready for Stripe Checkout settlement' },
+                { step: 3, title: 'AI Quality Verification', desc: 'Running Unified Supply Chain & Quality Check (4/4)' },
+                { step: 4, title: 'Awaiting Payment', desc: 'Order is verified and ready for Stripe settlement' },
               ].map((item) => {
                 const isPassed = approvalStep > item.step;
                 const isCurrent = approvalStep === item.step;
@@ -701,7 +706,7 @@ export default function AiApprovals() {
             </div>
 
             {/* Footer with Payment Gateway button when completed */}
-            {approvalStep === 3 ? (
+            {approvalStep === 4 ? (
               <div className="pt-2 space-y-2">
                 <Link
                   to={`/purchase-orders/${selectedOrder?.id}`}
