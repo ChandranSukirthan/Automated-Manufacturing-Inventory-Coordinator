@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Services.PurchaseOrders;
 using backend.Services;
+using backend.Data;
 using ManufacturingCoordinator.Data;
 
 namespace ManufacturingCoordinator.Controllers
@@ -21,9 +22,9 @@ namespace ManufacturingCoordinator.Controllers
         private readonly IInventoryService _inventoryService;
         private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private readonly IAgentIntegrationService _agentIntegrationService;
-        private readonly ManufacturingContext _context;
+        private readonly ApplicationDbContext _context;
 
-        public PurchaseOrdersController(IPurchaseOrderService poService, IInventoryService inventoryService, Microsoft.Extensions.Configuration.IConfiguration configuration, IAgentIntegrationService agentIntegrationService, ManufacturingContext context)
+        public PurchaseOrdersController(IPurchaseOrderService poService, IInventoryService inventoryService, Microsoft.Extensions.Configuration.IConfiguration configuration, IAgentIntegrationService agentIntegrationService, ApplicationDbContext context)
         {
             _poService = poService;
             _inventoryService = inventoryService;
