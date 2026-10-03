@@ -10,7 +10,7 @@ import OTPVerification from './pages/Auth/OTPVerification';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import ProfilePage from './pages/Profile/ProfilePage';
 
-// Student 2: Supply Chain Manager Pages
+// Supply Chain Manager pages
 import SupplyChainDashboard from './pages/Dashboard/AdminDashboard';
 import SupplierList from './pages/Suppliers/SupplierList';
 import SupplierDetail from './pages/Suppliers/SupplierDetail';
@@ -22,7 +22,7 @@ import AiApprovals from './pages/PurchaseOrders/AiApprovals';
 import SupplierAnalytics from './pages/PurchaseOrders/SupplierAnalytics';
 import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
 
-// Student 3: Quality & Defect Pages
+// Quality and defect pages
 import QualityDashboard from './pages/Dashboard/QualityDashboard';
 import AiValidationPage from './pages/Dashboard/AiValidationPage';
 import DefectReportsPage from './pages/Dashboard/DefectReportsPage';
@@ -33,14 +33,14 @@ import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
 import QuarantineHistoryPage from './pages/Dashboard/QuarantineHistoryPage';
 import QALayout from './components/Layout/QALayout';
 
-// Student 4: Production & Equipment Pages
+// Production and equipment pages
 import ProductionDashboard from './pages/Production/ProductionDashboard';
 import MachineList from './pages/Production/MachineList';
 import MachineDetail from './pages/Production/MachineDetail';
 import MaintenancePage from './pages/Production/MaintenancePage';
 import ShiftPage from './pages/Production/ShiftPage';
 
-// Student 4: System Administration Pages (ITAdmin)
+// System administration pages
 import ITAdminDashboard from './pages/Admin/AdminDashboard';
 import UsersPage from './pages/Admin/UsersPage';
 import RolesPage from './pages/Admin/RolesPage';
@@ -50,6 +50,7 @@ import SystemHealthPage from './pages/Admin/SystemHealthPage';
 
 // Floor Worker Dashboard
 import WorkerDashboard from './pages/Dashboard/WorkerDashboard';
+import ReplenishmentRequestPage from './pages/Worker/ReplenishmentRequestPage';
 
 function App() {
   return (
@@ -72,7 +73,7 @@ function App() {
             }
           />
 
-          {/* Student 2: Supply Chain Manager Routes */}
+          {/* Supply Chain Manager routes */}
           <Route
             path="/dashboard/manager"
             element={
@@ -186,7 +187,7 @@ function App() {
             }
           />
 
-          {/* Student 1: Floor Worker Inventory & Stock Tracking Routes */}
+          {/* Floor Worker inventory and stock-tracking routes */}
           <Route
             path="/dashboard/worker"
             element={
@@ -243,8 +244,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/worker/replenishment"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <ReplenishmentRequestPage />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Student 3: Quality & Defect Routes */}
+          {/* Quality and defect routes */}
           <Route element={<ProtectedRoute allowedRoles={[2, 'QualityInspector', 'ITAdmin']} />}>
             <Route element={<QALayout />}>
               <Route path="/quality" element={<QualityDashboard />} />
@@ -268,7 +277,7 @@ function App() {
             </Route>
           </Route>
 
-          {/* Student 4: Production & Equipment Routes */}
+          {/* Production and equipment routes */}
           <Route
             path="/production"
             element={
@@ -310,7 +319,7 @@ function App() {
             }
           />
 
-          {/* Student 4: System Administration Routes (Strictly ITAdmin only: role 3) */}
+          {/* System administration routes (ITAdmin only) */}
           <Route
             path="/admin"
             element={

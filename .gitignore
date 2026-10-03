@@ -1,5 +1,6 @@
 # Node/React Frontend
 node_modules/
+.pnpm-store/
 dist/
 dist-ssr/
 build/

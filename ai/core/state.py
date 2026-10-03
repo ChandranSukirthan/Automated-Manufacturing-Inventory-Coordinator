@@ -29,6 +29,7 @@ class AgentState(TypedDict, total=False):
     workflow_id: str
     procurement_request_id: int | None
     objective: str
+    data_extraction_request: dict[str, str]
     plan: list[str]
     current_agent: str
     status: WorkflowStatus

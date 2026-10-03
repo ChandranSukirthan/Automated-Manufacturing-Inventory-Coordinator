@@ -770,24 +770,26 @@ class _ProfilePopupState extends State<_ProfilePopup> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Quality Scope',
-                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                    ),
-                    const Text(
-                      'Factory Quality Assurance',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                if (widget.role == 'QualityInspector') ...[
+                  const SizedBox(height: 8),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Quality Scope',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                       ),
-                    ),
-                  ],
-                ),
+                      Text(
+                        'Factory Quality Assurance',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

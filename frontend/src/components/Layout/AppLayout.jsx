@@ -103,32 +103,31 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
 
   const getRoleName = (role) => {
     if (role === null || role === undefined) return '';
-    const s = String(role).trim().toLowerCase();
-    if (s === '1' || s === 'supplychainmanager' || s === 'manager') {
+    const numericRole = typeof role === 'number' ? role : Number(role);
+    if (Number.isInteger(numericRole)) {
+      switch (numericRole) {
+        case 1:
+          return 'Supply Chain Manager';
+        case 2:
+          return 'Quality Inspector';
+        case 3:
+          return 'System Admin';
+        default:
+          return 'Floor Worker';
+      }
+    }
+
+    const normalizedRole = String(role).trim().toLowerCase();
+    if (normalizedRole === 'supplychainmanager' || normalizedRole === 'manager') {
       return 'Supply Chain Manager';
     }
-    if (s === '2' || s === 'qualityinspector' || s === 'quality') {
+    if (normalizedRole === 'qualityinspector' || normalizedRole === 'quality') {
       return 'Quality Inspector';
     }
-    if (s === '3' || s === 'itadmin' || s === 'systemadmin' || s === 'admin') {
+    if (normalizedRole === 'itadmin' || normalizedRole === 'systemadmin' || normalizedRole === 'admin') {
       return 'System Admin';
     }
-    if (s === '0' || s === 'floorworker' || s === 'worker') {
-      return 'Floor Worker';
-    }
-    const r = parseInt(role, 10);
-    switch (r) {
-      case 1:
-        return 'Supply Chain Manager';
-      case 2:
-        return 'Quality Inspector';
-      case 3:
-        return 'System Admin';
-      case 0:
-        return 'Floor Worker';
-      default:
-        return 'Floor Worker';
-    }
+    return 'Floor Worker';
   };
 
   return (

@@ -136,30 +136,31 @@ class InventoryRoll {
 class DefectReport {
   const DefectReport({
     required this.id,
+    this.skuCode = '',
     required this.batchId,
     required this.productType,
     required this.severity,
     required this.description,
     required this.createdAt,
     required this.status,
-    this.skuCode,
     this.reportedByUserId,
     this.affectedInventory = const [],
   });
 
   final String id;
+  final String skuCode;
   final String batchId;
   final String productType;
   final String severity;
   final String description;
   final DateTime createdAt;
   final String status;
-  final String? skuCode;
   final String? reportedByUserId;
   final List<String> affectedInventory;
 
   factory DefectReport.fromJson(Map<String, dynamic> json) => DefectReport(
     id: json['id']?.toString() ?? '',
+    skuCode: json['skuCode'] as String? ?? '',
     batchId: json['batchId'] as String? ?? '',
     productType: json['productType'] as String? ?? '',
     severity: json['severity'] as String? ?? '',
@@ -167,7 +168,6 @@ class DefectReport {
     createdAt:
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     status: json['status'] as String? ?? '',
-    skuCode: json['skuCode'] as String?,
     reportedByUserId: json['reportedByUserId']?.toString(),
     affectedInventory: (json['affectedInventory'] as List<dynamic>? ?? [])
         .map((item) => item.toString())
@@ -177,23 +177,23 @@ class DefectReport {
 
 extension DefectReportCopy on DefectReport {
   DefectReport copyWith({
+    String? skuCode,
     String? batchId,
     String? productType,
     String? severity,
     String? description,
     String? status,
-    String? skuCode,
     String? reportedByUserId,
     List<String>? affectedInventory,
   }) => DefectReport(
     id: id,
+    skuCode: skuCode ?? this.skuCode,
     batchId: batchId ?? this.batchId,
     productType: productType ?? this.productType,
     severity: severity ?? this.severity,
     description: description ?? this.description,
     createdAt: createdAt,
     status: status ?? this.status,
-    skuCode: skuCode ?? this.skuCode,
     reportedByUserId: reportedByUserId ?? this.reportedByUserId,
     affectedInventory: affectedInventory ?? this.affectedInventory,
   );

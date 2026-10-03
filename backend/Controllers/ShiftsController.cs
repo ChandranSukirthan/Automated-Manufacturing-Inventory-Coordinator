@@ -9,7 +9,7 @@ namespace ManufacturingCoordinator.Api.Controllers
 {
     [ApiController]
     [Route("api/shifts")]
-    [Authorize]
+    [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
     public class ShiftsController : ControllerBase
     {
         private readonly IShiftService _shiftService;

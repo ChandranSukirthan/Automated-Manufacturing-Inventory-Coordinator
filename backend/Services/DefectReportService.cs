@@ -19,12 +19,9 @@ namespace ManufacturingCoordinator.Api.Services
     public class DefectReportService : IDefectReportService
     {
         private readonly ApplicationDbContext _db;
-        private readonly ManufacturingContext? _inventoryDb;
-
-        public DefectReportService(ApplicationDbContext db, ManufacturingContext? inventoryDb = null)
+        public DefectReportService(ApplicationDbContext db)
         {
             _db = db;
-            _inventoryDb = inventoryDb;
         }
 
         public async Task<IEnumerable<DefectReportDto>> GetAllAsync()
@@ -34,6 +31,7 @@ namespace ManufacturingCoordinator.Api.Services
                 .Select(d => new DefectReportDto
                 {
                     Id = d.Id,
+                    SkuCode = d.SkuCode,
                     BatchId = d.BatchId,
                     ReportedByUserId = d.ReportedByUserId,
                     ProductType = d.ProductType,
@@ -56,6 +54,7 @@ namespace ManufacturingCoordinator.Api.Services
             return new DefectReportDto
             {
                 Id = defect.Id,
+                SkuCode = defect.SkuCode,
                 BatchId = defect.BatchId,
                 ReportedByUserId = defect.ReportedByUserId,
                 ProductType = defect.ProductType,
@@ -85,33 +84,28 @@ namespace ManufacturingCoordinator.Api.Services
             }
 
             ValidateEnums(dto.ProductType, dto.Severity, dto.Status);
-            var context = string.IsNullOrWhiteSpace(dto.SkuCode)
+            var isCatalogueSkuReport = !string.IsNullOrWhiteSpace(dto.SkuCode);
+            var context = !isCatalogueSkuReport
                 ? await ResolveLegacyBatchContextAsync(dto.BatchId!, dto.ProductType)
-                : await ResolveInventoryContextAsync(dto.SkuCode, dto.AffectedInventory);
+                : await ResolveInventoryContextAsync(dto.SkuCode);
             var batchId = context.BatchId;
             var productType = context.ProductType;
 
             var affectedInventory = dto.AffectedInventory?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList()
                 ?? new List<string>();
-            var batchDefects = await _db.DefectReports
-                .Where(d => d.BatchId == batchId)
-                .Select(d => d.AffectedInventoryJson)
-                .ToListAsync();
-            var duplicateRoll = batchDefects
-                .SelectMany(DeserializeInventory)
-                .Intersect(affectedInventory, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (duplicateRoll != null || (affectedInventory.Count == 0 && batchDefects.Count > 0))
+            // Legacy batch reports retain the one-report-per-batch rule. A
+            // floor-worker SKU report is an independent incident and may be
+            // submitted before a physical roll or production batch exists.
+            if (!isCatalogueSkuReport && await _db.DefectReports.AnyAsync(d => d.BatchId == batchId))
             {
                 throw new AuthException(
-                    duplicateRoll == null
-                        ? "A defect has already been created for this batch."
-                        : $"A defect has already been created for inventory roll {duplicateRoll}.",
+                    "A defect has already been created for this batch.",
                     HttpStatusCode.Conflict);
             }
 
             var report = new DefectReport
             {
+                SkuCode = isCatalogueSkuReport ? dto.SkuCode.Trim().ToUpperInvariant() : string.Empty,
                 BatchId = batchId,
                 ReportedByUserId = reportedByUserId,
                 ProductType = productType,
@@ -128,6 +122,7 @@ namespace ManufacturingCoordinator.Api.Services
             return new DefectReportDto
             {
                 Id = report.Id,
+                SkuCode = report.SkuCode,
                 BatchId = report.BatchId,
                 ReportedByUserId = report.ReportedByUserId,
                 ProductType = report.ProductType,
@@ -144,43 +139,43 @@ namespace ManufacturingCoordinator.Api.Services
             var report = await _db.DefectReports.FirstOrDefaultAsync(d => d.Id == id);
             if (report == null) return null;
 
+            var skuCode = string.IsNullOrWhiteSpace(dto.SkuCode)
+                ? report.SkuCode
+                : dto.SkuCode.Trim().ToUpperInvariant();
+            var isCatalogueSkuReport = !string.IsNullOrWhiteSpace(skuCode);
             var batchId = string.IsNullOrWhiteSpace(dto.BatchId) ? report.BatchId : dto.BatchId.Trim();
             var productType = dto.ProductType ?? report.ProductType;
             var severity = dto.Severity ?? report.Severity;
             var status = dto.Status ?? report.Status;
 
             ValidateEnums(productType, severity, status);
-
-            var batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == batchId);
-            if (batch == null)
+            if (isCatalogueSkuReport)
             {
-                throw new AuthException("Batch was not found.", HttpStatusCode.NotFound);
+                productType = await ResolveProductTypeForSkuAsync(skuCode);
             }
-
-            if (batch.ProductType != productType)
+            else
             {
-                throw new AuthException("Product type does not match the selected batch.");
-            }
+                var batch = await _db.Batches.FirstOrDefaultAsync(b => b.Id == batchId);
+                if (batch == null)
+                {
+                    throw new AuthException("Batch was not found.", HttpStatusCode.NotFound);
+                }
 
-            var affectedInventory = dto.AffectedInventory ?? DeserializeInventory(report.AffectedInventoryJson);
-            var otherBatchDefects = await _db.DefectReports
-                .Where(d => d.BatchId == batchId && d.Id != id)
-                .Select(d => d.AffectedInventoryJson)
-                .ToListAsync();
-            var duplicateRoll = otherBatchDefects
-                .SelectMany(DeserializeInventory)
-                .Intersect(affectedInventory, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (duplicateRoll != null || (affectedInventory.Count == 0 && otherBatchDefects.Count > 0))
-            {
-                throw new AuthException(
-                    duplicateRoll == null
-                        ? "A defect has already been created for this batch."
-                        : $"A defect has already been created for inventory roll {duplicateRoll}.",
-                    HttpStatusCode.Conflict);
+                if (batch.ProductType != productType)
+                {
+                    throw new AuthException("Product type does not match the selected batch.");
+                }
+
+                if (await _db.DefectReports.AnyAsync(d => d.BatchId == batchId && d.Id != id))
+                {
+                    throw new AuthException(
+                        "A defect has already been created for this batch.",
+                        HttpStatusCode.Conflict);
+                }
             }
 
             report.BatchId = batchId;
+            report.SkuCode = skuCode;
             report.ProductType = productType;
             report.Severity = severity;
 
@@ -205,6 +200,7 @@ namespace ManufacturingCoordinator.Api.Services
             return new DefectReportDto
             {
                 Id = report.Id,
+                SkuCode = report.SkuCode,
                 BatchId = report.BatchId,
                 ReportedByUserId = report.ReportedByUserId,
                 ProductType = report.ProductType,
@@ -239,39 +235,37 @@ namespace ManufacturingCoordinator.Api.Services
         }
 
         private async Task<(string BatchId, ProductType ProductType)> ResolveInventoryContextAsync(
-            string skuCode,
-            List<string> affectedInventory)
+            string skuCode)
         {
-            if (_inventoryDb == null)
+            var cleanSku = skuCode.Trim().ToUpperInvariant();
+            var productType = await ResolveProductTypeForSkuAsync(cleanSku);
+
+            // A defect can be recorded as soon as the material/SKU is known.
+            // A batch or a QR roll can be associated later by the quality
+            // team, so submitting the report never depends on an empty roll
+            // register.
+            return ($"SKU-{cleanSku}-{Guid.NewGuid():N}", productType);
+        }
+
+        private async Task<ProductType> ResolveProductTypeForSkuAsync(string skuCode)
+        {
+            var material = await _db.RawMaterials
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.SkuCode == skuCode);
+            if (material == null)
             {
-                throw new AuthException("Inventory data is not available.", HttpStatusCode.ServiceUnavailable);
-            }
-            var rollIds = affectedInventory?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList() ?? new List<string>();
-            var rolls = _inventoryDb.InventoryRolls.Where(roll => roll.RawMaterial != null && roll.RawMaterial.SkuCode == skuCode.Trim());
-            if (rollIds.Count > 0)
-            {
-                rolls = rolls.Where(roll => rollIds.Contains(roll.Id));
+                throw new AuthException("The selected SKU is not in the inventory catalogue.", HttpStatusCode.NotFound);
             }
 
-            var inventoryRolls = await rolls.ToListAsync();
-            if (inventoryRolls.Count == 0)
+            var enumName = new string((material.Category ?? string.Empty)
+                .Where(char.IsLetterOrDigit)
+                .ToArray());
+            if (!Enum.TryParse<ProductType>(enumName, true, out var productType))
             {
-                throw new AuthException("No inventory rolls were found for the selected SKU.", HttpStatusCode.NotFound);
+                throw new AuthException("The selected SKU has an unsupported packaging type.");
             }
 
-            var batchIds = inventoryRolls.Select(roll => roll.BatchId).Distinct().ToList();
-            if (batchIds.Count != 1)
-            {
-                throw new AuthException("Selected inventory rolls must belong to one batch.");
-            }
-
-            var batch = await _db.Batches.FirstOrDefaultAsync(item => item.Id == batchIds[0]);
-            if (batch == null)
-            {
-                throw new AuthException("The selected inventory roll has no valid batch.", HttpStatusCode.NotFound);
-            }
-
-            return (batch.Id, batch.ProductType);
+            return productType;
         }
 
         private async Task<(string BatchId, ProductType ProductType)> ResolveLegacyBatchContextAsync(

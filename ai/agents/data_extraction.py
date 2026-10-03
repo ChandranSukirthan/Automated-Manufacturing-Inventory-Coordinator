@@ -1,163 +1,91 @@
 """
-Data Extraction Agent
-Retrieves all internal procurement context needed by the Purchasing Agent:
-- Material & stock data (Student 1: Inventory levels, burn rate, days remaining, deficit)
-- Open PO quantities
-- Approved supplier rates, MOQ, pack size
-- Historical prices and supplier performance
-Returns structured JSON — no chain-of-thought stored.
+Student 1 (Floor Worker): Data Extraction Agent.
+Retrieves current stock levels, consumption history, burn rate,
+and detects low-stock conditions using LangChain structured tools.
 """
-from __future__ import annotations
 
-import logging
+from typing import Dict, Any, Optional
+import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
-from ai.core.state import AgentState, WorkflowStatus
+import psycopg
 from ai.core.config import settings
+from ai.core.state import AgentState, WorkflowStatus
+from ai.data_extraction_agent import run_data_extraction_agent
 from ai.tools.inventory_tools import (
     get_inventory_levels,
     query_inventory_history,
     calculate_burn_rate,
-    detect_low_stock
+    detect_low_stock,
 )
-from ai.tools.purchasing_tools import (
-    query_internal_supplier_data,
-    get_db_connection,
-)
-# Re-export production_analysis_node for backwards compatibility
-from ai.agents.production_analysis import production_analysis_node
+from ai.tools.production_tools import get_production_schedule
 
-logger = logging.getLogger("amic_agentic_ai.data_extraction")
+_PRODUCT_DEFAULTS = {
+    "BoxPouch": {"batch_id": "BATCH001", "material_sku": "RM-STEEL-001"},
+    "BiscuitPackaging": {"batch_id": "BATCH002", "material_sku": "RM-ALUM-002"},
+    "TeaBag": {"batch_id": "BATCH003", "material_sku": "RM-POLY-003"},
+    "Can": {"batch_id": "BATCH-IRON-001", "material_sku": "RM-IRON-001"},
+    "Bottle": {"batch_id": "AUTO-BOT-001", "material_sku": "BOT-RESIN-001"},
+}
 
 
-def _query_supplier_rates_and_history(
-    material_name: str | None,
-    conn: Any,
-) -> tuple[list[dict], list[dict]]:
-    """
-    Queries supplier rates (MOQ, pack size, unit price, lead time) and
-    historical procurement outcomes from PostgreSQL.
-    Returns (supplier_rates, historical_procurement).
-    """
-    supplier_rates: list[dict] = []
-    historical_procurement: list[dict] = []
+def _extraction_request_from_state(state: AgentState) -> dict[str, str]:
+    """Build a validated, read-only request for the data-extraction agent."""
+    supplied = state.get("data_extraction_request")
+    if isinstance(supplied, dict):
+        return {key: str(value) for key, value in supplied.items()}
 
-    if not conn:
-        return supplier_rates, historical_procurement
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    s."Id", s."Name", s."SupplierCode", s."LeadTimeDays", s."PaymentTerms",
-                    s."IsActive"
-                FROM "Suppliers" s
-                WHERE s."IsActive" = true
-                ORDER BY s."Name";
-            """)
-            for row in cur.fetchall():
-                supplier_rates.append({
-                    "supplierId": row[0],
-                    "supplierName": row[1],
-                    "supplierCode": row[2],
-                    "leadTimeDays": row[3],
-                    "paymentTerms": row[4],
-                    "isActive": row[5],
-                    "source": "INTERNAL_DATABASE",
-                })
-    except Exception as ex:
-        logger.warning(f"[Data Extraction] Could not query supplier rates: {ex}")
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    "Material", "RecommendedSupplier", "SelectedSupplier",
-                    "EstimatedPrice", "FinalPrice",
-                    "EstimatedLeadTime", "ActualLeadTime",
-                    "ManagerDecision", "ProcurementSuccess",
-                    "PaymentSuccess", "DeliverySuccess", "QualityOutcome",
-                    "CreatedAt"
-                FROM "ProcurementOutcomes"
-                ORDER BY "CreatedAt" DESC
-                LIMIT 20;
-            """)
-            for row in cur.fetchall():
-                historical_procurement.append({
-                    "material": row[0],
-                    "recommendedSupplier": row[1],
-                    "selectedSupplier": row[2],
-                    "estimatedPrice": float(row[3]) if row[3] else None,
-                    "finalPrice": float(row[4]) if row[4] else None,
-                    "estimatedLeadTime": row[5],
-                    "actualLeadTime": row[6],
-                    "managerDecision": row[7],
-                    "procurementSuccess": row[8],
-                    "paymentSuccess": row[9],
-                    "deliverySuccess": row[10],
-                    "qualityOutcome": row[11],
-                    "createdAt": row[12].isoformat() if row[12] else None,
-                })
-    except Exception:
-        pass
-
-    return supplier_rates, historical_procurement
+    objective = str(state.get("objective", "")).lower()
+    if "tea bag" in objective or "teabag" in objective:
+        product_type = "TeaBag"
+    elif "bottle" in objective:
+        product_type = "Bottle"
+    elif "can packaging" in objective or " can " in f" {objective} ":
+        product_type = "Can"
+    elif "biscuit" in objective:
+        product_type = "BiscuitPackaging"
+    else:
+        product_type = "BoxPouch"
+    return {"product_type": product_type, **_PRODUCT_DEFAULTS[product_type]}
 
 
 def data_extraction_node(state: AgentState) -> Dict[str, Any]:
     """
-    Data Extraction Agent Node.
-    Retrieves all internal procurement data needed by the Purchasing Agent.
-    Strictly combines:
-    1. Student 1 Inventory retrieval & burn-rate telemetry tools:
-       - get_inventory_levels()
-       - query_inventory_history()
-       - calculate_burn_rate()
-       - detect_low_stock()
-    2. Authoritative procurement values from ASP.NET Core:
-       - material_name, current_stock, required_quantity, safety_stock, net_deficit, etc.
-    3. Supplier rates & historical procurement outcomes.
+    Student 1 (Floor Worker): Data Extraction Agent Node
+    Strictly responsible for inventory retrieval, burn-rate telemetry,
+    and read-only next-shift schedule planning.
     """
-    completed = list(state.get("completed_steps") or [])
-    errors = list(state.get("errors") or [])
-    tool_log = list(state.get("tool_call_log") or [])
-    tool_results = dict(state.get("tool_results") or {})
-    now_iso = datetime.now(timezone.utc).isoformat()
+    completed = list(state.get("completed_steps", []))
+    errors = list(state.get("errors", []))
+    tool_results = dict(state.get("tool_results", {}))
 
-    # ── Resolve material ID from state or objective ──────────────────────────
-    inv_input = state.get("inventory_data") or {}
-    obj = state.get("objective") or ""
-    material_match = re.search(r"\b(RM[A-Z0-9_-]*)\b", obj, re.IGNORECASE)
-
-    material_id = (
-        state.get("material_id")
-        or inv_input.get("materialId")
-        or inv_input.get("itemCode")
-        or (material_match.group(1).upper() if material_match else None)
-        or "RM-STEEL-001"
-    )
-
-    material_name = (
-        state.get("material_name")
-        or inv_input.get("materialName")
-        or inv_input.get("itemName")
-    )
-    current_stock = state.get("current_stock")
-    required_quantity = state.get("required_quantity") or inv_input.get("requiredQuantity")
-    safety_stock = state.get("safety_stock")
-    open_po_quantity = state.get("open_po_quantity")
-    net_deficit = state.get("net_deficit")
-    budget_limit = state.get("budget_limit")
-    unit = state.get("unit") or "units"
+    # Run Student 1's lightweight agent
+    try:
+        extraction = run_data_extraction_agent(_extraction_request_from_state(state))
+        tool_results["data_extraction_agent"] = extraction
+    except Exception as e:
+        extraction = {"status": "SKIPPED", "error": str(e)}
 
     try:
+        inv_input = state.get("inventory_data", {})
+        obj = state.get("objective", "")
+        material_match = re.search(r"\b(RM[A-Z0-9_-]*)\b", obj, re.IGNORECASE)
+
+        material_id = (
+            state.get("material_id")
+            or inv_input.get("materialId")
+            or inv_input.get("itemCode")
+            or (material_match.group(1).upper() if material_match else None)
+            or "RM-STEEL-001"
+        )
+
         # Tool 1: get_inventory_levels()
         levels = get_inventory_levels.invoke({"materialId": material_id})
 
         # Tool 2: query_inventory_history()
-        history = query_inventory_history.invoke({"materialId": material_id, "periodDays": 30})
+        history = query_inventory_history.invoke({
+            "materialId": material_id,
+            "periodDays": 30
+        })
 
         # Tool 3: calculate_burn_rate()
         burn = calculate_burn_rate.invoke({
@@ -167,124 +95,87 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         })
 
         # Tool 4: detect_low_stock()
+        current_stock = state.get("current_stock")
         low_stock_analysis = detect_low_stock.invoke({
             "currentStock": levels.get("currentStock", current_stock or 350.0),
-            "minimumStock": levels.get("minimumStock", safety_stock or 200.0),
+            "minimumStock": levels.get("minimumStock", 200.0),
             "burnRate": burn.get("burnRate", 80.0),
             "supplierLeadTime": 7.0,
             "materialId": material_id
         })
 
+        # Read-only schedule context for next shift
+        schedule = get_production_schedule.invoke({"shiftName": "Next shift"})
+
         curr_stock = current_stock if current_stock is not None else levels.get("currentStock", 350.0)
-        min_stock = safety_stock if safety_stock is not None else levels.get("minimumStock", 200.0)
+        min_stock = state.get("safety_stock") or levels.get("minimumStock", 200.0)
         max_stock = levels.get("maximumStock", 1000.0)
-        req_qty = required_quantity or inv_input.get("requiredQuantity") or max(500.0, float(max_stock - curr_stock))
+        req_qty = state.get("required_quantity") or inv_input.get("requiredQuantity") or max(500.0, float(max_stock - curr_stock))
 
-        # Query real material name from PostgreSQL RawMaterials table if not provided
-        item_name = material_name or levels.get("itemName")
-        if not item_name or item_name == "Unknown Material":
-            try:
-                import psycopg
-                with psycopg.connect(
-                    host=settings.DB_HOST,
-                    port=settings.DB_PORT,
-                    dbname=settings.DB_NAME,
-                    user=settings.DB_USER,
-                    password=settings.DB_PASSWORD,
-                    connect_timeout=2
-                ) as conn:
-                    with conn.cursor() as cur:
-                        cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (material_id.upper(), f"%{material_id.upper()}%"))
-                        row = cur.fetchone()
-                        if row:
-                            item_name = row[0]
-            except Exception:
-                if "STEEL" in material_id:
-                    item_name = "Cold Rolled Steel Sheet"
-                elif "ALUM" in material_id:
-                    item_name = "High-Tensile Aluminum Rod"
-                elif "POLY" in material_id:
-                    item_name = "Industrial Polypropylene Pellets"
-                else:
-                    item_name = "Industrial Raw Material"
+        # Query real material name from PostgreSQL RawMaterials table
+        item_name = levels.get("itemName") or "Industrial Raw Material"
+        try:
+            with psycopg.connect(
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                dbname=settings.DB_NAME,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                connect_timeout=2
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (material_id, f"%{material_id}%"))
+                    row = cur.fetchone()
+                    if row:
+                        item_name = row[0]
+        except Exception:
+            if "STEEL" in material_id:
+                item_name = "Cold Rolled Steel Sheet"
+            elif "ALUM" in material_id:
+                item_name = "High-Tensile Aluminum Rod"
+            elif "POLY" in material_id:
+                item_name = "Industrial Polypropylene Pellets"
 
-        material_name = item_name or "Industrial Raw Material"
-
-        # ── Internal supplier data ─────────────────────────────────────────────
-        internal_suppliers = query_internal_supplier_data(material_name=material_name)
-        tool_log.append({
-            "tool": "query_internal_supplier_data",
-            "material": material_name,
-            "suppliersFound": len(internal_suppliers),
-            "timestamp": now_iso,
-        })
-
-        # ── Supplier rates and historical procurement from DB ──────────────────
-        conn = get_db_connection()
-        supplier_rates, historical_procurement = _query_supplier_rates_and_history(
-            material_name=material_name,
-            conn=conn,
-        )
-        if conn:
-            conn.close()
-
-        tool_log.append({
-            "tool": "query_supplier_rates_and_history",
-            "supplierRatesFound": len(supplier_rates),
-            "historicalOutcomesFound": len(historical_procurement),
-            "timestamp": now_iso,
-        })
-
-        # ── Structured inventory data ──────────────────────────────────────────
         inventory_data: Dict[str, Any] = {
             "materialId": material_id,
             "itemCode": material_id,
-            "itemName": material_name,
-            "materialName": material_name,
+            "itemName": item_name,
             "currentStock": curr_stock,
             "availableQuantity": curr_stock,
             "minimumStock": min_stock,
             "maximumStock": max_stock,
-            "safetyStock": min_stock,
             "reorderThreshold": min_stock,
             "burnRate": burn.get("burnRate", 80.0),
             "burnRatePerHour": round(burn.get("burnRate", 80.0) / 8.0, 2),
             "daysRemaining": low_stock_analysis.get("daysRemaining", 4.375),
             "lowStock": low_stock_analysis.get("lowStock", True),
             "status": "LOW_STOCK" if low_stock_analysis.get("lowStock", True) else "NORMAL",
-            "requiredQuantity": float(req_qty),
-            "openPOQuantity": open_po_quantity or 0.0,
-            "netDeficit": net_deficit if net_deficit is not None else float(req_qty),
-            "budgetLimit": budget_limit,
-            "unit": unit,
-            "internalSuppliers": internal_suppliers,
+            "requiredQuantity": req_qty,
+            "productionSchedule": schedule,
+            "unit": "KG"
         }
 
         tool_results["get_inventory_levels"] = levels
         tool_results["query_inventory_history"] = history
         tool_results["calculate_burn_rate"] = burn
         tool_results["detect_low_stock"] = low_stock_analysis
+        tool_results["get_production_schedule"] = schedule
 
         completed.append("Data Extraction: Analyzed inventory levels, burn rate & days remaining")
 
         return {
             "current_agent": "Data Extraction",
             "inventory_data": inventory_data,
-            "material_id": material_id,
-            "material_name": material_name,
-            "supplier_rates": supplier_rates,
-            "historical_procurement": historical_procurement,
-            "tool_call_log": tool_log,
             "tool_results": tool_results,
             "completed_steps": completed,
-            "errors": errors,
+            "errors": errors
         }
 
     except Exception as ex:
-        errors.append(f"Data extraction exception: {str(ex)}")
         return {
             "current_agent": "Data Extraction",
             "status": WorkflowStatus.Failed,
-            "errors": errors,
-            "final_outcome": f"Safe failure: Exception during data extraction — {str(ex)}",
+            "tool_results": tool_results,
+            "errors": errors + [f"Data extraction exception: {str(ex)}"],
+            "final_outcome": "Safe failure: Exception encountered during data extraction."
         }

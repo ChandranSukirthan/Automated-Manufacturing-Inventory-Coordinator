@@ -11,8 +11,8 @@ class InventoryController extends ChangeNotifier {
       : _apiService = apiService ?? ApiService(),
         _poService = poService;
 
-  String _materialName = 'Food Grade BOPP Film';
-  String _packagingType = 'Box Pouch';
+String _materialName = 'Food Grade BOPP Film';
+  String? _packagingType = 'Box Pouch';
   String _sku = 'RM-PLASTIC-502';
   double _currentStock = 150.0;
   double _minimumStock = 500.0;
@@ -29,8 +29,8 @@ class InventoryController extends ChangeNotifier {
   int? _activeProcurementId;
 
   // Getters
-  String get materialName => _materialName;
-  String get packagingType => _packagingType;
+String get materialName => _materialName;
+  String? get packagingType => _packagingType;
   String get sku => _sku;
   double get currentStock => _currentStock;
   double get minimumStock => _minimumStock;
@@ -58,12 +58,12 @@ class InventoryController extends ChangeNotifier {
   }
 
   // Setters / State Mutators
-  void setMaterialName(String value) {
+void setMaterialName(String value) {
     _materialName = value;
     notifyListeners();
   }
 
-  void setPackagingType(String value) {
+  void setPackagingType(String? value) {
     _packagingType = value;
     notifyListeners();
   }
@@ -109,7 +109,10 @@ class InventoryController extends ChangeNotifier {
 
   /// Triggers the ASP.NET Core API when Floor Worker submits the Low Stock Alert.
   Future<bool> submitLowStockAlert() async {
-    if (_packagingType.isEmpty || _sku.isEmpty || _quantityRequested <= 0) {
+    if (_packagingType == null ||
+        _packagingType!.isEmpty ||
+        _sku.isEmpty ||
+        _quantityRequested <= 0) {
       _errorMessage = 'Please provide valid packaging type, SKU, and quantity > 0.';
       _successMessage = null;
       notifyListeners();
@@ -125,7 +128,7 @@ class InventoryController extends ChangeNotifier {
       if (_poService != null) {
         final alertResult = await _poService.submitLowStockAlert(
           sku: _sku,
-          packagingType: _packagingType,
+          packagingType: _packagingType ?? 'Standard',
           quantityRequested: _quantityRequested,
           workerId: 'floor_worker_1',
         );
@@ -140,7 +143,7 @@ class InventoryController extends ChangeNotifier {
       }
 
       final alert = LowStockAlert(
-        packagingType: _packagingType,
+        packagingType: _packagingType!,
         sku: _sku,
         quantityRequested: _quantityRequested,
       );
@@ -148,11 +151,11 @@ class InventoryController extends ChangeNotifier {
       final success = await _apiService.submitLowStockAlert(alert);
 
       if (success) {
-        _activeProcurementId = 101;
+_activeProcurementId = 101;
         _workflowId = 'WF-PROC-101';
         _currentStatus = 'Procurement Started';
         _procurementStarted = true;
-        _successMessage = 'Low stock alert for SKU "$_sku" submitted to ASP.NET Core. Procurement started with Workflow ID: $_workflowId';
+        _successMessage = 'Low-stock alert for SKU "$_sku" ($_quantityRequested x $_packagingType) submitted. Procurement started with Workflow ID: $_workflowId';
       } else {
         _errorMessage = 'Failed to submit low stock alert to backend.';
       }

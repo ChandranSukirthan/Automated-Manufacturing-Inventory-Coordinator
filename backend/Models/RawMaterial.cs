@@ -10,6 +10,13 @@ namespace backend.Models
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
+
+        // The material portion of an SKU, e.g. LAM in BP-LAM-001. This is
+        // assigned by the catalogue and is never typed by a floor worker.
+        public string MaterialCode { get; set; } = string.Empty;
+        public int PackagingTypeId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public PackagingType? PackagingType { get; set; }
         
         // E.g., meters, kg, units
         public string UnitOfMeasure { get; set; } = string.Empty; 

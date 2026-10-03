@@ -1,7 +1,55 @@
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import psycopg
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field, field_validator
 from ai.core.config import settings
+
+
+class ProductionScheduleInput(BaseModel):
+    """Validated input for the allow-listed production schedule tool."""
+
+    shiftName: str = Field(
+        default="Next shift",
+        min_length=1,
+        max_length=80,
+        description="The shift whose material requirements are requested.",
+    )
+
+    @field_validator("shiftName")
+    @classmethod
+    def validate_shift_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("shiftName must not be blank.")
+        return cleaned
+
+
+@tool(args_schema=ProductionScheduleInput)
+def get_production_schedule(shiftName: str = "Next shift") -> Dict[str, Any]:
+    """Return the approved dummy material plan for a factory shift.
+
+    This deliberately has no database or ordering side effect.  It is an
+    allow-listed read-only tool for the Data Extraction Agent to use when it
+    checks whether low stock could affect the upcoming shift.
+    """
+
+    return {
+        "shiftName": shiftName.strip(),
+        "status": "Scheduled",
+        "productionTarget": 10000,
+        "requiredMaterials": [
+            {"sku": "PAPER-A1", "name": "High Gloss Label Paper", "quantity": 500, "unit": "KG"},
+            {"sku": "CR-001", "name": "BoxPouch film", "quantity": 300, "unit": "KG"},
+            {"sku": "CAN-001", "name": "Can", "quantity": 250, "unit": "units"},
+            {"sku": "BOTTLE-001", "name": "Bottle", "quantity": 400, "unit": "units"},
+        ],
+    }
+
+
+# The workflow may bind only this explicit allow-list.  Keeping the tool list
+# separate prevents an LLM from calling unapproved database or ordering code.
+PRODUCTION_SCHEDULE_TOOLS: List[Any] = [get_production_schedule]
 
 
 def get_db_connection():

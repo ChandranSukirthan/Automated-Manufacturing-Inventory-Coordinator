@@ -1,13 +1,27 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace backend.Services
 {
     public interface IBarcodeService
     {
         /// <summary>
-        /// Generates a URL to a QR code image representing the provided data.
+        /// Requests a PNG QR code for a validated inventory-roll identifier.
+        /// The caller receives image bytes - never a third-party URL.
         /// </summary>
-        /// <param name="data">The data to encode in the QR code (e.g., Roll Identifier).</param>
-        /// <returns>A URL pointing to the generated QR code image.</returns>
-        string GenerateQrCodeUrl(string data);
+        Task<QrCodeImage> GenerateInventoryRollQrAsync(
+            string rollIdentifier,
+            CancellationToken cancellationToken = default);
+    }
+
+    public sealed record QrCodeImage(byte[] Bytes, string ContentType);
+
+    public sealed class QrCodeProviderException : Exception
+    {
+        public QrCodeProviderException(string message, Exception? innerException = null)
+            : base(message, innerException)
+        {
+        }
     }
 }
-

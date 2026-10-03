@@ -67,6 +67,9 @@ namespace ManufacturingCoordinator.Api.Services
                 Email = emailNormalized,
                 PasswordHash = _passwordHasher.HashPassword(dto.Password),
                 Role = dto.Role,
+                EmployeeId = dto.Role == UserRole.FloorWorker
+                    ? await FloorWorkerEmployeeIdGenerator.GetNextAsync(_db)
+                    : null,
                 IsEmailVerified = true,
                 IsActive = true
             };
@@ -130,6 +133,14 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("User not found.", HttpStatusCode.NotFound);
 
             user.Role = dto.Role;
+            if (dto.Role != UserRole.FloorWorker)
+            {
+                user.EmployeeId = null;
+            }
+            else if (string.IsNullOrWhiteSpace(user.EmployeeId))
+            {
+                user.EmployeeId = await FloorWorkerEmployeeIdGenerator.GetNextAsync(_db);
+            }
             user.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
@@ -329,9 +340,7 @@ namespace ManufacturingCoordinator.Api.Services
                                 var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
                                 _mfgContext.InventoryRolls.Add(new backend.Models.InventoryRoll
                                 {
-                                    Id = rollId,
                                     RollIdentifier = rollId,
-                                    BatchId = "BATCH001",
                                     RawMaterialId = mat.Id,
                                     InitialQuantity = line.Quantity,
                                     CurrentQuantity = line.Quantity,
@@ -678,6 +687,7 @@ namespace ManufacturingCoordinator.Api.Services
             return new UserListDto
             {
                 Id = user.Id,
+                EmployeeId = user.EmployeeId,
                 FullName = user.FullName,
                 Email = user.Email,
                 Role = user.Role,

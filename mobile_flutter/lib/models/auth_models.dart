@@ -1,12 +1,14 @@
 class UserSummary {
   const UserSummary({
     required this.id,
+    this.employeeId,
     required this.fullName,
     required this.email,
     required this.role,
   });
 
   final String id;
+  final String? employeeId;
   final String fullName;
   final String email;
   final String role;
@@ -18,6 +20,7 @@ class UserSummary {
 
   factory UserSummary.fromJson(Map<String, dynamic> json) => UserSummary(
     id: json['id']?.toString() ?? '',
+    employeeId: json['employeeId']?.toString(),
     fullName: json['fullName'] as String? ?? '',
     email: json['email'] as String? ?? '',
     role: _normalizeRole(json['role']),

@@ -15,7 +15,7 @@ namespace ManufacturingCoordinator.Api.Controllers
 {
     [ApiController]
     [Route("api/defects")]
-    [Authorize(Roles = "QualityInspector")]
+    [Authorize(Roles = "FloorWorker,QualityInspector,SupplyChainManager,ITAdmin")]
     public class DefectReportController : ControllerBase
     {
         private readonly IDefectReportService _service;
@@ -36,6 +36,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "QualityInspector,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> GetAll()
         {
             var defects = await _service.GetAllAsync();
@@ -43,6 +44,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpGet("{id:guid}")]
+        [Authorize(Roles = "QualityInspector,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> GetById(Guid id)
         {
             var defect = await _service.GetByIdAsync(id);
@@ -55,6 +57,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "FloorWorker,QualityInspector")]
         public async Task<IActionResult> Create([FromBody] CreateDefectReportDto dto)
         {
             if (dto == null)
@@ -96,6 +99,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPut("{id:guid}")]
+        [Authorize(Roles = "QualityInspector,ITAdmin")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDefectReportDto dto)
         {
             if (dto == null)
@@ -118,6 +122,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpDelete("{id:guid}")]
+        [Authorize(Roles = "QualityInspector,ITAdmin")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var deleted = await _service.DeleteAsync(id);
@@ -130,6 +135,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/quarantine")]
+        [Authorize(Roles = "QualityInspector,ITAdmin")]
         public async Task<IActionResult> Quarantine(
             Guid id,
             [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreateQuarantineDto? dto)
@@ -141,6 +147,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("analyze")]
+        [Authorize(Roles = "QualityInspector")]
         public async Task<IActionResult> Analyze([FromBody] CreateDefectReportDto dto)
         {
             if (dto == null || !ModelState.IsValid)

@@ -38,8 +38,9 @@ class ApiException implements Exception {
 class ApiClient {
   static const requestTimeout = Duration(seconds: 15);
 
-  ApiClient({required this.storage, String? baseUrl, this.onSessionExpired})
-    : baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
+  ApiClient({SessionStorage? storage, String? baseUrl, this.onSessionExpired})
+      : storage = storage ?? SessionStorage(),
+        baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
 
   final String aiBaseUrl = _defaultAiBaseUrl.replaceAll(RegExp(r'/$'), '');
   final SessionStorage storage;
@@ -47,6 +48,7 @@ class ApiClient {
   Future<void> Function()? onSessionExpired;
 
   Future<dynamic> get(String path) => _request('GET', path);
+  Future<Uint8List> getBytes(String path) => _getBytes(path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
@@ -143,6 +145,35 @@ class ApiClient {
     return jsonDecode(response.body);
   }
 
+  Future<Uint8List> _getBytes(String path, [bool retry = true]) async {
+    final session = await storage.read();
+    final headers = <String, String>{};
+    if (session != null && session.accessToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${session.accessToken}';
+    }
+
+    http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse('$baseUrl$path'), headers: headers)
+          .timeout(requestTimeout);
+    } catch (_) {
+      throw const ApiException(
+        'Could not connect to the server. Check the API URL and network.',
+      );
+    }
+
+    if (response.statusCode == 401 && retry && session != null) {
+      final refreshed = await _refresh(session.refreshToken);
+      if (refreshed) return _getBytes(path, false);
+      await onSessionExpired?.call();
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_message(response), statusCode: response.statusCode);
+    }
+    return response.bodyBytes;
+  }
+
   Future<bool> _refresh(String refreshToken) async {
     try {
       final response = await http.post(
@@ -162,6 +193,7 @@ class ApiClient {
           ...data,
           'user': {
             'id': oldSession.user.id,
+            'employeeId': oldSession.user.employeeId,
             'fullName': oldSession.user.fullName,
             'email': oldSession.user.email,
             'role': oldSession.user.role,

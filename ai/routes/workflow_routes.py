@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from ai.core.state import WorkflowStatus, ApprovalStatus
@@ -12,10 +12,15 @@ from ai.graph.workflow import (
     WORKFLOW_SESSIONS,
 )
 from ai.tools.production_tools import (
+    get_production_schedule,
     query_production_schedule,
     calculate_machine_uptime,
     check_maintenance_requirement,
     calculate_production_impact,
+)
+from ai.core.request_context import (
+    reset_authorization_header,
+    set_authorization_header,
 )
 
 router = APIRouter(prefix="/api/workflows", tags=["Agent Workflows"])
@@ -83,11 +88,15 @@ class ProductionImpactRequest(BaseModel):
     availableMaterial: int = Field(...)
 
 
+
 # ── Workflow Endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/run", status_code=status.HTTP_201_CREATED)
 @router.post("/trigger", status_code=status.HTTP_201_CREATED)
-def trigger_workflow(request: RunWorkflowRequest):
+def trigger_workflow(
+    request: RunWorkflowRequest,
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Triggers the multi-agent procurement workflow.
     Called by ASP.NET Core ProcurementService.RunAiResearchAsync().
@@ -100,28 +109,38 @@ def trigger_workflow(request: RunWorkflowRequest):
 
     # Build legacy procurement_requirement dict for backward compatibility
     req_dict: Dict[str, Any] = {}
+    if budget is not None:
+        req_dict["budgetLimit"] = budget
+        req_dict["maximumBudget"] = budget
+    if resolved_material_id:
+        req_dict["materialId"] = resolved_material_id
     if request.materialName:
         req_dict["materialName"] = request.materialName
-    if request.specification:
-        req_dict["requiredSpecification"] = request.specification
     if request.netDeficit is not None:
         req_dict["netDeficit"] = request.netDeficit
-        req_dict["requiredQuantity"] = request.netDeficit
-    elif resolved_quantity is not None:
+    if resolved_quantity is not None:
         req_dict["requiredQuantity"] = resolved_quantity
-    if budget is not None:
-        req_dict["maximumBudget"] = budget
+        req_dict["productionRequirement"] = resolved_quantity
+    if request.safetyStock is not None:
+        req_dict["safetyStock"] = request.safetyStock
+    if request.currentStock is not None:
+        req_dict["currentStock"] = request.currentStock
+    if request.specification:
+        req_dict["requiredSpecification"] = request.specification
+    if request.qualityRequirement:
+        req_dict["qualityRequirement"] = request.qualityRequirement
     if request.preferredRegion:
         req_dict["preferredRegion"] = request.preferredRegion
     if request.requiredByDate:
         req_dict["requiredByDate"] = request.requiredByDate
-    if request.qualityRequirement:
-        req_dict["qualityRequirement"] = request.qualityRequirement
+    if request.unit:
+        req_dict["unit"] = request.unit
 
-    result = run_workflow(
+    state = run_workflow(
         objective=request.objective,
         workflow_id=request.workflowId,
         procurement_requirement=req_dict if req_dict else None,
+        # Direct authoritative parameters
         material_id=resolved_material_id,
         material_name=request.materialName,
         current_stock=request.currentStock,
@@ -139,8 +158,6 @@ def trigger_workflow(request: RunWorkflowRequest):
         purchasing_data=request.purchasing_data,
         quality_data=request.quality_data,
     )
-
-    return get_final_output(result)
 
 
 @router.get("")
@@ -217,7 +234,9 @@ def request_revision_endpoint(workflow_id: str, request: RevisionRequest):
 # ── Production Tool Direct Endpoints ──────────────────────────────────────────
 
 @tools_router.get("/production-schedule")
-def tool_query_schedule(machineId: str = "M001"):
+def tool_query_schedule(machineId: str = "M001", shiftName: Optional[str] = None):
+    if shiftName is not None:
+        return get_production_schedule.invoke({"shiftName": shiftName})
     return query_production_schedule(machine_id=machineId)
 
 

@@ -12,6 +12,7 @@ using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
+using ManufacturingCoordinator.Api.Services;
 using RawMaterial = backend.Models.RawMaterial;
 
 namespace ManufacturingCoordinator.Data
@@ -25,15 +26,14 @@ namespace ManufacturingCoordinator.Data
             var mfgDb = scope.ServiceProvider.GetRequiredService<backend.Data.ManufacturingContext>();
             var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
 
-            await EnsureProcurementTablesAsync(db);
-
-            // 1. Seed Users for all roles
+            // 1. Seed roles. The verified development worker avoids an email-OTP
+            // dependency during local testing; registered Floor Workers start at EMP0001.
             var seedUsers = new[]
             {
                 ("admin@amic.com", "System Admin", "Admin@123", UserRole.ITAdmin),
-                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker),
                 ("manager@amic.com", "Supply Chain Manager", "Manager@123", UserRole.SupplyChainManager),
-                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector)
+                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector),
+                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker)
             };
 
             foreach (var (email, name, pwd, role) in seedUsers)
@@ -47,6 +47,10 @@ namespace ManufacturingCoordinator.Data
                     existing.Role = role;
                     existing.IsEmailVerified = true;
                     existing.IsActive = true;
+                    if (role == UserRole.FloorWorker)
+                    {
+                        existing.EmployeeId = "EMP0000";
+                    }
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -57,6 +61,7 @@ namespace ManufacturingCoordinator.Data
                         Email = email,
                         PasswordHash = hash,
                         Role = role,
+                        EmployeeId = role == UserRole.FloorWorker ? "EMP0000" : null,
                         IsEmailVerified = true,
                         IsActive = true
                     });
@@ -64,14 +69,21 @@ namespace ManufacturingCoordinator.Data
             }
             await db.SaveChangesAsync();
 
+            await FloorWorkerEmployeeIdGenerator.AssignMissingAsync(db);
+
+            await EnsureProcurementTablesAsync(db);
             await SeedEntitiesAsync(db, mfgDb);
+        }
+
+        public static async Task SeedAsync(ApplicationDbContext context)
+        {
+            await SeedEntitiesAsync(context);
         }
 
         private static async Task SeedEntitiesAsync(ApplicationDbContext db, backend.Data.ManufacturingContext mfgDb)
         {
             await EnsureProcurementTablesAsync(db);
-
-            // Seed RawMaterials
+            // 2. Seed RawMaterials
             if (!await db.RawMaterials.AnyAsync())
             {
                 var materials = new List<RawMaterial>
@@ -86,36 +98,507 @@ namespace ManufacturingCoordinator.Data
                         ReorderThreshold = 200m,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
+                    },
+                    new()
+                    {
+                        Name = "High-Tensile Aluminum Rod",
+                        SkuCode = "RM-ALUM-002",
+                        Category = "Metal",
+                        UnitOfMeasure = "METRES",
+                        Description = "6061-T6 aviation grade aluminum rod",
+                        ReorderThreshold = 100m,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    },
+                    new()
+                    {
+                        Name = "Industrial Polypropylene Pellets",
+                        SkuCode = "RM-POLY-003",
+                        Category = "Polymer",
+                        UnitOfMeasure = "KG",
+                        Description = "High-impact injection molding grade polymer",
+                        ReorderThreshold = 1000m,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
                     }
                 };
+
                 db.RawMaterials.AddRange(materials);
                 await db.SaveChangesAsync();
             }
 
-            // Seed Suppliers
+            // 3. Seed Suppliers
             if (!await db.Suppliers.AnyAsync())
             {
                 var suppliers = new List<Supplier>
                 {
                     new()
                     {
-                        SupplierName = "Global Steel Co.",
                         SupplierCode = "SUP-001",
-                        ContactEmail = "sales@globalsteel.example.com",
-                        ContactPhone = "+1-555-0101",
-                        Address = "100 Metal Way, Industrial City",
+                        Name = "Lanka Flexible Packaging Supplies",
+                        ContactEmail = "orders@lankaflexible.example",
+                        ContactPhone = "+1-555-0192",
+                        Address = "Colombo Export Processing Zone, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 7,
                         IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.UtcNow.AddDays(-60),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-60)
+                    },
+                    new()
+                    {
+                        SupplierCode = "SUP-002",
+                        Name = "Ceylon Food-Pack Materials",
+                        ContactEmail = "procurement@ceylonfoodpack.example",
+                        ContactPhone = "+1-555-0283",
+                        Address = "Colombo Logistics Park, Sri Lanka",
+                        PaymentTerms = "Net 60",
+                        LeadTimeDays = 14,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow.AddDays(-45),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-45)
+                    },
+                    new()
+                    {
+                        SupplierCode = "SUP-003",
+                        Name = "Island Polymer & Paper Mills",
+                        ContactEmail = "sales@islandpolymer.example",
+                        ContactPhone = "+1-555-0374",
+                        Address = "Kelaniya Industrial Estate, Sri Lanka",
+                        PaymentTerms = "Net 30",
+                        LeadTimeDays = 10,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow.AddDays(-30),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-30)
                     }
                 };
+
                 db.Suppliers.AddRange(suppliers);
                 await db.SaveChangesAsync();
             }
 
-            // Ensure Iron raw material exists
+            // 4. Seed Purchase Orders with Order Lines if none exist
+            if (!await db.PurchaseOrders.AnyAsync())
+            {
+                var supplier1 = await db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-001");
+                var supplier2 = await db.Suppliers.FirstOrDefaultAsync(s => s.SupplierCode == "SUP-002");
+                var material1 = await db.RawMaterials.FirstOrDefaultAsync();
+
+                if (supplier1 != null && material1 != null)
+                {
+                    var po1 = new PurchaseOrder
+                    {
+                        PoNumber = "PO-2026-0001",
+                        SupplierId = supplier1.Id,
+                        Currency = "USD",
+                        Status = PurchaseOrderStatus.Sent,
+                        BudgetLimit = 10000m,
+                        ApprovalThreshold = 5000m,
+                        RequiresApproval = true,
+                        TotalCost = 6750m,
+                        Notes = "Packaging-material replenishment order",
+                        StripePaymentIntentId = "pi_mock_seed_001",
+                        StripePaymentStatus = "succeeded",
+                        EmailStatus = "Sent",
+                        EmailSentAt = DateTime.UtcNow.AddDays(-10),
+                        CreatedAt = DateTime.UtcNow.AddDays(-15),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-10),
+                        OrderLines = new List<OrderLine>
+                        {
+                            new()
+                            {
+                                RawMaterialId = material1.Id,
+                                Description = "Laminated barrier film replenishment",
+                                Quantity = 1500m,
+                                UnitPrice = 4.50m,
+                                TotalPrice = 6750m,
+                                CreatedAt = DateTime.UtcNow.AddDays(-15),
+                                UpdatedAt = DateTime.UtcNow.AddDays(-15)
+                            }
+                        }
+                    };
+
+                    db.PurchaseOrders.Add(po1);
+                    await db.SaveChangesAsync();
+
+                    db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                    {
+                        PurchaseOrderId = po1.Id,
+                        Action = "PO approved",
+                        UserName = "Supply Chain Manager",
+                        Notes = "Approved initial stock order",
+                        Timestamp = DateTime.UtcNow.AddDays(-10)
+                    });
+
+                    db.PaymentTransactions.Add(new PaymentTransaction
+                    {
+                        PurchaseOrderId = po1.Id,
+                        TransactionId = "pi_mock_seed_001",
+                        Amount = 6750m,
+                        Currency = "usd",
+                        PaymentStatus = "succeeded",
+                        Timestamp = DateTime.UtcNow.AddDays(-10)
+                    });
+
+                    await db.SaveChangesAsync();
+                }
+
+                if (supplier2 != null && material1 != null)
+                {
+                    var po2 = new PurchaseOrder
+                    {
+                        PoNumber = "PO-2026-0002",
+                        SupplierId = supplier2.Id,
+                        Currency = "USD",
+                        Status = PurchaseOrderStatus.PendingApproval,
+                        BudgetLimit = 15000m,
+                        ApprovalThreshold = 5000m,
+                        RequiresApproval = true,
+                        TotalCost = 9000m,
+                        Notes = "AI Recommended: high burn rate forecast requires urgent packaging material replenishment.",
+                        CreatedAt = DateTime.UtcNow.AddHours(-2),
+                        UpdatedAt = DateTime.UtcNow.AddHours(-1),
+                        OrderLines = new List<OrderLine>
+                        {
+                            new()
+                            {
+                                RawMaterialId = material1.Id,
+                                Description = "High-volume flexible packaging material replenishment",
+                                Quantity = 2000m,
+                                UnitPrice = 4.50m,
+                                TotalPrice = 9000m,
+                                CreatedAt = DateTime.UtcNow.AddHours(-2),
+                                UpdatedAt = DateTime.UtcNow.AddHours(-2)
+                            }
+                        }
+                    };
+
+                    db.PurchaseOrders.Add(po2);
+                    await db.SaveChangesAsync();
+
+                    db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                    {
+                        PurchaseOrderId = po2.Id,
+                        Action = "PO submitted",
+                        UserName = "System Auto-Coordinator",
+                        Notes = "Submitted by AI inventory monitoring service",
+                        Timestamp = DateTime.UtcNow.AddHours(-1)
+                    });
+
+                    await db.SaveChangesAsync();
+                }
+            }
+
+            // 5. Seed Machines & Maintenance Logs
+            if (!await db.Machines.AnyAsync())
+            {
+                var cncMachine = new Machine
+                {
+                    Name = "CNC Milling Machine 01",
+                    Status = MachineStatus.Operational,
+                    UptimeHours = 480,
+                    MaintenanceIntervalHours = 500,
+                    Location = "Floor A - Sector 1"
+                };
+
+                var pressMachine = new Machine
+                {
+                    Name = "Hydraulic Press 02",
+                    Status = MachineStatus.UnderMaintenance,
+                    UptimeHours = 510,
+                    MaintenanceIntervalHours = 500,
+                    Location = "Floor B - Sector 2"
+                };
+
+                var welderMachine = new Machine
+                {
+                    Name = "Robotic Welder 03",
+                    Status = MachineStatus.Operational,
+                    UptimeHours = 120,
+                    MaintenanceIntervalHours = 600,
+                    Location = "Floor A - Sector 3"
+                };
+
+                var laserCutter = new Machine
+                {
+                    Name = "Laser Cutter 04",
+                    Status = MachineStatus.Offline,
+                    UptimeHours = 300,
+                    MaintenanceIntervalHours = 400,
+                    Location = "Floor C - Sector 1"
+                };
+
+                await db.Machines.AddRangeAsync(cncMachine, pressMachine, welderMachine, laserCutter);
+                await db.SaveChangesAsync();
+
+                var logs = new List<MaintenanceLog>
+                {
+                    new MaintenanceLog
+                    {
+                        MachineId = pressMachine.Id,
+                        Description = "Hydraulic seal replacement and fluid flush",
+                        PerformedBy = "Senior Tech - John D.",
+                        Type = MaintenanceType.Emergency,
+                        PerformedAt = DateTime.UtcNow.AddHours(-6)
+                    },
+                    new MaintenanceLog
+                    {
+                        MachineId = cncMachine.Id,
+                        Description = "Spindle lubrication and calibration verification",
+                        PerformedBy = "Tech - Sarah M.",
+                        Type = MaintenanceType.Preventive,
+                        PerformedAt = DateTime.UtcNow.AddDays(-3)
+                    }
+                };
+
+                await db.MaintenanceLogs.AddRangeAsync(logs);
+                await db.SaveChangesAsync();
+            }
+
+            // 6. Seed Shifts
+            if (!await db.Shifts.AnyAsync())
+            {
+                var shifts = new List<Shift>
+                {
+                    new Shift
+                    {
+                        Name = "Morning Production Shift A",
+                        ProductionTarget = 1500,
+                        AvailableMaterial = 1400,
+                        AdjustedOutput = 1350,
+                        ActualOutput = 1320,
+                        Status = ShiftStatus.Completed,
+                        StartTime = DateTime.UtcNow.Date.AddHours(6),
+                        EndTime = DateTime.UtcNow.Date.AddHours(14)
+                    },
+                    new Shift
+                    {
+                        Name = "Afternoon Production Shift B",
+                        ProductionTarget = 1800,
+                        AvailableMaterial = 1900,
+                        AdjustedOutput = 1800,
+                        ActualOutput = 950,
+                        Status = ShiftStatus.InProgress,
+                        StartTime = DateTime.UtcNow.Date.AddHours(14),
+                        EndTime = DateTime.UtcNow.Date.AddHours(22)
+                    },
+                    new Shift
+                    {
+                        Name = "Night Maintenance & Output Shift C",
+                        ProductionTarget = 1000,
+                        AvailableMaterial = 1200,
+                        AdjustedOutput = 1000,
+                        ActualOutput = 0,
+                        Status = ShiftStatus.Planned,
+                        StartTime = DateTime.UtcNow.Date.AddHours(22),
+                        EndTime = DateTime.UtcNow.Date.AddDays(1).AddHours(6)
+                    }
+                };
+
+                await db.Shifts.AddRangeAsync(shifts);
+                await db.SaveChangesAsync();
+            }
+
+            // 7. Seed Agent Workflows
+            if (!await db.AgentWorkflows.AnyAsync())
+            {
+                var workflows = new List<AgentWorkflow>
+                {
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1001",
+                        Objective = "Optimize CNC feed rates and verify safety tolerances",
+                        CurrentAgent = "Validation/Safety",
+                        Status = WorkflowStatus.WaitingForApproval,
+                        ApprovalStatus = ApprovalStatus.Pending,
+                        StartedAt = DateTime.UtcNow.AddHours(-3),
+                        FinalOutcome = null
+                    },
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1002",
+                        Objective = "Automated raw material procurement & PO dispatch",
+                        CurrentAgent = "ProcurementAgent",
+                        Status = WorkflowStatus.Completed,
+                        ApprovalStatus = ApprovalStatus.Approved,
+                        StartedAt = DateTime.UtcNow.AddDays(-1),
+                        CompletedAt = DateTime.UtcNow.AddDays(-1).AddMinutes(45),
+                        FinalOutcome = "PO-9021 issued and vendor confirmed receipt."
+                    },
+                    new AgentWorkflow
+                    {
+                        WorkflowId = "WF-1003",
+                        Objective = "Anomaly detection & predictive diagnostics for Hydraulic Press 02",
+                        CurrentAgent = "MaintenanceDiagnostics",
+                        Status = WorkflowStatus.Running,
+                        ApprovalStatus = ApprovalStatus.Pending,
+                        StartedAt = DateTime.UtcNow.AddMinutes(-40),
+                        FinalOutcome = null
+                    }
+                };
+
+                await db.AgentWorkflows.AddRangeAsync(workflows);
+                await db.SaveChangesAsync();
+            }
+
+            // 8. Seed Audit Logs
+            if (!await db.AuditLogs.AnyAsync())
+            {
+                var auditLogs = new List<AuditLog>
+                {
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "SEED_DATABASE",
+                        Entity = "System",
+                        EntityId = "INITIAL_SEED",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-10)
+                    },
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "CREATE",
+                        Entity = "Machine",
+                        EntityId = "CNC-01",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-8)
+                    },
+                    new AuditLog
+                    {
+                        UserId = Guid.NewGuid(),
+                        UserName = "System Admin",
+                        Action = "ADJUST_OUTPUT",
+                        Entity = "Shift",
+                        EntityId = "Shift-Morning-A",
+                        Success = true,
+                        IpAddress = "127.0.0.1",
+                        Timestamp = DateTime.UtcNow.AddMinutes(-5)
+                    }
+                };
+
+                await db.AuditLogs.AddRangeAsync(auditLogs);
+                await db.SaveChangesAsync();
+            }
+
+            // 9. Seed Batches, InventoryRolls, DefectReports & Quarantines
+            if (!await db.Batches.AnyAsync())
+            {
+                var batch1 = new Batch
+                {
+                    Id = "BATCH001",
+                    ProductType = ProductType.BoxPouch
+                };
+
+                var batch2 = new Batch
+                {
+                    Id = "BATCH002",
+                    ProductType = ProductType.BiscuitPackaging
+                };
+
+                var batch3 = new Batch
+                {
+                    Id = "BATCH003",
+                    ProductType = ProductType.TeaBag
+                };
+
+                await db.Batches.AddRangeAsync(batch1, batch2, batch3);
+                await db.SaveChangesAsync();
+
+                var roll1 = new InventoryRoll
+                {
+                    Id = "ROLL-001",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll2 = new InventoryRoll
+                {
+                    Id = "ROLL-002",
+                    BatchId = batch1.Id,
+                    Status = InventoryStatus.Quarantined
+                };
+
+                var roll3 = new InventoryRoll
+                {
+                    Id = "ROLL-003",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll4 = new InventoryRoll
+                {
+                    Id = "ROLL-004",
+                    BatchId = batch2.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                var roll5 = new InventoryRoll
+                {
+                    Id = "ROLL-005",
+                    BatchId = batch3.Id,
+                    Status = InventoryStatus.Available
+                };
+
+                await db.InventoryRolls.AddRangeAsync(roll1, roll2, roll3, roll4, roll5);
+                await db.SaveChangesAsync();
+
+                var qualityUser = await db.Users.FirstOrDefaultAsync(u => u.Email == "quality@amic.com");
+
+                var defect1 = new DefectReport
+                {
+                    BatchId = batch1.Id,
+                    ProductType = ProductType.BoxPouch,
+                    Severity = DefectSeverity.HIGH,
+                    Description = "Edge sealing delamination and micro-perforations observed along roll perimeter.",
+                    Status = DefectStatus.Open,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2)
+                };
+
+                var defect2 = new DefectReport
+                {
+                    BatchId = batch2.Id,
+                    ProductType = ProductType.BiscuitPackaging,
+                    Severity = DefectSeverity.MEDIUM,
+                    Description = "Color misalignment and minor ink smudging on secondary packaging film.",
+                    Status = DefectStatus.InReview,
+                    ReportedByUserId = qualityUser?.Id,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                };
+
+                await db.DefectReports.AddRangeAsync(defect1, defect2);
+                await db.SaveChangesAsync();
+
+                var quarantine1 = new Quarantine
+                {
+                    DefectReportId = defect1.Id,
+                    InventoryRollId = roll2.Id,
+                    Reason = "Roll quarantined due to severe delamination risk on sealing line.",
+                    Status = QuarantineStatus.Active,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1),
+                    ReleasedAt = null
+                };
+
+                var quarantine2 = new Quarantine
+                {
+                    DefectReportId = defect2.Id,
+                    InventoryRollId = roll3.Id,
+                    Reason = "Temporary hold for ink smear inspection. Batch cleared after lab chromatography test.",
+                    Status = QuarantineStatus.Released,
+                    CreatedAt = DateTime.UtcNow.AddDays(-4),
+                    ReleasedAt = DateTime.UtcNow.AddDays(-3)
+                };
+
+                await db.Quarantines.AddRangeAsync(quarantine1, quarantine2);
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure Iron raw material exists in ApplicationDbContext
             var ironMat = await db.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
             if (ironMat == null)
             {
@@ -141,12 +624,6 @@ namespace ManufacturingCoordinator.Data
                 db.Batches.Add(new Batch { Id = "BATCH-IRON-001", ProductType = ProductType.Can });
                 await db.SaveChangesAsync();
             }
-            var defaultBatch = await db.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH001");
-            if (defaultBatch == null)
-            {
-                db.Batches.Add(new Batch { Id = "BATCH001", ProductType = ProductType.Can });
-                await db.SaveChangesAsync();
-            }
 
             // Ensure mfgDb has Iron and historical roll if mfgDb is available
             if (mfgDb != null)
@@ -168,12 +645,11 @@ namespace ManufacturingCoordinator.Data
                     await mfgDb.SaveChangesAsync();
                 }
 
-                var ironRoll = await mfgDb.InventoryRolls.FirstOrDefaultAsync(r => r.Id == "IRON-ROLL-001" || r.RollIdentifier == "IRON-ROLL-001");
+                var ironRoll = await mfgDb.InventoryRolls.FirstOrDefaultAsync(r => r.RollIdentifier == "IRON-ROLL-001");
                 if (ironRoll == null)
                 {
                     ironRoll = new backend.Models.InventoryRoll
                     {
-                        Id = "IRON-ROLL-001",
                         RollIdentifier = "IRON-ROLL-001",
                         BatchId = "BATCH-IRON-001",
                         RawMaterialId = mfgIron.Id,
@@ -342,5 +818,6 @@ namespace ManufacturingCoordinator.Data
                 Console.WriteLine($"Procurement tables creation/check notice: {ex.Message}");
             }
         }
+    }
     }
 }

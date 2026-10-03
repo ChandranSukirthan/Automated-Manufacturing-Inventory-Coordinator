@@ -68,6 +68,8 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             skuCode: item.sku.trim(),
             name: item.name.isEmpty ? material.name : item.name,
             category: material.category,
+            packagingTypeId: material.packagingTypeId,
+            materialCode: material.materialCode,
             unitOfMeasure: material.unitOfMeasure,
             reorderThreshold: material.reorderThreshold,
           );

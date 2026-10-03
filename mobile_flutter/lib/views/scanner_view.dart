@@ -3,6 +3,13 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../controllers/inventory_controller.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
+import '../widgets/catalog_sku_fields.dart';
+
+String _normalizeSku(String value) => value
+    .trim()
+    .toUpperCase()
+    .replaceAll('-', '')
+    .replaceAll(' ', '');
 
 class ScannerView extends StatefulWidget {
   final InventoryController controller;
@@ -40,66 +47,110 @@ class _ScannerViewState extends State<ScannerView> {
         });
 
         final scannedCode = barcode.rawValue!;
-        Map<String, dynamic>? roll;
-        String? lookupError;
+        await _scannerController.stop();
+        Map<String, dynamic> roll;
         try {
           roll = await _inventoryApi.lookupRoll(scannedCode);
         } on ApiException catch (exception) {
-          lookupError = exception.message;
+          if (!mounted) return;
+          _showInvalidCodeMessage(exception.message);
+          break;
         }
         if (!mounted) return;
 
-        widget.controller.setSku(
-          (roll?['rollIdentifier'] as String?)?.trim().isNotEmpty == true
-            ? roll!['rollIdentifier'] as String
-            : scannedCode,
-        );
-
-        // Show yellow SnackBar saying "Scan Successful"
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFFFFD700),
-            duration: const Duration(seconds: 2),
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.black),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    roll == null
-                      ? lookupError == null
-                        ? 'Code captured: $scannedCode'
-                        : 'Code captured; lookup unavailable'
-                      : 'Roll found: ${roll['rollIdentifier'] ?? scannedCode}',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            if (widget.onBack != null) {
-              widget.onBack!();
-            } else if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              setState(() {
-                _hasScanned = false;
-              });
-            }
-          }
-        });
+        final sku = (roll['skuCode'] as String?)?.trim() ?? '';
+        if (sku.isEmpty) {
+          _showInvalidCodeMessage('This QR code is not linked to a material SKU.');
+          break;
+        }
+        final useSku = await _showRollDetails(roll, scannedCode);
+        if (!mounted) return;
+        if (useSku == true) widget.controller.setSku(sku);
+        setState(() => _hasScanned = false);
+        await _scannerController.start();
 
         break;
       }
     }
   }
+
+  void _showInvalidCodeMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 3),
+        content: Text(
+          '$message Scan a QR code generated for a registered roll.',
+        ),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      setState(() => _hasScanned = false);
+      await _scannerController.start();
+    });
+  }
+
+  Future<bool?> _showRollDetails(
+    Map<String, dynamic> roll,
+    String scannedCode,
+  ) => showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle_outline, color: Color(0xFFFFD700)),
+          SizedBox(width: 10),
+          Text('Roll scanned'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _rollDetail('Roll identifier', roll['rollIdentifier'] ?? scannedCode),
+          _rollDetail('SKU', roll['skuCode'] ?? 'Unknown'),
+          _rollDetail('Material', roll['materialName'] ?? 'Unknown'),
+          _rollDetail('Initial quantity', '${roll['initialQuantity'] ?? 0}'),
+          _rollDetail(
+            'Remaining in this roll',
+            '${roll['remainingQuantity'] ?? 0}',
+          ),
+          _rollDetail(
+            'Current SKU stock',
+            '${roll['currentSkuStock'] ?? 0}',
+          ),
+          _rollDetail('Status', roll['status'] ?? 'Unknown'),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Use SKU'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _rollDetail(String label, Object value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          TextSpan(text: value.toString()),
+        ],
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -134,6 +185,12 @@ class _ScannerViewState extends State<ScannerView> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Switch front or rear camera',
+            icon: const Icon(Icons.cameraswitch_outlined, color: Colors.white),
+            onPressed: () => _scannerController.switchCamera(),
+          ),
+          IconButton(
+            tooltip: 'Toggle flashlight',
             icon: ValueListenableBuilder<MobileScannerState>(
               valueListenable: _scannerController,
               builder: (context, state, child) {
@@ -239,13 +296,7 @@ class _ScannerViewState extends State<ScannerView> {
 
                 // Yellow text button "Enter SKU Manually"
                 TextButton(
-                  onPressed: () {
-                    if (widget.onBack != null) {
-                      widget.onBack!();
-                    } else if (Navigator.canPop(context)) {
-                      Navigator.pop(context);
-                    }
-                  },
+                  onPressed: _showManualSkuEntry,
                   child: const Text(
                     'Enter SKU Manually',
                     style: TextStyle(
@@ -281,4 +332,281 @@ class _ScannerViewState extends State<ScannerView> {
       ),
     );
   }
+
+  Future<void> _showManualSkuEntry() async {
+    List<InventoryItemModel> inventoryItems = const [];
+    List<PackagingTypeModel> packagingTypes = const [];
+    List<RawMaterialModel> rawMaterials = const [];
+    try {
+      final catalogue = await Future.wait([
+        _inventoryApi.fetchInventory(),
+        _inventoryApi.fetchPackagingTypes(),
+        _inventoryApi.fetchRawMaterials(),
+      ]);
+      inventoryItems = catalogue[0] as List<InventoryItemModel>;
+      packagingTypes = catalogue[1] as List<PackagingTypeModel>;
+      rawMaterials = catalogue[2] as List<RawMaterialModel>;
+    } on ApiException catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    await _scannerController.stop();
+    if (!mounted) return;
+    final enteredSku = await showDialog<String>(
+      context: context,
+      builder: (_) => _ManualSkuDialog(
+        inventoryItems: inventoryItems,
+        packagingTypes: packagingTypes,
+        rawMaterials: rawMaterials,
+      ),
+    );
+
+    final sku = enteredSku?.trim();
+    if (!mounted) return;
+    if (sku == null || sku.isEmpty) {
+      await _scannerController.start();
+      return;
+    }
+
+    final matchingItem = inventoryItems
+        .where((item) => _normalizeSku(item.sku) == _normalizeSku(sku))
+        .firstOrNull;
+    if (matchingItem == null || matchingItem.stockLevel <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('SKU is not a currently available inventory item.'),
+          ),
+        );
+      }
+      await _scannerController.start();
+      return;
+    }
+    final useSku = await _showManualSkuDetails(matchingItem);
+    if (!mounted) return;
+    if (useSku == true) widget.controller.setSku(matchingItem.sku);
+    await _scannerController.start();
+  }
+
+  Future<bool?> _showManualSkuDetails(InventoryItemModel item) =>
+      showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, color: Color(0xFFFFD700)),
+              SizedBox(width: 10),
+              Text('Material selected'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _rollDetail('SKU', item.sku),
+              _rollDetail('Material', item.name),
+              _rollDetail('Current SKU stock', '${item.stockLevel}'),
+              _rollDetail('Reorder level', '${item.reorderThreshold}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Use SKU'),
+            ),
+          ],
+        ),
+      );
+
+}
+
+/// Owns the field controller for the manual-SKU route.  This ensures Flutter
+/// disposes it only after the dialog subtree is detached; disposing it as soon
+/// as Navigator.pop completed caused the Cancel assertion seen on device.
+class _ManualSkuDialog extends StatefulWidget {
+  const _ManualSkuDialog({
+    required this.inventoryItems,
+    required this.packagingTypes,
+    required this.rawMaterials,
+  });
+
+  final List<InventoryItemModel> inventoryItems;
+  final List<PackagingTypeModel> packagingTypes;
+  final List<RawMaterialModel> rawMaterials;
+
+  @override
+  State<_ManualSkuDialog> createState() => _ManualSkuDialogState();
+}
+
+class _ManualSkuDialogState extends State<_ManualSkuDialog> {
+  final _formKey = GlobalKey<FormState>();
+  int? _packagingTypeId;
+  int? _rawMaterialId;
+  String? _sku;
+
+  @override
+  void initState() {
+    super.initState();
+    _packagingTypeId = widget.packagingTypes
+        .where((type) => _firstMaterialId(type.id) != null)
+        .firstOrNull
+        ?.id;
+    _rawMaterialId = _firstMaterialId(_packagingTypeId);
+    _sku = _skuOptions.firstOrNull?.sku;
+  }
+
+  List<RawMaterialModel> get _materialOptions => materialOptionsFor(
+    _packagingTypeId,
+    widget.rawMaterials,
+  );
+
+  List<InventoryItemModel> get _skuOptions {
+    final selectedMaterial = materialById(
+      widget.rawMaterials,
+      _rawMaterialId,
+    );
+    if (_packagingTypeId == null || selectedMaterial == null) return const [];
+    final options = widget.inventoryItems.where((item) {
+      final itemMaterial = materialById(widget.rawMaterials, item.rawMaterialId);
+      return item.stockLevel > 0 &&
+          item.packagingTypeId == _packagingTypeId &&
+          itemMaterial?.materialCode == selectedMaterial.materialCode;
+    }).toList();
+    options.sort((left, right) => (left.skuNumber ?? 0).compareTo(right.skuNumber ?? 0));
+    return options;
+  }
+
+  int? _firstMaterialId(int? packagingTypeId) => materialOptionsFor(
+    packagingTypeId,
+    widget.rawMaterials,
+  ).where((material) {
+    final matches = widget.inventoryItems.where((item) {
+      final itemMaterial = materialById(widget.rawMaterials, item.rawMaterialId);
+      return item.stockLevel > 0 &&
+          item.packagingTypeId == packagingTypeId &&
+          itemMaterial?.materialCode == material.materialCode;
+    });
+    return matches.isNotEmpty;
+  }).firstOrNull?.id;
+
+  String _skuNumberLabel(InventoryItemModel item) =>
+      item.skuNumber?.toString().padLeft(3, '0') ?? item.sku.split('-').last;
+
+  void _useSku() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, _sku);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Select material SKU'),
+    content: Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<int>(
+            initialValue: _packagingTypeId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Packaging Type'),
+            items: widget.packagingTypes
+                .map(
+                  (type) => DropdownMenuItem<int>(
+                    value: type.id,
+                    child: Text(type.name, overflow: TextOverflow.ellipsis),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) => setState(() {
+              _packagingTypeId = value;
+              _rawMaterialId = _firstMaterialId(value);
+              _sku = _skuOptions.firstOrNull?.sku;
+            }),
+            validator: (value) =>
+                value == null ? 'Select a packaging type.' : null,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            initialValue: _rawMaterialId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Raw Material'),
+            items: _materialOptions
+                .map(
+                  (material) => DropdownMenuItem<int>(
+                    value: material.id,
+                    child: Text(
+                      '${material.name} (${material.materialCode})',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: _packagingTypeId == null
+                ? null
+                : (value) => setState(() {
+                    _rawMaterialId = value;
+                    _sku = _skuOptions.firstOrNull?.sku;
+                  }),
+            validator: (value) => value == null ? 'Select a raw material.' : null,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _skuOptions.any((item) => item.sku == _sku)
+                ? _sku
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'SKU Number',
+              helperText: 'Only SKUs currently in stock are shown.',
+            ),
+            items: _skuOptions
+                .map(
+                  (item) => DropdownMenuItem<String>(
+                    value: item.sku,
+                    child: Text(
+                      '${_skuNumberLabel(item)} (${item.stockLevel} units in stock)',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: _skuOptions.isEmpty
+                ? null
+                : (value) => setState(() => _sku = value),
+            validator: (value) => value == null
+                ? 'Select an SKU number with available stock.'
+                : null,
+          ),
+          if (_sku != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'SKU preview: $_sku',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _useSku, child: const Text('Use SKU')),
+    ],
+  );
 }
