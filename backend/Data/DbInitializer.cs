@@ -80,7 +80,7 @@ namespace ManufacturingCoordinator.Data
             await SeedEntitiesAsync(context);
         }
 
-        private static async Task SeedEntitiesAsync(ApplicationDbContext db, backend.Data.ManufacturingContext mfgDb)
+        private static async Task SeedEntitiesAsync(ApplicationDbContext db, backend.Data.ManufacturingContext? mfgDb = null)
         {
             await EnsureProcurementTablesAsync(db);
             // 2. Seed RawMaterials
@@ -818,6 +818,5 @@ namespace ManufacturingCoordinator.Data
                 Console.WriteLine($"Procurement tables creation/check notice: {ex.Message}");
             }
         }
-    }
     }
 }
