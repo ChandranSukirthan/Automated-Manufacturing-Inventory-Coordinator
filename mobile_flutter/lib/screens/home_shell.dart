@@ -790,6 +790,7 @@ class _ProfilePopupState extends State<_ProfilePopup> {
                     ],
                   ),
                 ],
+                ),
               ],
             ),
           ),

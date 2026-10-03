@@ -126,7 +126,7 @@ if (widget.role == 'FloorWorker') {
                   child: ListTile(
                     leading: const Icon(Icons.assignment_late_outlined),
                     title: Text(
-                      (defect.skuCode.isNotEmpty) ? defect.skuCode : defect.batchId,
+                      defect.skuCode.isEmpty ? defect.batchId : defect.skuCode,
                     ),
                     subtitle: Text(
                       defect.description,

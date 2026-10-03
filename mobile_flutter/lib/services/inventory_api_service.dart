@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'api_client.dart';
 import 'session_storage.dart';
-import '../models/worker_workflow_models.dart';
 
 int _toInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
@@ -237,50 +236,23 @@ class InventoryApiService {
       if (sku != null && sku.trim().isNotEmpty) 'sku': sku,
       if (packagingType != null && packagingType.trim().isNotEmpty)
         'packagingType': packagingType,
-      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
-      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
-      if (skuNumber != null) 'skuNumber': skuNumber,
+      'packagingTypeId': ?packagingTypeId,
+      'rawMaterialId': ?rawMaterialId,
+      'skuNumber': ?skuNumber,
     });
-  }
-
-  Future<WorkerWorkflowResult> triggerReplenishment({
-    required String materialId,
-    required num requiredQuantity,
-    String? objective,
-  }) async {
-    final response = await _api.post('/inventory/trigger-replenishment', {
-      'materialId': materialId,
-      'requiredQuantity': requiredQuantity,
-      'objective': objective ??
-          'Floor Worker Stock Replenishment: Reorder $requiredQuantity units of $materialId',
-    });
-    if (response is Map<String, dynamic>) {
-      return WorkerWorkflowResult.fromJson(response);
-    }
-    return WorkerWorkflowResult(
-      materialSku: materialId,
-      quantity: requiredQuantity,
-      status: 'Triggered',
-    );
   }
 
   Future<void> createItem({
-    int? packagingTypeId,
-    int? rawMaterialId,
-    int? skuNumber,
-    String? sku,
-    String? name,
-    String? category,
+    required int packagingTypeId,
+    required int rawMaterialId,
+    required int skuNumber,
     required int stockLevel,
     required int reorderThreshold,
   }) async {
     await _api.post('/inventory', {
-      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
-      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
-      if (skuNumber != null) 'skuNumber': skuNumber,
-      if (sku != null && sku.isNotEmpty) 'sku': sku,
-      if (name != null && name.isNotEmpty) 'name': name,
-      if (category != null && category.isNotEmpty) 'category': category,
+      'packagingTypeId': packagingTypeId,
+      'rawMaterialId': rawMaterialId,
+      'skuNumber': skuNumber,
       'stockLevel': stockLevel,
       'reorderThreshold': reorderThreshold,
     });

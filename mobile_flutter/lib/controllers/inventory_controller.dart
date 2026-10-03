@@ -128,7 +128,7 @@ void setMaterialName(String value) {
       if (_poService != null) {
         final alertResult = await _poService.submitLowStockAlert(
           sku: _sku,
-          packagingType: _packagingType ?? 'Standard',
+          packagingType: _packagingType,
           quantityRequested: _quantityRequested,
           workerId: 'floor_worker_1',
         );
