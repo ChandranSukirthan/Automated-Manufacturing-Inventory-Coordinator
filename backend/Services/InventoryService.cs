@@ -67,28 +67,85 @@ namespace backend.Services
 
         public async Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item)
         {
+            var cleanSku = (item.Sku ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(cleanSku))
+            {
+                throw new InvalidOperationException("SKU is required.");
+            }
+
+            if (await _context.InventoryItems.AnyAsync(i => i.Sku.ToLower() == cleanSku.ToLower()))
+            {
+                throw new InvalidOperationException($"SKU {cleanSku} already exists.");
+            }
+
+            item.Sku = cleanSku;
+
+            // Link existing RawMaterial if matching SkuCode exists
+            if (!item.RawMaterialId.HasValue || item.RawMaterialId.Value <= 0)
+            {
+                var existingRawMaterial = await _context.RawMaterials
+                    .FirstOrDefaultAsync(m => m.SkuCode.ToLower() == cleanSku.ToLower());
+                if (existingRawMaterial != null)
+                {
+                    item.RawMaterialId = existingRawMaterial.Id;
+                    item.PackagingTypeId = existingRawMaterial.PackagingTypeId;
+                }
+            }
+
             _context.InventoryItems.Add(item);
             await _context.SaveChangesAsync();
+
+            // Auto-generate low stock alert if below or at reorder threshold
+            if (item.StockLevel <= item.ReorderThreshold)
+            {
+                var hasActiveAlert = await _context.StockAlerts
+                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+                if (!hasActiveAlert)
+                {
+                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                    _context.StockAlerts.Add(new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = string.IsNullOrWhiteSpace(item.Category) ? "Standard Roll" : item.Category,
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Pending",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                }
+            }
+
             return item;
         }
 
         public async Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request)
         {
+            if (!request.PackagingTypeId.HasValue || !request.RawMaterialId.HasValue || !request.SkuNumber.HasValue)
+            {
+                throw new InvalidOperationException("PackagingTypeId, RawMaterialId, and SkuNumber are required to create from catalogue.");
+            }
+
             var packagingType = await _context.PackagingTypes
-                .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId && type.IsActive);
+                .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId.Value && type.IsActive);
             if (packagingType == null)
             {
                 throw new InvalidOperationException("The selected packaging type was not found.");
             }
 
             var materialTemplate = await _context.RawMaterials
-                .FirstOrDefaultAsync(material => material.Id == request.RawMaterialId);
+                .FirstOrDefaultAsync(material => material.Id == request.RawMaterialId.Value);
             if (materialTemplate == null || materialTemplate.PackagingTypeId != packagingType.Id)
             {
                 throw new InvalidOperationException("The selected raw material is not available for that packaging type.");
             }
 
-            var sku = BuildSku(packagingType.ShortCode, materialTemplate.MaterialCode, request.SkuNumber);
+            var sku = BuildSku(packagingType.ShortCode, materialTemplate.MaterialCode, request.SkuNumber.Value);
             if (await _context.InventoryItems.AnyAsync(item => item.Sku == sku))
             {
                 throw new InvalidOperationException($"SKU {sku} already exists. Enter the next sequence number.");
@@ -120,14 +177,14 @@ namespace backend.Services
                 await _context.SaveChangesAsync();
             }
 
-var item = new InventoryItem
+            var item = new InventoryItem
             {
                 Sku = sku,
                 Name = materialSku.Name,
                 Category = packagingType.Name,
                 PackagingTypeId = packagingType.Id,
                 RawMaterialId = materialSku.Id,
-                SkuNumber = request.SkuNumber,
+                SkuNumber = request.SkuNumber.Value,
                 StockLevel = request.StockLevel,
                 ReorderThreshold = request.ReorderThreshold,
             };
