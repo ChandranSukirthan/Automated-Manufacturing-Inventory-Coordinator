@@ -1,3 +1,4 @@
+import 'supplier_quotes_screen.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -170,6 +171,7 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => SupplierQuotesScreen(supplierId: sup.id))), icon: const Icon(Icons.price_change), label: const Text('Material quotes')),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [

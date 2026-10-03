@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
+import 'receive_goods_screen.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
 import '../../widgets/po_status_stepper.dart';
@@ -69,6 +70,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
+          IconButton(icon: const Icon(Icons.inventory_2), tooltip: 'Delivery receipts', onPressed: () async {
+            await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReceiveGoodsScreen(purchaseOrderId: widget.poId)));
+            if (mounted) await _fetchDetails();
+          }),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
             onPressed: _fetchDetails,
@@ -91,6 +96,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (_po!.bankSlipStatus == 'SUBMITTED') ElevatedButton(onPressed: () async {
+                            try { await widget.service.verifyBankSlip(widget.poId); await _fetchDetails(); }
+                            catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString()))); }
+                          }, child: const Text('Confirm bank payment against bank records')),
                           // Manager Interactive Action Panel or Telemetry Notice
                           _buildManagerActionBar(context, _po!),
 
@@ -777,11 +786,11 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
   Future<void> _handleDirectPayment(int poId) async {
     try {
-      await widget.service.processPayment(poId, forceDispatch: true);
+      await widget.service.processPayment(poId, forceDispatch: false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Payment processed & Order Dispatched to Supplier via PDF/SendGrid!'),
+            content: Text('Payment request processed. Check payment and dispatch status.'),
             backgroundColor: Color(0xFF10B981),
           ),
         );

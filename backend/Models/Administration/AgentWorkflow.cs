@@ -7,6 +7,10 @@ namespace ManufacturingCoordinator.Models.Administration
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string WorkflowId { get; set; } = string.Empty; // e.g. "WF-1001"
+        public string WorkflowType { get; set; } = "Procurement";
+        public Guid? MachineId { get; set; }
+        public int? PurchaseOrderId { get; set; }
+        public string? StateJson { get; set; }
         public string Objective { get; set; } = string.Empty;
         public string CurrentAgent { get; set; } = string.Empty;
         public WorkflowStatus Status { get; set; } = WorkflowStatus.Running;

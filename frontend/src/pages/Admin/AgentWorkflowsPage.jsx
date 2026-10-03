@@ -16,6 +16,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
+import machineService from '../../services/machineService';
 import adminService from '../../services/adminService';
 
 export default function AgentWorkflowsPage() {
@@ -30,7 +31,10 @@ export default function AgentWorkflowsPage() {
 
   // Trigger Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [objective, setObjective] = useState('Replenish BoxPouch film because inventory is low.');
+  const [objective, setObjective] = useState('Schedule preventive maintenance.');
+  const [machines, setMachines] = useState([]);
+  const [machineId, setMachineId] = useState('');
+  useEffect(() => { machineService.getAll().then(setMachines).catch(() => setError('Could not load machines.')); }, []);
   const [customWfId, setCustomWfId] = useState('');
   const [triggerLoading, setTriggerLoading] = useState(false);
 
@@ -61,7 +65,7 @@ export default function AgentWorkflowsPage() {
     setSuccessMsg('');
     try {
       await adminService.approveWorkflow(workflowId);
-      setSuccessMsg(`Workflow ${workflowId} approved successfully. Resumed execution.`);
+      setSuccessMsg(`Workflow ${workflowId} approved successfully. Maintenance authorization recorded.`);
       await fetchWorkflows();
     } catch (err) {
       console.error(err);
@@ -89,20 +93,20 @@ export default function AgentWorkflowsPage() {
 
   const handleTriggerWorkflow = async (e) => {
     e.preventDefault();
-    if (!objective.trim()) return;
+    if (!objective.trim() || !machineId) return;
 
     setTriggerLoading(true);
     setError('');
     setSuccessMsg('');
     try {
       const payload = {
-        objective: objective.trim(),
+        objective: `${objective.trim()} [MachineID: ${machineId}]`,
         workflowId: customWfId.trim() || undefined
       };
       await adminService.triggerWorkflow(payload);
-      setSuccessMsg('Planner/Coordinator Agent triggered successfully! Execution started.');
+      setSuccessMsg('Maintenance request created for IT Admin review.');
       setIsModalOpen(false);
-      setObjective('Replenish BoxPouch film because inventory is low.');
+      setObjective('Schedule preventive maintenance.');
       setCustomWfId('');
       await fetchWorkflows();
     } catch (err) {
@@ -178,7 +182,7 @@ export default function AgentWorkflowsPage() {
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-brand-500/20"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Trigger AI Workflow</span>
+            <span>Request maintenance</span>
           </button>
 
           <button
@@ -224,11 +228,11 @@ export default function AgentWorkflowsPage() {
           <div className="py-16 text-center text-slate-400 bg-slate-900/40 rounded-3xl border border-white/10">
             <Bot className="w-10 h-10 mx-auto mb-3 text-slate-600" />
             <p className="text-base font-semibold text-white">No agent workflows found</p>
-            <p className="text-xs text-slate-400 mt-1">Click "Trigger AI Workflow" above to launch a new autonomous coordination pipeline.</p>
+            <p className="text-xs text-slate-400 mt-1">Click "Request maintenance" above to launch a new autonomous coordination pipeline.</p>
           </div>
         ) : (
           filteredWorkflows.map((wf) => {
-            const isWaitingApproval = (wf.status === 3 || wf.status === 'WaitingForApproval' || wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
+            const isWaitingApproval = wf.workflowType === 'Maintenance' && (wf.status === 3 || wf.status === 'WaitingForApproval' || wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
               wf.status !== 1 && wf.status !== 'Completed' &&
               wf.status !== 2 && wf.status !== 'Failed';
             const isApproveLoading = actionLoading[wf.workflowId] === 'approve';
@@ -278,7 +282,7 @@ export default function AgentWorkflowsPage() {
                       <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
                       <div>
                         <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">IT Admin Approval Required</span>
-                        <p className="text-xs text-slate-300 mt-0.5">High-impact procurement or schedule adjustment awaits human authorization before execution.</p>
+                        <p className="text-xs text-slate-300 mt-0.5">This machine maintenance request awaits IT Admin authorization.</p>
                       </div>
                     </div>
 
@@ -289,7 +293,7 @@ export default function AgentWorkflowsPage() {
                         className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
                       >
                         {isApproveLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        <span>Approve & Execute</span>
+                        <span>Authorize maintenance</span>
                       </button>
 
                       <button
@@ -357,6 +361,11 @@ export default function AgentWorkflowsPage() {
             </div>
 
             <form onSubmit={handleTriggerWorkflow} className="space-y-4">
+              <label className="text-sm text-slate-300">Machine
+                <select required value={machineId} onChange={e => setMachineId(e.target.value)} className="block w-full bg-slate-800 p-2 rounded">
+                  <option value="">Choose machine</option>{machines.map(m => <option key={m.id} value={m.id}>{m.name} ({m.machineTag || m.id})</option>)}
+                </select>
+              </label>
               <div>
                 <label className="text-xs font-semibold text-slate-300 block mb-1">Custom Workflow ID (Optional)</label>
                 <input
@@ -386,7 +395,7 @@ export default function AgentWorkflowsPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setObjective("Replenish BoxPouch film because inventory is low.")}
+                    onClick={() => setObjective("Schedule preventive maintenance.")}
                     className="text-xs px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-300 transition"
                   >
                     📦 Replenish BoxPouch
@@ -418,7 +427,7 @@ export default function AgentWorkflowsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={triggerLoading || !objective.trim()}
+                  disabled={triggerLoading || !objective.trim() || !machineId}
                   className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-brand-500/20 disabled:opacity-50"
                 >
                   {triggerLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}

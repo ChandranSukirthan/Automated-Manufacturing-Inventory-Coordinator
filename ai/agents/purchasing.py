@@ -7,6 +7,7 @@ Architecture prepared for future learning-based procurement intelligence via
 structured historical outcome storage (see ProcurementOutcome model).
 """
 from __future__ import annotations
+from ai.core.config import settings
 
 import logging
 from datetime import datetime, timezone
@@ -120,12 +121,10 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         pack_size=1.0,
         net_deficit=explicit_deficit,
     )
-    net_deficit = qty_calc.get("adjustedQuantity") or qty_calc.get("recommendedQuantity") or prod_req
+    net_deficit = explicit_deficit if explicit_deficit is not None else qty_calc.get("recommendedQuantity", prod_req)
 
-    # Inter-agent cooperation: If Production Agent detected a material shortfall, reconcile it
-    shortfall = float(impact.get("plannedOutput", 0) - impact.get("adjustedOutput", 0))
-    if shortfall > net_deficit:
-        net_deficit = shortfall
+    # Production output and material quantity have different units. Never overwrite
+    # the authoritative material deficit with a finished-product shortfall.
 
     tool_log.append({
         "tool": "calculate_purchase_quantity",
@@ -178,15 +177,15 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "material": material_name,
             "materialName": material_name,
             "specification": specification,
-            "unitPrice": float(s.get("unitPrice") or s.get("unitPriceUsd") or 1.45),
-            "currency": "USD",
+            "unitPrice": float(s.get("unitPrice") or s.get("unitPriceUsd") or 0),
+            "currency": s.get("currency", "USD"),
             "unit": unit,
-            "minimumOrderQuantity": float(s.get("minimumOrderQuantity") or 500.0),
-            "packSize": float(s.get("packSize") or 50.0),
-            "availableQuantity": float(s.get("availableQuantity") or max(net_deficit * 2, 5000.0)),
+            "minimumOrderQuantity": float(s.get("minimumOrderQuantity", 0)),
+            "packSize": float(s.get("packSize", 1)),
+            "availableQuantity": float(s.get("availableQuantity", max(net_deficit * 2, 10000) if settings.demo_mode else 0)),
             "leadTimeDays": int(s.get("leadTimeDays") or 3),
-            "qualityEvidence": "ISO 9001 Certified (Internal contract verified)",
-            "certifications": ["ISO 9001"],
+            "qualityEvidence": s.get("qualityEvidence", "ISO 9001 Certified" if settings.demo_mode else "UNKNOWN"),
+            "certifications": [],
             "availabilityStatus": "AVAILABLE",
             "supplierStatus": "APPROVED",
             "verificationStatus": "VERIFIED",
@@ -198,7 +197,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         all_candidates.append(cand)
 
     # Also add standard catalog suppliers from available_suppliers
-    for cat in available_suppliers:
+    for cat in (available_suppliers if settings.demo_mode else []):
         if not isinstance(cat, dict):
             continue
         cat_name = cat.get("name") or cat.get("supplierName") or "Catalog Supplier"
@@ -277,6 +276,12 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
     # ── Selection ─────────────────────────────────────────────────────────────
     selection = select_supplier(validated_pairs, eval_requirement)
+    if not selection.get("selectedCandidate"):
+        return {"current_agent": "Supplier Review", "status": WorkflowStatus.WaitingForApproval,
+                "requires_approval": True, "draft_po": None, "supplier_candidates": all_candidates,
+                "validation_results": {"isValid": False, "overallStatus": "NEEDS_SUPPLIER_QUOTE"},
+                "completed_steps": completed, "errors": errors + ["No suitable supplier quote is available. Add a verified quote or create a manual draft PO."],
+                "final_outcome": "Waiting for supplier information; manual inventory and procurement remain available."}
     top_cand = selection.get("selectedCandidate") or (all_candidates[0] if all_candidates else {})
     top_report = selection.get("validationReport") or (validated_pairs[0][1] if validated_pairs else {})
     recommended_qty = top_report.get("adjustedQuantity") or net_deficit

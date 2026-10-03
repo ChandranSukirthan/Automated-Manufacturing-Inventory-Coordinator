@@ -129,6 +129,9 @@ namespace ManufacturingCoordinator.Api.Controllers
             var resolvedTime = DateTime.UtcNow.ToString("o");
             var decision = dto.Decision?.Trim();
 
+            if (decision is not ("Clear" or "QACleared" or "Reject" or "QARejected" or "Keep on Hold" or "OnHold" or "Hold"))
+                return BadRequest(new { message = "Choose Clear, Reject or Hold." });
+
             var supplierPassed = !resultsDict.TryGetValue("supplierValidation", out var sv) || sv?.ToString() == "PASSED";
             var budgetPassed = !resultsDict.TryGetValue("budgetCheck", out var bc) || bc?.ToString() == "PASSED";
             var poMathPassed = !resultsDict.TryGetValue("poMathematicalCheck", out var pm) || pm?.ToString() == "PASSED";
@@ -200,66 +203,28 @@ namespace ManufacturingCoordinator.Api.Controllers
             // Release active quarantines ONLY if explicitly requested and decision was Clear
             if (dto.ReleaseQuarantine && resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")
             {
-                string? targetRoll = null;
-                string? targetMaterial = null;
-
-                if (resultsDict.TryGetValue("historicalRisk", out var hrObj) && hrObj != null)
+                // Only an explicitly linked order or structured roll ID can select holds.
+                var materialIds = linkedPo == null ? new List<int>() : await _context.OrderLines
+                    .Where(l => l.PurchaseOrderId == linkedPo.Id).Select(l => l.RawMaterialId).ToListAsync(cancellationToken);
+                var skus = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id))
+                    .Select(m => m.SkuCode).ToListAsync(cancellationToken);
+                var rollIds = await _context.StockRolls.Where(r => materialIds.Contains(r.RawMaterialId))
+                    .Select(r => r.RollIdentifier).ToListAsync(cancellationToken);
+                if (resultsDict.TryGetValue("historicalRisk", out var history) && history != null)
                 {
-                    if (hrObj is JsonElement hrElem && hrElem.ValueKind == JsonValueKind.Object)
-                    {
-                        if (hrElem.TryGetProperty("relatedRoll", out var rr)) targetRoll = rr.GetString();
-                        if (hrElem.TryGetProperty("material", out var mat)) targetMaterial = mat.GetString();
-                    }
-                    else if (hrObj is Dictionary<string, object?> hrDict)
-                    {
-                        if (hrDict.TryGetValue("relatedRoll", out var rr)) targetRoll = rr?.ToString();
-                        if (hrDict.TryGetValue("material", out var mat)) targetMaterial = mat?.ToString();
-                    }
-                    else if (hrObj is string hrStr && !string.IsNullOrWhiteSpace(hrStr))
-                    {
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(hrStr);
-                            if (doc.RootElement.TryGetProperty("relatedRoll", out var rr)) targetRoll = rr.GetString();
-                            if (doc.RootElement.TryGetProperty("material", out var mat)) targetMaterial = mat.GetString();
-                        }
-                        catch { }
-                    }
+                    using var historyDoc = JsonDocument.Parse(history.ToString()!);
+                    if (historyDoc.RootElement.TryGetProperty("relatedRoll", out var related) && related.ValueKind == JsonValueKind.String)
+                        rollIds.Add(related.GetString()!);
                 }
-
-                var activeQuarantines = await _context.Quarantines
-                    .Include(q => q.DefectReport)
-                    .Where(q => q.Status == QuarantineStatus.Active)
-                    .ToListAsync(cancellationToken);
-
-                foreach (var q in activeQuarantines)
-                {
-                    bool isRelevant = false;
-                    if (!string.IsNullOrEmpty(targetRoll) && (q.InventoryRollId == targetRoll || q.InventoryRollId.Contains(targetRoll, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        isRelevant = true;
-                    }
-                    else if (!string.IsNullOrEmpty(targetMaterial) && q.DefectReport != null && q.DefectReport.Description.Contains(targetMaterial, StringComparison.OrdinalIgnoreCase))
-                    {
-                        isRelevant = true;
-                    }
-                    else if (string.IsNullOrEmpty(targetRoll) && string.IsNullOrEmpty(targetMaterial))
-                    {
-                        isRelevant = true;
-                    }
-
-                    if (isRelevant)
-                    {
-                        q.Status = QuarantineStatus.Released;
-                        q.ReleasedAt = DateTime.UtcNow;
-
-                        var roll = await _context.InventoryRolls.FirstOrDefaultAsync(r => r.Id == q.InventoryRollId, cancellationToken);
-                        if (roll != null)
-                        {
-                            roll.Status = InventoryStatus.Available;
-                        }
-                    }
-                }
+                var holds = await _context.Quarantines.Include(q => q.DefectReport)
+                    .Where(q => q.Status == QuarantineStatus.Active).ToListAsync(cancellationToken);
+                var relevant = holds.Where(q => rollIds.Contains(q.InventoryRollId) ||
+                    (q.DefectReport != null && skus.Contains(q.DefectReport.SkuCode))).ToList();
+                if (relevant.Count == 0)
+                    return Conflict(new { message = "No explicitly linked active quarantine was found. Release the specific quarantine from its details page." });
+                var quarantineService = new ManufacturingCoordinator.Api.Services.QuarantineService(_context);
+                foreach (var hold in relevant)
+                    await quarantineService.ReleaseAsync(hold.Id, dto.Note, userName);
             }
 
             await _context.SaveChangesAsync(cancellationToken);

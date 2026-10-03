@@ -136,10 +136,10 @@ class TestInventoryToolsGoldenCases(unittest.TestCase):
         self.assertIsNotNone(extraction, "Data extraction result must be present in state.")
         self.assertEqual(extraction["materialId"], "RM001")
         self.assertEqual(extraction["currentStock"], 350.0)
-        self.assertEqual(extraction["burnRate"], 80.0)
-        self.assertAlmostEqual(extraction["daysRemaining"], 4.375, places=2)
-        self.assertTrue(extraction["lowStock"])
-        self.assertEqual(extraction["requiredQuantity"], 2000.0)
+        self.assertAlmostEqual(extraction["burnRate"], 560.0 / 30, places=2)
+        self.assertAlmostEqual(extraction["daysRemaining"], 18.75, places=2)
+        self.assertFalse(extraction["lowStock"])
+        self.assertEqual(extraction["requiredQuantity"], 650.0)
 
         # Check tool execution summary is recorded
         summary = state.get("tool_execution_summary")

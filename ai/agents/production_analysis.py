@@ -21,21 +21,23 @@ def production_analysis_node(state: AgentState) -> Dict[str, Any]:
     # 1. Query production schedule
     schedule = query_production_schedule()
     tool_results["query_production_schedule"] = schedule
+    if schedule.get("available") is False:
+        return {"current_agent": "Production Analysis", "production_data": schedule,
+                "tool_results": tool_results, "completed_steps": completed + ["Production schedule unavailable; procurement can continue using authoritative material requirements"]}
 
-    # 2. Check machine uptime & maintenance requirement
-    uptime_data = calculate_machine_uptime(schedule.get("machineId", "M001"))
+
+    # Machine diagnostics are optional and require an actual machine association.
+    machine_id = schedule.get("machineId")
+    uptime_data = calculate_machine_uptime(machine_id) if machine_id else {"available": False, "reason": "No machine associated with this schedule"}
+    interval = uptime_data.get("maintenanceIntervalHours")
     maintenance_data = check_maintenance_requirement(
-        uptime=uptime_data.get("uptimeHours", 480.0),
-        maintenance_interval=500.0,
-        machine_id=schedule.get("machineId", "M001")
-    )
+        uptime=uptime_data["uptimeHours"], maintenance_interval=interval, machine_id=machine_id
+    ) if uptime_data.get("uptimeHours") is not None and interval else {"available": False, "reason": "Maintenance telemetry is incomplete"}
     tool_results["calculate_machine_uptime"] = uptime_data
     tool_results["check_maintenance_requirement"] = maintenance_data
-
-    # 3. Assess impact of available inventory on shift target
     inv_data = state.get("inventory_data", {})
-    target = schedule.get("plannedOutput", 1000)
-    available_mat = inv_data.get("availableQuantity", 350.0)
+    target = schedule.get("plannedOutput", 0)
+    available_mat = inv_data.get("availableQuantity", 0)
 
     # 4. Calculate production impact
     impact = calculate_production_impact(target=target, available_material=int(available_mat))

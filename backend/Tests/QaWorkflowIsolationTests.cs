@@ -217,6 +217,7 @@ public class QaWorkflowIsolationTests
             CreatedAt = DateTime.UtcNow
         });
 
+        db.StockRolls.Add(new backend.Models.InventoryRoll { RawMaterialId = 1, RollIdentifier = "ROLL-TEST-1", Status = "In Stock" });
         // Workflow has stale "RESOLVED" state
         var staleWf = new AgentWorkflow
         {
@@ -365,6 +366,7 @@ public class QaWorkflowIsolationTests
             Status = QuarantineStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
+        db.StockRolls.Add(new backend.Models.InventoryRoll { RawMaterialId = 1, RollIdentifier = "ROLL-40", Status = "In Stock" });
         db.Quarantines.Add(quarantine);
         await db.SaveChangesAsync();
 
@@ -380,7 +382,7 @@ public class QaWorkflowIsolationTests
         // 1. Initial Validation -> BLOCKED
         await poService.EnsurePoValidationWorkflowAsync(po);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => poService.ValidateApprovalGateAsync(po));
-        Assert.Contains("Approval blocked: QA validation requires manual review.", ex.Message);
+        Assert.Contains("active quarantine", ex.Message);
 
         // 2. Resolve & Release Quarantine
         quarantine.Status = QuarantineStatus.Released;
@@ -408,5 +410,87 @@ public class QaWorkflowIsolationTests
         // 3. Approval Gate check now PASSES without exception
         var exception = await Record.ExceptionAsync(() => poService.ValidateApprovalGateAsync(po));
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Test5_UnrelatedMaterial_ActiveQuarantineOnOtherMaterial_DoesNotBlockApproval()
+    {
+        await using var db = CreateInMemoryDbContext();
+
+        var supplier = new Supplier
+        {
+            Id = 1,
+            Name = "Supplier A",
+            SupplierCode = "SUP-001",
+            IsActive = true,
+            ContactEmail = "supp@test.com",
+            LeadTimeDays = 5
+        };
+        var quarantinedMaterial = new RawMaterial
+        {
+            Id = 1,
+            Name = "Laminated Film",
+            SkuCode = "BP-LAM-001"
+        };
+        var clearMaterial = new RawMaterial
+        {
+            Id = 2,
+            Name = "Pencil",
+            SkuCode = "pencil"
+        };
+        db.Suppliers.Add(supplier);
+        db.RawMaterials.AddRange(quarantinedMaterial, clearMaterial);
+
+        // An active quarantine exists for Laminated Film (BP-LAM-001 / ROLL-002)
+        var quarantine = new Quarantine
+        {
+            Id = Guid.NewGuid(),
+            InventoryRollId = "ROLL-BP-LAM-001-01",
+            Reason = "Delamination defect on sealing line",
+            Status = QuarantineStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Quarantines.Add(quarantine);
+
+        // Purchase order for pencil (clear material)
+        var poPencil = new PurchaseOrder
+        {
+            Id = 50,
+            PoNumber = "PO-2026-0050",
+            SupplierId = 1,
+            BudgetLimit = 10000m,
+            TotalCost = 500m,
+            Currency = "USD",
+            Status = PurchaseOrderStatus.PendingApproval,
+            Notes = "Workflow ID: WF-QA-PO-2026-0050",
+            OrderLines = new List<OrderLine>
+            {
+                new() { RawMaterialId = 2, Quantity = 50, UnitPrice = 10m, TotalPrice = 500m }
+            }
+        };
+        db.PurchaseOrders.Add(poPencil);
+        await db.SaveChangesAsync();
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var poService = new PurchaseOrderService(
+            db,
+            new DummyStripeService(),
+            new DummyEmailService(),
+            config,
+            NullLogger<PurchaseOrderService>.Instance
+        );
+
+        // Act: Validate & Approval Gate for Pencil
+        var wf = await poService.EnsurePoValidationWorkflowAsync(poPencil);
+
+        using var doc = JsonDocument.Parse(wf.ValidationResults!);
+        Assert.True(doc.RootElement.GetProperty("isValid").GetBoolean());
+        Assert.Equal("CLEAR", doc.RootElement.GetProperty("qualitySafetyStatus").GetString());
+        Assert.Equal("NOT_REQUIRED", doc.RootElement.GetProperty("manualResolutionStatus").GetString());
+        Assert.Equal(0, doc.RootElement.GetProperty("quarantinedRollsCount").GetInt32());
+
+        // ValidateApprovalGateAsync must NOT throw: Pencil is clear!
+        var ex = await Record.ExceptionAsync(() => poService.ValidateApprovalGateAsync(poPencil));
+        Assert.Null(ex);
     }
 }

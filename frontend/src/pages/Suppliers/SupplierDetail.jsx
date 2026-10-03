@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
+import SupplierQuotesPanel from '../../components/Suppliers/SupplierQuotesPanel';
 import supplierService from '../../services/supplierService';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import { parseErrorMessage } from '../../utils/errorHandler';
@@ -265,7 +266,8 @@ export default function SupplierDetail() {
         </div>
       </div>
 
-      {/* Associated Purchase Orders Section */}
+      <SupplierQuotesPanel supplierId={id} />
+        {/* Associated Purchase Orders Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-white flex items-center gap-2">

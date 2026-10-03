@@ -338,7 +338,7 @@ namespace ManufacturingCoordinator.Controllers
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<PurchaseOrderResponseDto>> ProcessPayment(int id, [FromQuery] bool forceDispatch = true)
+        public async Task<ActionResult<PurchaseOrderResponseDto>> ProcessPayment(int id, [FromQuery] bool forceDispatch = false)
         {
             var approverId = GetCurrentUserId();
             try
@@ -381,12 +381,13 @@ namespace ManufacturingCoordinator.Controllers
 
                 if (isPlaceholder)
                 {
-                    return Ok(new { url = origin + $"/purchase-orders/{id}?payment=success&simulated=true" });
+                    return StatusCode(503, new { message = "Stripe is not configured; no payment has been confirmed." });
                 }
 
                 Stripe.StripeConfiguration.ApiKey = stripeKey;
 
-                var amountCents = (long)Math.Max(100, Math.Round(po.TotalCost * 100, 0));
+                if (po.Status is not ("Approved" or "Payment" or "PaymentFailed")) return BadRequest(new { message = "Approve the order before starting payment." });
+                var amountCents = (long)Math.Round(po.TotalCost * 100, 0);
                 var currency = string.IsNullOrWhiteSpace(po.Currency) ? "usd" : po.Currency.ToLowerInvariant();
 
                 var options = new Stripe.Checkout.SessionCreateOptions
@@ -408,7 +409,8 @@ namespace ManufacturingCoordinator.Controllers
                         },
                     },
                     Mode = "payment",
-                    SuccessUrl = origin + $"/purchase-orders/{id}?payment=success",
+                    SuccessUrl = origin + $"/purchase-orders/{id}?session_id={{CHECKOUT_SESSION_ID}}",
+                    ClientReferenceId = id.ToString(),
                     CancelUrl = origin + $"/purchase-orders/{id}?payment=cancel",
                 };
 
@@ -428,12 +430,32 @@ namespace ManufacturingCoordinator.Controllers
                 {
                     origin = "http://localhost:5173";
                 }
-                return Ok(new { url = origin + $"/purchase-orders/{id}?payment=success&simulated=true" });
+                return StatusCode(503, new { message = "Stripe is not configured; no payment has been confirmed." });
             }
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        [HttpPost("{id:int}/verify-bank-slip")]
+        [Authorize(Roles = "SupplyChainManager")]
+        public async Task<IActionResult> VerifyBankSlip(int id) => Ok(await _poService.VerifyBankSlipAsync(id, GetCurrentUserId()));
+
+        [HttpPost("{id:int}/confirm-checkout")]
+        [Authorize(Roles = "SupplyChainManager")]
+        public async Task<IActionResult> ConfirmCheckout(int id, [FromQuery] string sessionId)
+        {
+            var key = _configuration["StripeSettings:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+            if (string.IsNullOrWhiteSpace(key) || key.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
+                return StatusCode(503, new { message = "Stripe is not configured." });
+            var service = new Stripe.Checkout.SessionService(new Stripe.StripeClient(key));
+            var session = await service.GetAsync(sessionId);
+            if (session.ClientReferenceId != id.ToString() || session.PaymentStatus != "paid" ||
+                session.AmountTotal == null || string.IsNullOrWhiteSpace(session.PaymentIntentId))
+                return BadRequest(new { message = "Stripe has not confirmed payment for this purchase order." });
+            return Ok(await _poService.ConfirmCheckoutAsync(id, session.PaymentIntentId,
+                session.AmountTotal.Value / 100m, session.Currency, GetCurrentUserId()));
         }
 
         /// <summary>

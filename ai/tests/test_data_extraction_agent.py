@@ -2,18 +2,11 @@ import json
 
 import pytest
 
-try:
-    from ai.agents.data_extraction_agent import (
-        query_production_db,
-        run_data_extraction_agent,
-        run_data_extraction_agent_json,
-    )
-except ImportError:
-    from agents.data_extraction_agent import (
-        query_production_db,
-        run_data_extraction_agent,
-        run_data_extraction_agent_json,
-    )
+from ai.agents.data_extraction_agent import (
+    query_production_db,
+    run_data_extraction_agent,
+    run_data_extraction_agent_json,
+)
 
 
 VALID_BOXPOUCH_REQUEST = {

@@ -1,6 +1,10 @@
 import api from './api';
 
 export const purchaseOrderService = {
+  async getReceipts(id) { return (await api.get(`/purchase-orders/${id}/receipts`)).data; },
+  async receiveGoods(id, data) { return (await api.post(`/purchase-orders/${id}/receipts`, data)).data; },
+  async verifyBankSlip(id) { return (await api.post(`/purchase-orders/${id}/verify-bank-slip`)).data; },
+  async confirmCheckout(id, sessionId) { return (await api.post(`/purchase-orders/${id}/confirm-checkout`, null, { params: { sessionId } })).data; },
   async getPurchaseOrders() {
     const response = await api.get('/purchase-orders');
     return response.data;
@@ -46,7 +50,7 @@ export const purchaseOrderService = {
     return response.data;
   },
 
-  async processPayment(id, forceDispatch = true) {
+  async processPayment(id, forceDispatch = false) {
     const response = await api.post(`/purchase-orders/${id}/process-payment?forceDispatch=${forceDispatch}`);
     return response.data;
   },

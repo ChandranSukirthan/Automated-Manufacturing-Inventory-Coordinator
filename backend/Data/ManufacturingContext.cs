@@ -18,10 +18,12 @@ namespace backend.Data
         public DbSet<InventoryRoll> InventoryRolls { get; set; } = null!;
         public DbSet<StockLevel> StockLevels { get; set; } = null!;
         public DbSet<PackagingType> PackagingTypes { get; set; } = null!;
+        public DbSet<InventoryMovement> InventoryMovements { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<InventoryItem>().Property(i => i.StockLevel).IsConcurrencyToken();
 
             modelBuilder.Entity<InventoryItem>(entity =>
             {
@@ -66,6 +68,8 @@ namespace backend.Data
             modelBuilder.Entity<InventoryRoll>(entity =>
             {
                 entity.HasKey(e => e.Id);
+                entity.Property(e => e.CurrentQuantity).IsConcurrencyToken();
+                entity.Property(e => e.Status).IsConcurrencyToken();
                 entity.Property(e => e.RollIdentifier).IsRequired();
                 entity.HasIndex(e => e.RollIdentifier).IsUnique();
                 
@@ -73,7 +77,7 @@ namespace backend.Data
                 entity.HasOne(e => e.RawMaterial)
                       .WithMany(r => r.InventoryRolls)
                       .HasForeignKey(e => e.RawMaterialId)
-                      .OnDelete(DeleteBehavior.Cascade);
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // StockLevel config

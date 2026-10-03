@@ -26,6 +26,10 @@ class ApprovalStatus(StrEnum):
 
 class AgentState(TypedDict, total=False):
     # ── Workflow metadata ──────────────────────────────────────────────────────
+    workflow_type: str
+    queued_request: dict[str, Any] | None
+    machine_id: str | None
+    dispatch_confirmed: bool
     workflow_id: str
     procurement_request_id: int | None
     objective: str

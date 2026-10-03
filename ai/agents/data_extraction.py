@@ -58,12 +58,8 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
     errors = list(state.get("errors", []))
     tool_results = dict(state.get("tool_results", {}))
 
-    # Run Student 1's lightweight agent
-    try:
-        extraction = run_data_extraction_agent(_extraction_request_from_state(state))
-        tool_results["data_extraction_agent"] = extraction
-    except Exception as e:
-        extraction = {"status": "SKIPPED", "error": str(e)}
+    # The graph retrieves canonical SKU data below. Product-specific extraction
+    # is available separately and must not substitute a default product/batch.
 
     try:
         inv_input = state.get("inventory_data", {})
@@ -75,8 +71,11 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
             or inv_input.get("materialId")
             or inv_input.get("itemCode")
             or (material_match.group(1).upper() if material_match else None)
-            or "RM-STEEL-001"
+            or None
         )
+
+        if not material_id:
+            raise ValueError("Select an exact material before starting procurement")
 
         # Tool 1: get_inventory_levels()
         levels = get_inventory_levels.invoke({"materialId": material_id})
@@ -89,7 +88,7 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
 
         # Tool 3: calculate_burn_rate()
         burn = calculate_burn_rate.invoke({
-            "consumption": history.get("consumption", 2400.0),
+            "consumption": history.get("consumption", 0),
             "periodDays": history.get("periodDays", 30),
             "materialId": material_id
         })
@@ -97,9 +96,9 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         # Tool 4: detect_low_stock()
         current_stock = state.get("current_stock")
         low_stock_analysis = detect_low_stock.invoke({
-            "currentStock": levels.get("currentStock", current_stock or 350.0),
-            "minimumStock": levels.get("minimumStock", 200.0),
-            "burnRate": burn.get("burnRate", 80.0),
+            "currentStock": levels["currentStock"],
+            "minimumStock": levels["minimumStock"],
+            "burnRate": burn.get("burnRate", 0),
             "supplierLeadTime": 7.0,
             "materialId": material_id
         })
@@ -107,10 +106,10 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         # Read-only schedule context for next shift
         schedule = get_production_schedule.invoke({"shiftName": "Next shift"})
 
-        curr_stock = current_stock if current_stock is not None else levels.get("currentStock", 350.0)
-        min_stock = state.get("safety_stock") or levels.get("minimumStock", 200.0)
+        curr_stock = levels["currentStock"]
+        min_stock = state.get("safety_stock") if state.get("safety_stock") is not None else levels["minimumStock"]
         max_stock = levels.get("maximumStock", 1000.0)
-        req_qty = state.get("required_quantity") or inv_input.get("requiredQuantity") or max(500.0, float(max_stock - curr_stock))
+        req_qty = state.get("required_quantity") or inv_input.get("requiredQuantity") or max(0.0, float(max_stock - curr_stock))
 
         # Query real material name from PostgreSQL RawMaterials table
         item_name = levels.get("itemName") or "Industrial Raw Material"
@@ -124,17 +123,12 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
                 connect_timeout=2
             ) as conn:
                 with conn.cursor() as cur:
-                    cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (material_id, f"%{material_id}%"))
+                    cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s', (material_id.upper(),))
                     row = cur.fetchone()
                     if row:
                         item_name = row[0]
         except Exception:
-            if "STEEL" in material_id:
-                item_name = "Cold Rolled Steel Sheet"
-            elif "ALUM" in material_id:
-                item_name = "High-Tensile Aluminum Rod"
-            elif "POLY" in material_id:
-                item_name = "Industrial Polypropylene Pellets"
+            item_name = state.get("material_name") or item_name
 
         inventory_data: Dict[str, Any] = {
             "materialId": material_id,
@@ -145,14 +139,14 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
             "minimumStock": min_stock,
             "maximumStock": max_stock,
             "reorderThreshold": min_stock,
-            "burnRate": burn.get("burnRate", 80.0),
-            "burnRatePerHour": round(burn.get("burnRate", 80.0) / 8.0, 2),
-            "daysRemaining": low_stock_analysis.get("daysRemaining", 4.375),
-            "lowStock": low_stock_analysis.get("lowStock", True),
-            "status": "LOW_STOCK" if low_stock_analysis.get("lowStock", True) else "NORMAL",
+            "burnRate": burn.get("burnRate", 0),
+            "burnRatePerHour": round(burn.get("burnRate", 0) / 8.0, 2),
+            "daysRemaining": low_stock_analysis.get("daysRemaining"),
+            "lowStock": low_stock_analysis.get("lowStock", False),
+            "status": "LOW_STOCK" if low_stock_analysis.get("lowStock", False) else "NORMAL",
             "requiredQuantity": req_qty,
             "productionSchedule": schedule,
-            "unit": "KG"
+            "unit": state.get("unit") or "units"
         }
 
         tool_results["get_inventory_levels"] = levels

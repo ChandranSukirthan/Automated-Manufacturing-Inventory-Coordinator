@@ -41,7 +41,21 @@ class _HistoryClient:
 
 
 @pytest.fixture(autouse=True)
-def mock_inventory_read_boundary(monkeypatch):
+def mock_inventory_read_boundary(monkeypatch, tmp_path):
+    from ai.core.config import settings
+    from ai.graph import workflow
+    from ai.session_store import SessionStore
+    monkeypatch.setattr(settings, "demo_mode", True)
+    monkeypatch.setattr(settings, "db_port", 1)
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    monkeypatch.setattr(workflow, "sync_to_database", lambda *_: None)
+    monkeypatch.setattr(workflow, "save_procurement_outcome", lambda *_: None)
+    monkeypatch.setattr(workflow, "WORKFLOW_SESSIONS", SessionStore(tmp_path / "sessions.sqlite3"))
+    import psycopg
+    def offline_connection(*_args, **_kwargs):
+        raise psycopg.OperationalError("Database boundary is mocked for offline tests")
+    monkeypatch.setattr(psycopg, "connect", offline_connection)
     def live_level(material_id: str):
         return {
             "rawMaterialId": 1,
@@ -53,3 +67,18 @@ def mock_inventory_read_boundary(monkeypatch):
 
     monkeypatch.setattr(inventory_tools, "_get_live_stock_level", live_level)
     monkeypatch.setattr(inventory_tools.httpx, "Client", _HistoryClient)
+
+
+@pytest.fixture
+def auth_headers(monkeypatch):
+    import base64, hashlib, hmac, json, time
+    from ai.core.config import settings
+    monkeypatch.setattr(settings, "jwt_secret_key", "offline-tests-key-at-least-thirty-two-characters")
+    def encode(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
+    header = encode({"alg": "HS256", "typ": "JWT"})
+    payload = encode({"sub": "test-manager", "role": "SupplyChainManager", "exp": time.time() + 600,
+                      "iss": settings.jwt_issuer, "aud": settings.jwt_audience})
+    body = header + "." + payload
+    signature = base64.urlsafe_b64encode(hmac.new(settings.jwt_secret_key.encode(), body.encode(), hashlib.sha256).digest()).rstrip(b"=").decode()
+    return {"Authorization": "Bearer " + body + "." + signature}

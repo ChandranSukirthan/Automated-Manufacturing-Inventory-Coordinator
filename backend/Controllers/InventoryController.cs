@@ -55,43 +55,12 @@ namespace backend.Controllers
             if (!ModelState.IsValid) return BadRequest(ModelState);
             try
             {
-                // If catalogue selection is provided, generate using catalogue builder
-                if (request.PackagingTypeId.GetValueOrDefault() > 0
-                    && request.RawMaterialId.GetValueOrDefault() > 0
-                    && request.SkuNumber.GetValueOrDefault() > 0)
-                {
-                    var created = await _inventoryService.CreateInventoryItemFromSkuAsync(request);
-                    return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
-                }
-
-                // Direct creation (e.g. from Floor Worker UI)
-                if (string.IsNullOrWhiteSpace(request.Sku))
-                {
-                    return BadRequest(new { message = "SKU code is required." });
-                }
-                if (string.IsNullOrWhiteSpace(request.Name))
-                {
-                    return BadRequest(new { message = "Item name is required." });
-                }
-
-                var item = new InventoryItem
-                {
-                    Sku = request.Sku.Trim(),
-                    Name = request.Name.Trim(),
-                    Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
-                    PackagingTypeId = request.PackagingTypeId,
-                    RawMaterialId = request.RawMaterialId,
-                    SkuNumber = request.SkuNumber,
-                    StockLevel = request.StockLevel,
-                    ReorderThreshold = request.ReorderThreshold
-                };
-
-                var createdItem = await _inventoryService.CreateInventoryItemAsync(item);
-                return CreatedAtAction(nameof(GetItem), new { id = createdItem.Id }, createdItem);
+                var created = await _inventoryService.CreateInventoryItemFromSkuAsync(request);
+                return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
             }
             catch (System.Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(ex.Message);
             }
         }
 

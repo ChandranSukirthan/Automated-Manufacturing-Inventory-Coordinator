@@ -47,47 +47,7 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
       final list = await widget.service.getIncomingSupplies();
       if (mounted) {
         setState(() {
-          _supplies = list.isNotEmpty
-              ? list
-              : [
-                  // Fallback sample data if backend has no active POs yet
-                  IncomingSupplyItem(
-                    purchaseOrderId: 42,
-                    poNumber: 'PO-2026-0042',
-                    supplierName: 'Apex Packaging Materials Ltd',
-                    materialName: 'Food Grade BOPP Film',
-                    quantity: 1000.0,
-                    expectedDelivery: DateTime.now().add(const Duration(days: 3)),
-                    deliveryStatus: SupplyDeliveryStatus.inTransit,
-                    trackingNumber: 'TRK-APEX-9921',
-                    actualDeliveryDate: null,
-                    statusRemarks: 'Dispatched from regional warehouse via Express Freight',
-                  ),
-                  IncomingSupplyItem(
-                    purchaseOrderId: 39,
-                    poNumber: 'PO-2026-0039',
-                    supplierName: 'Global Polymers Corp',
-                    materialName: 'High-Density Polyethylene Resin',
-                    quantity: 2500.0,
-                    expectedDelivery: DateTime.now().add(const Duration(days: 6)),
-                    deliveryStatus: SupplyDeliveryStatus.expected,
-                    trackingNumber: 'TRK-GPC-4412',
-                    actualDeliveryDate: null,
-                    statusRemarks: 'Order confirmed and awaiting carrier pickup',
-                  ),
-                  IncomingSupplyItem(
-                    purchaseOrderId: 36,
-                    poNumber: 'PO-2026-0036',
-                    supplierName: 'BioPack Eco Solutions',
-                    materialName: 'Biodegradable Sealant Layer',
-                    quantity: 500.0,
-                    expectedDelivery: DateTime.now().subtract(const Duration(days: 1)),
-                    deliveryStatus: SupplyDeliveryStatus.received,
-                    trackingNumber: 'TRK-BIO-1082',
-                    actualDeliveryDate: DateTime.now().subtract(const Duration(days: 1)),
-                    statusRemarks: 'Delivered at Loading Bay 2. Awaiting QA inspection roll verification.',
-                  ),
-                ];
+          _supplies = list;
           _loading = false;
         });
       }

@@ -38,6 +38,7 @@ import {
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
 import ConfirmModal from '../../components/Common/ConfirmModal';
+import GoodsReceiptPanel from '../../components/PurchaseOrders/GoodsReceiptPanel';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import { useAuth } from '../../context/AuthContext';
 import { parseErrorMessage } from '../../utils/errorHandler';
@@ -117,11 +118,11 @@ export default function PurchaseOrderDetail() {
     fetchTrackingDetails();
 
     const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get('payment') === 'success') {
-      purchaseOrderService.processPayment(id).then(() => {
+    if (searchParams.get('session_id')) {
+      purchaseOrderService.confirmCheckout(id, searchParams.get('session_id')).then(() => {
         fetchPoDetails();
         fetchTrackingDetails();
-        setSlipSuccessMessage('Stripe Checkout successful! Payment verified and purchase order dispatched.');
+        setSlipSuccessMessage('Card payment confirmed. Check dispatch status below.');
       }).catch(err => setError(parseErrorMessage(err, 'Failed to complete payment settlement.')));
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -424,6 +425,19 @@ export default function PurchaseOrderDetail() {
         </div>
       }
     >
+      <GoodsReceiptPanel po={po} onReceived={async () => { await fetchPoDetails(); await fetchTrackingDetails(); }} />
+      {isManager && po.bankSlipStatus === 'SUBMITTED' && <button disabled={actionLoading} className="px-4 py-2 rounded bg-cyan-700 text-white" onClick={async () => {
+        setActionLoading(true);
+        try { await purchaseOrderService.verifyBankSlip(id); await fetchPoDetails(); await fetchTrackingDetails(); }
+        catch (err) { setError(parseErrorMessage(err, 'Could not verify bank evidence.')); }
+        finally { setActionLoading(false); }
+      }}>Confirm bank payment against bank records</button>}
+      {isManager && po.status === 'Paid' && po.emailStatus !== 'Sent' && <button disabled={actionLoading} className="px-4 py-2 rounded bg-cyan-700 text-white" onClick={async () => {
+        setActionLoading(true);
+        try { await purchaseOrderService.processPayment(id); await fetchPoDetails(); await fetchTrackingDetails(); }
+        catch (err) { setError(parseErrorMessage(err, 'Could not retry dispatch.')); }
+        finally { setActionLoading(false); }
+      }}>Retry supplier dispatch</button>}
       {/* Back button */}
       <div>
         <Link

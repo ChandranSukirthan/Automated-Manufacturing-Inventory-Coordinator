@@ -2,6 +2,10 @@ class WorkflowModel {
   final String id;
   final String workflowId;
   final String objective;
+  final String workflowType;
+  final String? machineId;
+  final int? purchaseOrderId;
+  bool get canAuthorizeMaintenance => workflowType == "Maintenance" && isWaitingForApproval && approvalStatus == "Pending";
   final String currentAgent;
   final String status;
   final String approvalStatus;
@@ -19,6 +23,9 @@ class WorkflowModel {
     required this.id,
     required this.workflowId,
     required this.objective,
+    this.workflowType = "Procurement",
+    this.machineId,
+    this.purchaseOrderId,
     required this.currentAgent,
     required this.status,
     required this.approvalStatus,
@@ -39,8 +46,14 @@ class WorkflowModel {
           .toList();
     }
 
+    final details = json['details'];
+    if (stepList.isEmpty && details is Map && details['completed_steps'] is List) {
+      final completed = details['completed_steps'] as List;
+      stepList = List.generate(completed.length, (i) => WorkflowStepModel(stepNumber: i + 1,
+        agentName: 'Recorded stage', status: 'Completed', output: completed[i].toString()));
+    }
     final idStr = json['id']?.toString() ?? '';
-    final wfId = json['workflowId']?.toString() ?? (idStr.length > 8 ? 'WF-${idStr.substring(0, 6).toUpperCase()}' : 'WF-1001');
+    final wfId = json['workflowId']?.toString() ?? idStr;
     final statusStr = json['status']?.toString() ?? 'Pending';
     final approvalStr = json['approvalStatus']?.toString() ?? 
         (json['isWaitingForApproval'] == true ? 'Waiting For Approval' : 'Pending');
@@ -50,13 +63,16 @@ class WorkflowModel {
     return WorkflowModel(
       id: idStr,
       workflowId: wfId,
+      workflowType: json['workflowType']?.toString() ?? 'Procurement',
+      machineId: json['machineId']?.toString(),
+      purchaseOrderId: (json['purchaseOrderId'] as num?)?.toInt(),
       objective: json['objective']?.toString() ?? 'Agent Workflow Task',
       currentAgent: json['currentAgent']?.toString() ?? 'Planner',
       status: statusStr,
       approvalStatus: approvalStr,
       finalOutcome: json['finalOutcome']?.toString() ?? json['result']?.toString(),
       currentStep: (json['currentStep'] as num?)?.toInt() ?? 0,
-      totalSteps: (json['totalSteps'] as num?)?.toInt() ?? (stepList.isNotEmpty ? stepList.length : 5),
+      totalSteps: (json['totalSteps'] as num?)?.toInt() ?? stepList.length,
       steps: stepList,
       isWaitingForApproval: waiting,
       createdAt: json['startedAt'] != null
@@ -70,6 +86,9 @@ class WorkflowModel {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'workflowType': workflowType,
+        'machineId': machineId,
+        'purchaseOrderId': purchaseOrderId,
         'workflowId': workflowId,
         'objective': objective,
         'currentAgent': currentAgent,

@@ -9,13 +9,17 @@ for _path_str in (str(_REPO_ROOT), str(_AI_DIR)):
         sys.path.insert(0, _path_str)
 
 import asyncio
+import os
 import logging
 import random
+import uuid
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Header
+from ai.security import require_actor
+from ai.core.request_context import set_authorization_header, reset_authorization_header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -69,21 +73,22 @@ async def autonomous_equipment_telemetry_scanner():
                     for m_id, name, uptime, interval in overdue_machines:
                         cur.execute("""
                             SELECT COUNT(*) FROM "AgentWorkflows"
-                            WHERE ("Objective" LIKE %s OR "Objective" LIKE %s)
+                            WHERE "MachineId" = %s AND "WorkflowType" = 'Maintenance'
                               AND "Status" = 'WaitingForApproval';
-                        """, (f"%{m_id}%", f"%{name}%"))
+                        """, (m_id,))
                         pending_count = cur.fetchone()[0]
                         if pending_count == 0:
                             short_id = str(m_id)[:4].upper()
                             clean_tag = "".join(c for c in name if c.isalnum())[:6].upper()
-                            wf_id = f"WF-AUTO-{clean_tag}-{short_id}"
+                            wf_id = f"WF-AUTO-{uuid.uuid4().hex[:24].upper()}"
                             objective = (
                                 f"Autonomous Telemetry Alert: {name} [MachineID: {m_id}] "
                                 f"has exceeded maintenance threshold ({int(uptime)}h / {int(interval)}h). "
                                 f"Requesting IT Admin approval for preventive overhaul."
                             )
                             print(f"[Scanner] Overdue: {name} ({uptime}h/{interval}h) -> {wf_id}")
-                            run_workflow(objective=objective, workflow_id=wf_id)
+                            await asyncio.to_thread(run_workflow, objective=objective, workflow_id=wf_id,
+                                                    workflow_type="Maintenance", machine_id=str(m_id))
         except Exception:
             pass
         await asyncio.sleep(15)
@@ -99,7 +104,11 @@ async def inventory_monitor_task():
     async with httpx.AsyncClient() as client:
         while True:
             try:
-                response = await client.get(INVENTORY_API_URL, timeout=5.0)
+                token = os.environ.get("AMIC_MONITOR_TOKEN")
+                if not token:
+                    await asyncio.sleep(CHECK_INTERVAL_SECONDS)
+                    continue
+                response = await client.get(INVENTORY_API_URL, timeout=5.0, headers={"Authorization": f"Bearer {token}"})
                 if response.status_code == 200:
                     for item in response.json():
                         stock = item.get("stockLevel", 0)
@@ -112,7 +121,7 @@ async def inventory_monitor_task():
                         else:
                             if sku in _active_alerted_skus:
                                 _active_alerted_skus.discard(sku)
-                            rate = _consumption_rate(sku)
+                            rate = 0.0  # Historical burn-rate analysis is performed by authenticated inventory tools.
                             if (stock - rate * 5) <= threshold:
                                 if sku not in _active_alerted_skus:
                                     await _send_alert(client, item, is_predictive=True)
@@ -130,7 +139,9 @@ async def _send_alert(client: httpx.AsyncClient, item: dict, is_predictive: bool
         "workerId": "Predictive Reorder Alert" if is_predictive else "Auto-Monitor-Bot",
     }
     try:
-        await client.post(ALERTS_API_URL, json=payload, timeout=5.0)
+        response = await client.post(ALERTS_API_URL, json=payload, timeout=5.0,
+            headers={"Authorization": f"Bearer {os.environ.get('AMIC_MONITOR_TOKEN', '')}"})
+        response.raise_for_status()
         logger.info(f"Alert sent for SKU {payload['sku']}")
     except Exception as e:
         logger.debug(f"Alert delivery note: {e}")
@@ -211,7 +222,15 @@ def init_db_tables():
 # ── App lifespan: start both background tasks ────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db_tables()
+    # The backend migrations own the shared PostgreSQL schema.
+    from ai.graph.workflow import WORKFLOW_SESSIONS, sync_to_database
+    for workflow_id in list(WORKFLOW_SESSIONS):
+        state = WORKFLOW_SESSIONS[workflow_id]
+        if state.get("status") == "Running":
+            state.update(status="Failed", current_agent="Interrupted",
+                         errors=["Service restarted during execution. Retry to resume with fresh authorization."])
+            WORKFLOW_SESSIONS[workflow_id] = state
+            sync_to_database(state)
     scanner = asyncio.create_task(autonomous_equipment_telemetry_scanner())
     monitor = asyncio.create_task(inventory_monitor_task())
     yield
@@ -324,11 +343,15 @@ async def extract_data_agent_workflow(request: DataExtractionRequest):
         raise HTTPException(status_code=500, detail=str(ex))
 
 
-@app.post("/api/agent/workflow/run")
-async def trigger_agent_workflow(request: WorkflowTriggerRequest):
+@app.post("/api/agent/workflow/run", dependencies=[Depends(require_actor)])
+async def trigger_agent_workflow(request: WorkflowTriggerRequest, authorization: Optional[str] = Header(default=None)):
     """Trigger end-to-end multi-agent workflow for a material/batch."""
     try:
-        result_state = run_data_extraction_workflow(request.materialId, request.workflowId)
+        token = set_authorization_header(authorization)
+        try:
+            result_state = await asyncio.to_thread(run_data_extraction_workflow, request.materialId, request.workflowId)
+        finally:
+            reset_authorization_header(token)
         saved = workflow_repo.save_workflow(result_state)
         return {"status": "success", "workflow": saved}
     except Exception as ex:
@@ -336,7 +359,7 @@ async def trigger_agent_workflow(request: WorkflowTriggerRequest):
         raise HTTPException(status_code=500, detail=str(ex))
 
 
-@app.get("/api/agent/workflow/{workflow_id}")
+@app.get("/api/agent/workflow/{workflow_id}", dependencies=[Depends(require_actor)])
 async def get_workflow_state(workflow_id: str):
     """Get persisted workflow by ID."""
     record = workflow_repo.get_workflow(workflow_id)
@@ -345,7 +368,7 @@ async def get_workflow_state(workflow_id: str):
     return record
 
 
-@app.get("/api/agent/workflows")
+@app.get("/api/agent/workflows", dependencies=[Depends(require_actor)])
 async def list_agent_workflows():
     """List all persisted workflow records."""
     return workflow_repo.list_workflows()

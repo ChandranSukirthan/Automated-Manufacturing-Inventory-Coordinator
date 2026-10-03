@@ -52,44 +52,26 @@ def get_inventory_levels(materialId: str) -> Dict[str, Any]:
     return out.model_dump()
 
 
-_OFFLINE_STOCK_CATALOG: Dict[str, Dict[str, Any]] = {
-    "RM-STEEL-001": {"skuCode": "RM-STEEL-001", "rawMaterialId": 1, "currentStock": 350.0, "minimumStock": 200.0, "maximumStock": 1000.0, "consumption": 2400.0},
-    "RM-ALUM-002": {"skuCode": "RM-ALUM-002", "rawMaterialId": 2, "currentStock": 350.0, "minimumStock": 200.0, "maximumStock": 1000.0, "consumption": 560.0},
-    "RM-POLY-003": {"skuCode": "RM-POLY-003", "rawMaterialId": 3, "currentStock": 450.0, "minimumStock": 300.0, "maximumStock": 1200.0, "consumption": 1800.0},
-    "RM-IRON-001": {"skuCode": "RM-IRON-001", "rawMaterialId": 4, "currentStock": 200.0, "minimumStock": 150.0, "maximumStock": 800.0, "consumption": 600.0},
-}
-
-
 def _get_live_stock_level(material_id: str) -> Dict[str, Any]:
-    """Return the exact stock-level record for one material from the API with offline fallback."""
-    try:
-        with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
-            response = client.get(
-                f"{INVENTORY_API_URL}/stock-levels",
-                headers=inventory_api_headers(),
-            )
-            response.raise_for_status()
-            levels = response.json()
-            if isinstance(levels, list):
-                for level in levels:
-                    sku = str(level.get("skuCode", "")).upper()
-                    raw_material_id = str(level.get("rawMaterialId", ""))
-                    if material_id == sku or material_id == raw_material_id:
-                        return level
-    except Exception as ex:
-        logger.warning(f"Inventory API unreachable ({ex}). Using offline catalog fallback for {material_id}.")
+    """Return the exact stock-level record for one material from the API."""
+    with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+        response = client.get(
+            f"{INVENTORY_API_URL}/stock-levels",
+            headers=inventory_api_headers(),
+        )
+        response.raise_for_status()
+        levels = response.json()
 
-    # Fallback to offline catalog
-    for k, v in _OFFLINE_STOCK_CATALOG.items():
-        if material_id == k or str(v.get("rawMaterialId")) == material_id:
-            return v
-    return {
-        "skuCode": material_id,
-        "rawMaterialId": 1,
-        "currentStock": 350.0,
-        "minimumStock": 200.0,
-        "maximumStock": 1000.0,
-    }
+    if not isinstance(levels, list):
+        raise ValueError("The inventory API returned an invalid stock-level response.")
+
+    for level in levels:
+        sku = str(level.get("skuCode", "")).upper()
+        raw_material_id = str(level.get("rawMaterialId", ""))
+        if material_id == sku or material_id == raw_material_id:
+            return level
+
+    raise ValueError(f"No live stock level exists for material '{material_id}'.")
 
 
 # ── TOOL 2: query_inventory_history() ──────────────────────────────────────
@@ -110,45 +92,36 @@ def query_inventory_history(materialId: str, periodDays: int = 7) -> Dict[str, A
     if raw_material_id is None:
         raise ValueError(f"The live stock level for '{safe_id}' has no material ID.")
 
-    try:
-        with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
-            response = client.get(
-                f"{INVENTORY_API_URL}/{raw_material_id}/history",
-                headers=inventory_api_headers(),
-            )
-            response.raise_for_status()
-            history = response.json()
+    with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+        response = client.get(
+            f"{INVENTORY_API_URL}/{raw_material_id}/history",
+            headers=inventory_api_headers(),
+        )
+        response.raise_for_status()
+        history = response.json()
 
-        if isinstance(history, list):
-            cutoff = datetime.now(timezone.utc) - timedelta(days=safe_period)
-            total_consumption = 0.0
-            for entry in history:
-                if str(entry.get("transactionType", "")).upper() != "CONSUMED":
-                    continue
-                raw_date = entry.get("date")
-                try:
-                    occurred_at = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
-                except (TypeError, ValueError):
-                    continue
-                if occurred_at.tzinfo is None:
-                    occurred_at = occurred_at.replace(tzinfo=timezone.utc)
-                if occurred_at >= cutoff:
-                    total_consumption += float(entry.get("quantity") or 0)
+    if not isinstance(history, list):
+        raise ValueError("The inventory API returned an invalid history response.")
 
-            out = InventoryHistoryOutput(
-                materialId=str(level.get("skuCode") or safe_id),
-                periodDays=safe_period,
-                consumption=round(total_consumption, 2),
-            )
-            return out.model_dump()
-    except Exception as ex:
-        logger.warning(f"Inventory history API unreachable ({ex}). Using offline fallback for {safe_id}.")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=safe_period)
+    total_consumption = 0.0
+    for entry in history:
+        if str(entry.get("transactionType", "")).upper() != "CONSUMED":
+            continue
+        raw_date = entry.get("date")
+        try:
+            occurred_at = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        if occurred_at >= cutoff:
+            total_consumption += float(entry.get("quantity") or 0)
 
-    default_consumption = _OFFLINE_STOCK_CATALOG.get(safe_id, {}).get("consumption", 560.0)
     out = InventoryHistoryOutput(
         materialId=str(level.get("skuCode") or safe_id),
         periodDays=safe_period,
-        consumption=round(default_consumption, 2),
+        consumption=round(total_consumption, 2),
     )
     return out.model_dump()
 

@@ -11,9 +11,7 @@ namespace backend.Models
         // Foreign Key
         public int RawMaterialId { get; set; }
 
-        // Batch tracking belongs to the production context. The legacy
-        // inventory table does not store this value.
-        [NotMapped]
+        // Persisted batch identity connects physical receipts and QA records.
         public string? BatchId { get; set; }
         
         [JsonIgnore]

@@ -41,17 +41,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             if (isPlaceholder)
             {
-                var simulatedId = $"pi_sandbox_{Guid.NewGuid():N}";
-                _logger.LogInformation(
-                    "Stripe sandbox simulation active (placeholder API key detected). Simulating payment {Amount} {Currency} -> {SimulatedId}",
-                    amount, currency, simulatedId);
-
-                return new StripePaymentResult(
-                    Success: true,
-                    PaymentIntentId: simulatedId,
-                    Status: "succeeded",
-                    ErrorMessage: null
-                );
+                return new StripePaymentResult(false, null, "unavailable", "Configure a valid Stripe key before processing payment.");
             }
 
             try
@@ -83,7 +73,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     paymentIntent.Id, paymentIntent.Status);
 
                 return new StripePaymentResult(
-                    Success: paymentIntent.Status is "requires_payment_method" or "succeeded" or "requires_confirmation",
+                    Success: paymentIntent.Status == "succeeded",
                     PaymentIntentId: paymentIntent.Id,
                     Status: paymentIntent.Status,
                     ErrorMessage: null
@@ -92,21 +82,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             catch (StripeException ex)
             {
                 _logger.LogError(ex, "Stripe payment failed: {Message}", ex.Message);
-
-                // If authentication fails due to invalid/placeholder test credentials during local evaluation, fall back to sandbox simulation
-                if (ex.Message.Contains("Invalid API Key", StringComparison.OrdinalIgnoreCase) ||
-                    ex.StripeError?.Code == "api_key_expired" ||
-                    ex.HttpStatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    var fallbackId = $"pi_sandbox_fallback_{Guid.NewGuid():N}";
-                    _logger.LogWarning("Stripe authorization rejected key. Falling back to sandbox simulation: {Id}", fallbackId);
-                    return new StripePaymentResult(
-                        Success: true,
-                        PaymentIntentId: fallbackId,
-                        Status: "succeeded",
-                        ErrorMessage: null
-                    );
-                }
 
                 return new StripePaymentResult(
                     Success: false,

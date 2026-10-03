@@ -34,6 +34,8 @@ def get_production_schedule(shiftName: str = "Next shift") -> Dict[str, Any]:
     checks whether low stock could affect the upcoming shift.
     """
 
+    if not settings.demo_mode:
+        return query_production_schedule()
     return {
         "shiftName": shiftName.strip(),
         "status": "Scheduled",
@@ -90,20 +92,21 @@ def query_production_schedule(date_str: Optional[str] = None, machine_id: str = 
                 row = cur.fetchone()
                 if row:
                     planned_output = int(row[0])
-                    # required material proportional to planned output
-                    req_material = int(planned_output * 0.2)
                     return {
                         "productionDate": prod_date,
-                        "machineId": machine_id,
                         "plannedOutput": planned_output,
-                        "requiredMaterial": req_material
+                        "requiredMaterial": None,
+                        "availableMaterial": int(row[1]),
+                        "machineId": None
                     }
         except Exception:
             pass
         finally:
             conn.close()
 
-    # Standard / Prompt default format
+    if not settings.demo_mode:
+        return {"available": False, "reason": "No matching production schedule is available", "requiredMaterials": []}
+    # Demo fixture
     return {
         "productionDate": prod_date,
         "machineId": machine_id,
@@ -125,18 +128,20 @@ def calculate_machine_uptime(machine_id: str = "M001") -> Dict[str, Any]:
     if conn:
         try:
             with conn.cursor() as cur:
-                cur.execute('SELECT "UptimeHours" FROM "Machines" WHERE "Name" LIKE %s OR "Id"::text = %s LIMIT 1', (f"%{machine_id}%", machine_id))
+                cur.execute('SELECT "UptimeHours", "MaintenanceIntervalHours" FROM "Machines" WHERE "Id"::text = %s LIMIT 1', (machine_id,))
                 row = cur.fetchone()
                 if row:
                     return {
                         "machineId": machine_id,
-                        "uptimeHours": float(row[0])
+                        "uptimeHours": float(row[0]), "maintenanceIntervalHours": float(row[1])
                     }
         except Exception:
             pass
         finally:
             conn.close()
 
+    if not settings.demo_mode:
+        return {"available": False, "machineId": machine_id, "reason": "No matching machine telemetry is available"}
     return {
         "machineId": machine_id,
         "uptimeHours": 480.0

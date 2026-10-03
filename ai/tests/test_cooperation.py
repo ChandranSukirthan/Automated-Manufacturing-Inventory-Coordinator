@@ -57,14 +57,14 @@ def test_agent_cooperation_and_data_passing():
 
     # 5. Verify Student 3 (Validation) audited the PO and routed to approval gate
     validation_results = result.get("validation_results", {})
-    assert "qualitySafetyStatus" in validation_results
+    assert "qualitySafetyStatus" in validation_results, result.get("errors")
     assert result.get("requires_approval") is True
     assert result.get("status") == WorkflowStatus.WaitingForApproval
 
     # 6. Verify Human Approval resumes and completes workflow
     resumed = approve_and_resume(wf_id)
     assert resumed is not None
-    assert resumed["status"] == WorkflowStatus.Completed
+    assert resumed["status"] == WorkflowStatus.WaitingForApproval
     assert resumed["approval_status"] == ApprovalStatus.Approved
     assert any("Execution: PO" in step for step in resumed["completed_steps"])
 

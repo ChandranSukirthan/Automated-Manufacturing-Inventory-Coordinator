@@ -67,85 +67,28 @@ namespace backend.Services
 
         public async Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item)
         {
-            var cleanSku = (item.Sku ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(cleanSku))
-            {
-                throw new InvalidOperationException("SKU is required.");
-            }
-
-            if (await _context.InventoryItems.AnyAsync(i => i.Sku.ToLower() == cleanSku.ToLower()))
-            {
-                throw new InvalidOperationException($"SKU {cleanSku} already exists.");
-            }
-
-            item.Sku = cleanSku;
-
-            // Link existing RawMaterial if matching SkuCode exists
-            if (!item.RawMaterialId.HasValue || item.RawMaterialId.Value <= 0)
-            {
-                var existingRawMaterial = await _context.RawMaterials
-                    .FirstOrDefaultAsync(m => m.SkuCode.ToLower() == cleanSku.ToLower());
-                if (existingRawMaterial != null)
-                {
-                    item.RawMaterialId = existingRawMaterial.Id;
-                    item.PackagingTypeId = existingRawMaterial.PackagingTypeId;
-                }
-            }
-
             _context.InventoryItems.Add(item);
             await _context.SaveChangesAsync();
-
-            // Auto-generate low stock alert if below or at reorder threshold
-            if (item.StockLevel <= item.ReorderThreshold)
-            {
-                var hasActiveAlert = await _context.StockAlerts
-                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
-                if (!hasActiveAlert)
-                {
-                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
-                    _context.StockAlerts.Add(new StockAlert
-                    {
-                        Sku = cleanSku,
-                        PackagingType = string.IsNullOrWhiteSpace(item.Category) ? "Standard Roll" : item.Category,
-                        QuantityRequested = reqQty,
-                        CurrentStock = item.StockLevel,
-                        RequiredQuantity = reqQty,
-                        SafetyStock = item.ReorderThreshold,
-                        MaterialName = item.Name,
-                        WorkerId = "Automated Low-Stock Detector",
-                        Status = "Pending",
-                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
-                        Timestamp = DateTime.UtcNow
-                    });
-                    await _context.SaveChangesAsync();
-                }
-            }
-
             return item;
         }
 
         public async Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request)
         {
-            if (!request.PackagingTypeId.HasValue || !request.RawMaterialId.HasValue || !request.SkuNumber.HasValue)
-            {
-                throw new InvalidOperationException("PackagingTypeId, RawMaterialId, and SkuNumber are required to create from catalogue.");
-            }
-
             var packagingType = await _context.PackagingTypes
-                .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId.Value && type.IsActive);
+                .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId && type.IsActive);
             if (packagingType == null)
             {
                 throw new InvalidOperationException("The selected packaging type was not found.");
             }
 
             var materialTemplate = await _context.RawMaterials
-                .FirstOrDefaultAsync(material => material.Id == request.RawMaterialId.Value);
+                .FirstOrDefaultAsync(material => material.Id == request.RawMaterialId);
             if (materialTemplate == null || materialTemplate.PackagingTypeId != packagingType.Id)
             {
                 throw new InvalidOperationException("The selected raw material is not available for that packaging type.");
             }
 
-            var sku = BuildSku(packagingType.ShortCode, materialTemplate.MaterialCode, request.SkuNumber.Value);
+            var sku = BuildSku(packagingType.ShortCode, materialTemplate.MaterialCode, request.SkuNumber);
             if (await _context.InventoryItems.AnyAsync(item => item.Sku == sku))
             {
                 throw new InvalidOperationException($"SKU {sku} already exists. Enter the next sequence number.");
@@ -177,14 +120,14 @@ namespace backend.Services
                 await _context.SaveChangesAsync();
             }
 
-            var item = new InventoryItem
+var item = new InventoryItem
             {
                 Sku = sku,
                 Name = materialSku.Name,
                 Category = packagingType.Name,
                 PackagingTypeId = packagingType.Id,
                 RawMaterialId = materialSku.Id,
-                SkuNumber = request.SkuNumber.Value,
+                SkuNumber = request.SkuNumber,
                 StockLevel = request.StockLevel,
                 ReorderThreshold = request.ReorderThreshold,
             };
@@ -229,6 +172,13 @@ var existing = await _context.InventoryItems.FindAsync(id);
             // Packaging type, raw material and the server-generated SKU are
             // immutable after creation. Stock counts are the only editable
             // values on an existing material SKU.
+            if (item.StockLevel < 0 || item.ReorderThreshold < 0)
+                throw new InvalidOperationException("Stock and reorder threshold cannot be negative.");
+            var adjustment = item.StockLevel - existing.StockLevel;
+            if (adjustment != 0)
+                _context.InventoryMovements.Add(new InventoryMovement { RawMaterialId = existing.RawMaterialId ?? 0,
+                    TransactionType = "ADJUSTED", Quantity = adjustment, PreviousStock = existing.StockLevel,
+                    NewStock = item.StockLevel, Reason = "Manual stock adjustment" });
             existing.StockLevel = item.StockLevel;
             existing.ReorderThreshold = item.ReorderThreshold;
             await _context.SaveChangesAsync();
@@ -266,6 +216,10 @@ var existing = await _context.InventoryItems.FindAsync(id);
         {
             var item = await _context.InventoryItems.FindAsync(id);
             if (item == null) return false;
+            if (await _context.InventoryRolls.AnyAsync(r => r.RawMaterialId == item.RawMaterialId))
+                throw new InvalidOperationException("This SKU has physical rolls. Remove eligible rolls before deleting the SKU.");
+            if (_appContext != null && await _appContext.OrderLines.AnyAsync(l => l.RawMaterialId == item.RawMaterialId))
+                throw new InvalidOperationException("This SKU has purchase-order history and cannot be deleted.");
             _context.InventoryItems.Remove(item);
             await _context.SaveChangesAsync();
             return true;
@@ -489,22 +443,6 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             _context.RawMaterials.Add(material);
             await _context.SaveChangesAsync();
 
-            // Sync with InventoryItems
-            if (!string.IsNullOrWhiteSpace(material.SkuCode) &&
-                !await _context.InventoryItems.AnyAsync(i => i.Sku.ToLower() == material.SkuCode.Trim().ToLower()))
-            {
-                var initialStock = material.ReorderThreshold > 0 ? (int)(material.ReorderThreshold * 2) : 500;
-                _context.InventoryItems.Add(new InventoryItem
-                {
-                    Sku = material.SkuCode.Trim(),
-                    Name = material.Name,
-                    Category = material.Category ?? "Metal",
-                    StockLevel = initialStock,
-                    ReorderThreshold = material.ReorderThreshold > 0 ? (int)material.ReorderThreshold : 50
-                });
-                await _context.SaveChangesAsync();
-            }
-
             return material;
         }
 
@@ -543,6 +481,9 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             var existing = await _context.RawMaterials.FindAsync(id);
             if (existing == null) return false;
 
+            if (await _context.InventoryRolls.AnyAsync(r => r.RawMaterialId == id) ||
+                (_appContext != null && await _appContext.OrderLines.AnyAsync(l => l.RawMaterialId == id)))
+                throw new InvalidOperationException("This material has roll or order history and cannot be deleted.");
             var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku.ToLower() == existing.SkuCode.ToLower());
             if (item != null)
             {
@@ -717,8 +658,11 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             // Registering a physical roll is a goods-received event. The roll
             // gives the incoming stock its QR traceability and its quantity is
             // added to the same SKU balance shown by Stock Levels.
-            inventoryItem.StockLevel = checked(
-                inventoryItem.StockLevel + decimal.ToInt32(roll.InitialQuantity));
+            var previousStock = inventoryItem.StockLevel;
+            inventoryItem.StockLevel = checked(previousStock + decimal.ToInt32(roll.InitialQuantity));
+            _context.InventoryMovements.Add(new InventoryMovement { RawMaterialId = roll.RawMaterialId,
+                RollIdentifier = roll.RollIdentifier, TransactionType = "RECEIVED", Quantity = roll.InitialQuantity,
+                PreviousStock = previousStock, NewStock = inventoryItem.StockLevel, Reason = "Physical roll received" });
             rawMaterial.UpdatedAt = DateTime.UtcNow;
             _context.InventoryRolls.Add(roll);
             try
@@ -740,23 +684,51 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
         public async Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll)
         {
             if (id != roll.Id) return false;
-            var existing = await _context.InventoryRolls.FindAsync(id);
+            var existing = await _context.InventoryRolls.Include(r => r.RawMaterial).FirstOrDefaultAsync(r => r.Id == id);
             if (existing == null) return false;
 
+            if (existing.Status == "Quarantined" || existing.Status == "Locked" || existing.Status == "On Hold")
+                throw new InvalidOperationException("QA must release a held roll before it can be edited.");
+            if (roll.CurrentQuantity < 0 || roll.InitialQuantity != existing.InitialQuantity ||
+                roll.CurrentQuantity > existing.InitialQuantity || roll.CurrentQuantity != decimal.Truncate(roll.CurrentQuantity))
+                throw new InvalidOperationException("Remaining quantity must be a whole number between zero and the original received quantity. Received quantity is immutable.");
+            if (roll.Status is not ("In Stock" or "In Production" or "Depleted"))
+                throw new InvalidOperationException("Use the quality workflow to quarantine or release inventory.");
+            var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.RawMaterialId == existing.RawMaterialId ||
+                i.Sku == existing.RawMaterial!.SkuCode);
+            if (item == null) throw new InvalidOperationException("The roll's SKU balance was not found.");
+            var delta = roll.CurrentQuantity - existing.CurrentQuantity;
+            var previous = item.StockLevel;
+            var next = checked(previous + decimal.ToInt32(delta));
+            if (next < 0) throw new InvalidOperationException("This change would make stock negative. Reconcile stock first.");
+            item.StockLevel = next;
+            _context.InventoryMovements.Add(new InventoryMovement { RawMaterialId = existing.RawMaterialId,
+                RollIdentifier = existing.RollIdentifier, TransactionType = delta < 0 ? "CONSUMED" : "ADJUSTED",
+                Quantity = delta < 0 ? -delta : delta, PreviousStock = previous, NewStock = next,
+                Reason = "Roll quantity updated" });
             existing.CurrentQuantity = roll.CurrentQuantity;
-            existing.InitialQuantity = roll.InitialQuantity;
-            existing.Status = roll.Status;
+            existing.Status = roll.CurrentQuantity == 0 ? "Depleted" : roll.Status;
             existing.UpdatedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
             return true;
         }
 
         public async Task<bool> DeleteInventoryRollAsync(int id)
         {
-            var roll = await _context.InventoryRolls.FindAsync(id);
+            var roll = await _context.InventoryRolls.Include(r => r.RawMaterial).FirstOrDefaultAsync(r => r.Id == id);
             if (roll == null) return false;
-
+            if (roll.Status == "Quarantined" || roll.Status == "Locked" || roll.Status == "On Hold" ||
+                (_appContext != null && (await _appContext.Quarantines.AnyAsync(q => q.InventoryRollId == roll.RollIdentifier) ||
+                    await _appContext.GoodsReceipts.AnyAsync(g => g.RollIdentifier == roll.RollIdentifier))))
+                throw new InvalidOperationException("This roll has quality or receipt history and cannot be deleted.");
+            var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku == roll.RawMaterial!.SkuCode);
+            if (item == null || item.StockLevel < roll.CurrentQuantity)
+                throw new InvalidOperationException("Reconcile the SKU balance before removing this roll.");
+            var previous = item.StockLevel;
+            item.StockLevel -= decimal.ToInt32(roll.CurrentQuantity);
+            _context.InventoryMovements.Add(new InventoryMovement { RawMaterialId = roll.RawMaterialId,
+                RollIdentifier = roll.RollIdentifier, TransactionType = "REMOVED", Quantity = roll.CurrentQuantity,
+                PreviousStock = previous, NewStock = item.StockLevel, Reason = "Roll registration removed" });
             _context.InventoryRolls.Remove(roll);
             await _context.SaveChangesAsync();
             return true;
@@ -936,6 +908,12 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
 
         public async Task<IEnumerable<InventoryHistoryItemDto>> GetInventoryHistoryAsync(int rawMaterialId)
         {
+            var movements = await _context.InventoryMovements.Where(m => m.RawMaterialId == rawMaterialId)
+                .OrderByDescending(m => m.CreatedAt).ToListAsync();
+            if (movements.Count > 0)
+                return movements.Select(m => new InventoryHistoryItemDto { Date = m.CreatedAt,
+                    TransactionType = m.TransactionType, Quantity = m.Quantity, PreviousStock = m.PreviousStock,
+                    NewStock = m.NewStock, Reason = m.Reason, User = "Inventory operations" }).ToList();
             var material = await _context.RawMaterials
                 .Include(r => r.InventoryRolls)
                 .FirstOrDefaultAsync(r => r.Id == rawMaterialId);
@@ -1036,9 +1014,29 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+                var item = await _context.InventoryItems.SingleOrDefaultAsync(i => i.Sku == materialSku);
+                var incoming = _appContext == null ? 0m : await _appContext.OrderLines
+                    .Where(l => l.RawMaterialId == material.Id &&
+                        (l.PurchaseOrder.Status == PurchaseOrderStatus.Approved || l.PurchaseOrder.Status == PurchaseOrderStatus.Payment ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.Paid || l.PurchaseOrder.Status == PurchaseOrderStatus.Sent ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.InTransit))
+                    .SumAsync(l => l.Quantity);
+                var alreadyReceived = _appContext == null ? 0m : await _appContext.GoodsReceipts
+                    .Where(r => _appContext.OrderLines.Any(l => l.Id == r.OrderLineId && l.RawMaterialId == material.Id &&
+                        l.PurchaseOrder.Status == PurchaseOrderStatus.InTransit)).SumAsync(r => r.Quantity);
+                var deficit = Math.Max(0m, dto.RequiredQuantity + (item?.ReorderThreshold ?? 0) -
+                    (item?.StockLevel ?? 0) - Math.Max(0, incoming - alreadyReceived));
                 var payload = new
                 {
                     objective = objective,
+                    background = true,
+                    materialName = materialName,
+                    currentStock = item?.StockLevel ?? 0,
+                    safetyStock = item?.ReorderThreshold ?? 0,
+                    openPOQuantity = Math.Max(0, incoming - alreadyReceived),
+                    netDeficit = deficit,
+                    budgetLimit = _configuration.GetValue<decimal>("Procurement:DefaultBudgetLimit", 15000m),
+                    unit = material.UnitOfMeasure,
                     material_id = materialSku,
                     required_quantity = (double)draftQty
                 };
@@ -1110,122 +1108,11 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 throw new HttpRequestException("The AI agent returned a workflow without an ID.");
             }
 
-            // 3. Create or Sync Purchase Order in ApplicationDbContext for Supply Chain Manager
-            int? createdPoId = null;
-            string? finalPoNumber = null;
-            decimal totalAmount = draftQty * draftUnitPrice;
-
-            if (_appContext != null &&
-                !string.IsNullOrWhiteSpace(draftSupplierCode) &&
-                !string.IsNullOrWhiteSpace(draftSupplierName) &&
-                draftUnitPrice > 0)
-            {
-                try
-                {
-                    // Find matching Supplier in Database
-                    var supplier = await _appContext.Suppliers
-                        .FirstOrDefaultAsync(s => s.SupplierCode == draftSupplierCode)
-                        ?? await _appContext.Suppliers
-                            .FirstOrDefaultAsync(s => s.Name.ToLower().Contains(draftSupplierName.ToLower()))
-                        ?? await _appContext.Suppliers.FirstOrDefaultAsync(s => s.IsActive)
-                        ?? await _appContext.Suppliers.FirstOrDefaultAsync();
-
-                    if (supplier != null && material != null)
-                    {
-                        var poCount = await _appContext.PurchaseOrders.CountAsync();
-                        finalPoNumber = !string.IsNullOrWhiteSpace(draftPoNumber)
-                            ? draftPoNumber
-                            : $"PO-{DateTime.UtcNow:yyyy}-{(poCount + 1):D4}";
-
-                        // Check if PO exists with this number
-                        var existingPo = await _appContext.PurchaseOrders.FirstOrDefaultAsync(p => p.PoNumber == finalPoNumber);
-                        if (existingPo == null)
-                        {
-                            var po = new ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder
-                            {
-                                PoNumber = finalPoNumber,
-                                SupplierId = supplier.Id,
-                                Currency = "USD",
-                                BudgetLimit = 15000m,
-                                ApprovalThreshold = 5000m,
-                                RequiresApproval = true,
-                                Status = PurchaseOrderStatus.PendingApproval,
-                                Notes = $"[AI Replenishment Order] Workflow: {wfId}. {objective}",
-                                TotalCost = totalAmount,
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            };
-
-                            po.OrderLines.Add(new ManufacturingCoordinator.Models.PurchaseOrders.OrderLine
-                            {
-                                RawMaterialId = material.Id,
-                                Description = $"AI Multi-Agent Autonomous Replenishment for {material.Name} ({material.SkuCode})",
-                                Quantity = draftQty,
-                                UnitPrice = draftUnitPrice,
-                                TotalPrice = totalAmount,
-                                CreatedAt = DateTime.UtcNow,
-                                UpdatedAt = DateTime.UtcNow
-                            });
-
-                            _appContext.PurchaseOrders.Add(po);
-                            await _appContext.SaveChangesAsync();
-                            createdPoId = po.Id;
-
-                            // Add audit trail record
-                            _appContext.PurchaseOrderApprovals.Add(new ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrderApproval
-                            {
-                                PurchaseOrderId = po.Id,
-                                Action = "PendingApproval",
-                                Notes = $"Autonomous AI workflow {wfId} generated replenishment draft. Pending Supply Chain Manager approval.",
-                                Timestamp = DateTime.UtcNow
-                            });
-                            await _appContext.SaveChangesAsync();
-
-                            _logger.LogInformation("Created PendingApproval PurchaseOrder {PoNumber} (ID: {PoId}) from AI workflow {WfId}", po.PoNumber, po.Id, wfId);
-                        }
-                        else
-                        {
-                            createdPoId = existingPo.Id;
-                            finalPoNumber = existingPo.PoNumber;
-                        }
-                    }
-
-                    // Sync or update StockAlert status to 'Processing' so UI shows active replenishment
-                    var alertsToUpdate = await _context.StockAlerts
-                        .Where(a => a.Sku == materialSku && (a.Status == "Pending" || a.Status == "Acknowledged"))
-                        .ToListAsync();
-
-                    if (alertsToUpdate.Any())
-                    {
-                        foreach (var a in alertsToUpdate)
-                        {
-                            a.Status = "Processing";
-                        }
-                    }
-                    else
-                    {
-                        var hasProcessing = await _context.StockAlerts
-                            .AnyAsync(a => a.Sku == materialSku && a.Status == "Processing");
-                        if (!hasProcessing)
-                        {
-                            _context.StockAlerts.Add(new StockAlert
-                            {
-                                Sku = materialSku,
-                                PackagingType = material!.Category,
-                                QuantityRequested = (int)draftQty,
-                                Status = "Processing",
-                                WorkerId = "Auto-Replenish-Bot",
-                                Timestamp = DateTime.UtcNow
-                            });
-                        }
-                    }
-                    await _context.SaveChangesAsync();
-                }
-                catch (Exception dbEx)
-                {
-                    _logger.LogError(dbEx, "Failed to persist pending PurchaseOrder for AI replenishment workflow");
-                }
-            }
+            int? createdPoId = _appContext == null ? null :
+                await new ManufacturingCoordinator.Services.PurchaseOrders.WorkflowDraftService(_appContext).FinalizeAsync(wfId);
+            var linkedPo = createdPoId.HasValue ? await _appContext!.PurchaseOrders.FindAsync(createdPoId.Value) : null;
+            string? finalPoNumber = linkedPo?.PoNumber;
+            decimal totalAmount = linkedPo?.TotalCost ?? 0m;
 
             return new
             {
@@ -1235,7 +1122,7 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 requires_approval = requiresApproval,
                 approval_status = approvalStatus,
                 purchase_order_id = createdPoId,
-                po_number = finalPoNumber ?? draftPoNumber ?? "PO-PENDING",
+                po_number = finalPoNumber ?? draftPoNumber,
                 supplier_name = draftSupplierName,
                 material_name = materialName,
                 material_sku = materialSku,

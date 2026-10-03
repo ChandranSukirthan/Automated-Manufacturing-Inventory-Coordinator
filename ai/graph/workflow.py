@@ -23,6 +23,16 @@ from langgraph.graph import StateGraph, START, END
 
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 from ai.core.config import settings
+from ai.session_store import SessionStore
+import threading
+import re
+
+_LOCKS_GUARD = threading.Lock()
+_WORKFLOW_LOCKS = {}
+
+def _workflow_lock(workflow_id):
+    with _LOCKS_GUARD:
+        return _WORKFLOW_LOCKS.setdefault(workflow_id, threading.RLock())
 from ai.agents.planner import planner_node
 from ai.agents.data_extraction import data_extraction_node
 from ai.agents.production_analysis import production_analysis_node
@@ -89,26 +99,21 @@ def sync_to_database(state: AgentState) -> None:
             connect_timeout=3,
         ) as conn:
             with conn.cursor() as cur:
-                try:
-                    cur.execute('ALTER TABLE "AgentWorkflows" ADD COLUMN IF NOT EXISTS "ValidationResults" text;')
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-
                 cur.execute(
                     """
                     INSERT INTO "AgentWorkflows"
                         ("Id", "WorkflowId", "Objective", "CurrentAgent", "Status",
-                         "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome", "ValidationResults")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome", "ValidationResults", "WorkflowType", "MachineId", "StateJson")
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT ("WorkflowId") DO UPDATE
                     SET "Objective"          = EXCLUDED."Objective",
                         "CurrentAgent"       = EXCLUDED."CurrentAgent",
                         "Status"             = EXCLUDED."Status",
                         "ApprovalStatus"     = EXCLUDED."ApprovalStatus",
-                        "CompletedAt"        = COALESCE(EXCLUDED."CompletedAt", "AgentWorkflows"."CompletedAt"),
+                        "CompletedAt"        = EXCLUDED."CompletedAt",
                         "FinalOutcome"       = EXCLUDED."FinalOutcome",
-                        "ValidationResults"  = COALESCE(EXCLUDED."ValidationResults", "AgentWorkflows"."ValidationResults");
+                        "ValidationResults"  = COALESCE(EXCLUDED."ValidationResults", "AgentWorkflows"."ValidationResults"),
+                        "WorkflowType" = EXCLUDED."WorkflowType", "MachineId" = EXCLUDED."MachineId", "StateJson" = EXCLUDED."StateJson";
                     """,
                     (
                         str(uuid.uuid4()),
@@ -121,6 +126,8 @@ def sync_to_database(state: AgentState) -> None:
                         completed_at,
                         state.get("final_outcome"),
                         validation_results_json,
+                        state.get("workflow_type", "Procurement"), state.get("machine_id"),
+                        json.dumps(dict(state), default=str),
                     ),
                 )
             conn.commit()
@@ -193,7 +200,7 @@ def _after_data_extraction(state: AgentState) -> str:
 
 
 def _after_purchasing(state: AgentState) -> str:
-    if state.get("status") == WorkflowStatus.Failed:
+    if state.get("status") in (WorkflowStatus.Failed, WorkflowStatus.WaitingForApproval, WorkflowStatus.Completed):
         return END
     return "validation"
 
@@ -210,6 +217,42 @@ def _after_validation(state: AgentState) -> str:
 
 # ── Graph assembly ─────────────────────────────────────────────────────────────
 
+def _maintenance_node(state):
+    machine_id = state.get("machine_id")
+    if not machine_id:
+        raise ValueError("Maintenance requires an exact machine ID")
+    with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT "Name", "UptimeHours", "MaintenanceIntervalHours", "Status" FROM "Machines" WHERE "Id" = %s', (machine_id,))
+            row = cursor.fetchone()
+    if not row:
+        raise ValueError("The maintenance target machine does not exist")
+    return {"current_agent": "Maintenance Review", "status": WorkflowStatus.WaitingForApproval,
+            "requires_approval": True, "approval_status": ApprovalStatus.Pending,
+            "production_data": {"machineId": machine_id, "name": row[0], "uptimeHours": row[1],
+                                "maintenanceIntervalHours": row[2], "status": row[3]},
+            "completed_steps": state.get("completed_steps", []) + ["Maintenance: assessed the exact machine's live telemetry"],
+            "final_outcome": "Waiting for IT Admin maintenance authorization"}
+
+
+def _record_stage(node):
+    def recorded(state):
+        try:
+            difference = node(state)
+        except Exception as error:
+            difference = {"status": WorkflowStatus.Failed, "errors": state.get("errors", []) + [str(error)],
+                          "current_agent": node.__name__, "final_outcome": "This workflow failed; correct the reported issue and retry."}
+        updated = {**state, **difference}
+        WORKFLOW_SESSIONS[updated["workflow_id"]] = updated
+        sync_to_database(updated)
+        return difference
+    return recorded
+
+
+def _after_planner(state):
+    return "maintenance" if state.get("workflow_type") == "Maintenance" else "data_extraction"
+
+
 def build_workflow_graph():
     """
     Assembles the LangGraph StateGraph connecting all 4 collaborative agents:
@@ -221,14 +264,16 @@ def build_workflow_graph():
     """
     workflow = StateGraph(AgentState)
 
-    workflow.add_node("planner", planner_node)
-    workflow.add_node("data_extraction", data_extraction_node)
-    workflow.add_node("production_analysis", production_analysis_node)
-    workflow.add_node("purchasing", purchasing_node)
-    workflow.add_node("validation", validation_node)
+    workflow.add_node("planner", _record_stage(planner_node))
+    workflow.add_node("data_extraction", _record_stage(data_extraction_node))
+    workflow.add_node("production_analysis", _record_stage(production_analysis_node))
+    workflow.add_node("purchasing", _record_stage(purchasing_node))
+    workflow.add_node("validation", _record_stage(validation_node))
 
     workflow.add_edge(START, "planner")
-    workflow.add_edge("planner", "data_extraction")
+    workflow.add_node("maintenance", _record_stage(_maintenance_node))
+    workflow.add_conditional_edges("planner", _after_planner, {"maintenance": "maintenance", "data_extraction": "data_extraction"})
+    workflow.add_edge("maintenance", END)
     workflow.add_conditional_edges(
         "data_extraction",
         _after_data_extraction,
@@ -249,13 +294,19 @@ def build_workflow_graph():
     return workflow.compile()
 
 
-WORKFLOW_SESSIONS: Dict[str, AgentState] = {}
+WORKFLOW_SESSIONS = SessionStore()
 COMPILED_APP = build_workflow_graph()
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def run_workflow(
+def run_workflow(objective, workflow_id=None, **kwargs):
+    wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:24].upper()}"
+    with _workflow_lock(wf_id):
+        return _run_workflow_unlocked(objective, workflow_id=wf_id, **kwargs)
+
+
+def _run_workflow_unlocked(
     objective: str,
     workflow_id: Optional[str] = None,
     procurement_requirement: Optional[Dict[str, Any]] = None,
@@ -276,6 +327,8 @@ def run_workflow(
     procurement_request_id: Optional[int] = None,
     quality_data: Optional[Dict[str, Any]] = None,
     purchasing_data: Optional[Dict[str, Any]] = None,
+    workflow_type: str = "Procurement",
+    machine_id: Optional[str] = None,
 ) -> AgentState:
     """
     Starts and executes the workflow up to completion or the human approval gate.
@@ -283,6 +336,11 @@ def run_workflow(
     top-level state fields — the AI never invents them.
     """
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
+    existing = WORKFLOW_SESSIONS.get(wf_id)
+    if existing and existing.get("current_agent") != "Queued":
+        if existing.get("objective") != objective or existing.get("material_id") != material_id:
+            raise ValueError("Workflow ID is already assigned to a different request")
+        return existing
     now_iso = datetime.now(timezone.utc).isoformat()
 
     initial_inv = {}
@@ -294,6 +352,9 @@ def run_workflow(
 
     initial_state: AgentState = {
         "workflow_id": wf_id,
+        "queued_request": existing.get("queued_request") if existing else None,
+        "workflow_type": workflow_type,
+        "machine_id": machine_id,
         "procurement_request_id": procurement_request_id,
         "objective": objective,
         "current_agent": "Planner",
@@ -347,8 +408,10 @@ def run_workflow(
         "updated_at": now_iso,
     }
 
+    WORKFLOW_SESSIONS[wf_id] = initial_state
     sync_to_database(initial_state)
-    result_state = COMPILED_APP.invoke(initial_state)
+    with _workflow_lock(wf_id):
+        result_state = COMPILED_APP.invoke(initial_state)
     WORKFLOW_SESSIONS[wf_id] = result_state
     sync_to_database(result_state)
 
@@ -363,6 +426,13 @@ def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> O
     state = WORKFLOW_SESSIONS.get(workflow_id)
     if not state:
         return None
+
+    if state.get("approval_status") == ApprovalStatus.Approved:
+        return state
+    if state.get("status") != WorkflowStatus.WaitingForApproval or not state.get("validation_results", {}).get("isValid"):
+        raise ValueError("Workflow is not ready for approval; resolve its validation findings first")
+    if state.get("workflow_type") == "Maintenance":
+        raise ValueError("Maintenance authorization is performed by the backend IT Admin service")
 
     state["approval_status"] = ApprovalStatus.Approved
     state["requires_approval"] = False
@@ -393,6 +463,8 @@ def reject_workflow(
     state = WORKFLOW_SESSIONS.get(workflow_id)
     if not state:
         return None
+    if state.get("approval_status") == ApprovalStatus.Approved:
+        raise ValueError("An approved workflow cannot be rejected")
 
     state["approval_status"] = ApprovalStatus.Rejected
     state["status"] = WorkflowStatus.Failed
@@ -423,6 +495,8 @@ def request_revision(
     state = WORKFLOW_SESSIONS.get(workflow_id)
     if not state:
         return None
+    if state.get("approval_status") == ApprovalStatus.Approved:
+        raise ValueError("An approved workflow cannot be revised")
 
     state["approval_status"] = ApprovalStatus.RevisionRequested
     state["manager_decision"] = "REQUEST_REVISION"
@@ -436,7 +510,12 @@ def request_revision(
         state["approved_by"] = requested_by
 
     # Re-run from purchasing node with revision context
-    result_state = COMPILED_APP.invoke(state)
+    state["approval_status"] = ApprovalStatus.Pending
+    state["errors"] = []
+    with _workflow_lock(workflow_id):
+        result_state = {**state, **_record_stage(purchasing_node)(state)}
+        if result_state.get("draft_po"):
+            result_state.update(_record_stage(validation_node)(result_state))
     WORKFLOW_SESSIONS[workflow_id] = result_state
     sync_to_database(result_state)
 
@@ -467,6 +546,8 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
         output_status = "IN_PROGRESS"
 
     return {
+        "workflowType": state.get("workflow_type", "Procurement"),
+        "machineId": state.get("machine_id"),
         "workflowId": state.get("workflow_id"),
         "workflow_id": state.get("workflow_id"),
         "procurementRequestId": state.get("procurement_request_id"),

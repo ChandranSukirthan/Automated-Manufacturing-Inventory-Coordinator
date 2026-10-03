@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import '../services/floor_worker_operations_service.dart';
+import 'purchase_orders/receive_goods_screen.dart';
 import 'production_status_screen.dart' show OperationsEmptyState;
 
 class SupplyDeliveryTrackingScreen extends StatefulWidget {
@@ -107,6 +108,7 @@ class _SupplyDeliveryTrackingScreenState
 
   Widget _deliveryCard(IncomingDelivery delivery) => Card(
     child: ListTile(
+      onTap: () async { await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReceiveGoodsScreen(purchaseOrderId: delivery.id))); if (mounted) await _load(); },
       leading: const Icon(
         Icons.local_shipping_outlined,
         color: Color(0xFFFFD700),

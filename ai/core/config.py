@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     gemini_model: str = "gemini-2.0-flash"
     fastapi_port: int = 8000
+    demo_mode: bool = False
+    jwt_secret_key: str = ""
+    jwt_issuer: str = "InventoryCoordinatorAPI"
+    jwt_audience: str = "InventoryCoordinatorClient"
 
     model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 

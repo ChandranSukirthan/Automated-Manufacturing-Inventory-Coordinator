@@ -96,3 +96,7 @@ test_scm.py
 test_scm.js
 test_error.js
 test_alert.py
+ai/workflow_state.sqlite3*
+
+ai/test-temp*/
+ai/workflow_history.sqlite3*

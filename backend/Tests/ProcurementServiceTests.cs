@@ -83,6 +83,8 @@ namespace backend.Tests
         public Task<PurchaseOrderResponseDto> ApproveAsync(int id, Guid approverId, string? notes = null) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> RequestRevisionAsync(int id, Guid approverId, string? reason) => Task.FromResult(new PurchaseOrderResponseDto());
+        public Task<PurchaseOrderResponseDto> VerifyBankSlipAsync(int id, Guid? userId) => throw new NotImplementedException();
+        public Task<PurchaseOrderResponseDto> ConfirmCheckoutAsync(int id, string transactionId, decimal amount, string currency, Guid? userId) => throw new NotImplementedException();
         public Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderResponseDto> UploadBankSlipAsync(int id, Microsoft.AspNetCore.Http.IFormFile? file, string referenceNumber, string? notes = null, Guid? userId = null) => Task.FromResult(new PurchaseOrderResponseDto());
         public Task<PurchaseOrderTrackingDto> GetTrackingAsync(int id) => Task.FromResult(new PurchaseOrderTrackingDto { PurchaseOrderId = id, PoNumber = "PO-TEST" });

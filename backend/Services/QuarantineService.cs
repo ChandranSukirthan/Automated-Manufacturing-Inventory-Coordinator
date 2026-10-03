@@ -60,52 +60,32 @@ namespace ManufacturingCoordinator.Api.Services
                 .Where(id => id.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var targetRollIds = affectedInventory.Count > 0
-                ? affectedInventory
-                : await _db.InventoryRolls
-                    .Where(i => i.BatchId == defect.BatchId && i.Status == InventoryStatus.Available)
-                    .Select(i => i.Id)
-                    .ToListAsync();
-
-            if (targetRollIds.Count == 0)
-            {
-                throw new AuthException("Inventory roll was not found.", HttpStatusCode.NotFound);
-            }
-
-            var inventoryRolls = await _db.InventoryRolls
-                .Where(i => targetRollIds.Contains(i.Id))
+            var physical = await _db.StockRolls.Include(r => r.RawMaterial)
+                .Where(r => affectedInventory.Count > 0 ? affectedInventory.Contains(r.RollIdentifier) :
+                    (!string.IsNullOrEmpty(defect.SkuCode) ? r.RawMaterial!.SkuCode == defect.SkuCode : r.BatchId == defect.BatchId))
                 .ToListAsync();
-
-            if (inventoryRolls.Count != targetRollIds.Count || inventoryRolls.Any(i => i.BatchId != defect.BatchId))
+            var legacy = await _db.InventoryRolls.Where(r => affectedInventory.Count > 0
+                ? affectedInventory.Contains(r.Id) : r.BatchId == defect.BatchId).ToListAsync();
+            var targetRollIds = physical.Select(r => r.RollIdentifier).Concat(legacy.Select(r => r.Id)).Distinct().ToList();
+            if (targetRollIds.Count == 0 || (affectedInventory.Count > 0 && affectedInventory.Any(id => !targetRollIds.Contains(id))))
+                throw new AuthException("The selected physical inventory was not found.", HttpStatusCode.NotFound);
+            if (physical.Any(r => !string.IsNullOrEmpty(defect.SkuCode)
+                ? r.RawMaterial!.SkuCode != defect.SkuCode : r.BatchId != defect.BatchId) ||
+                legacy.Any(r => r.BatchId != defect.BatchId))
+                throw new AuthException("Inventory roll does not belong to the defect material or batch.");
+            if (physical.Any(r => r.Status != "In Stock" && r.Status != "In Production") ||
+                legacy.Any(r => r.Status != InventoryStatus.Available) ||
+                await _db.Quarantines.AnyAsync(q => targetRollIds.Contains(q.InventoryRollId) && q.Status == QuarantineStatus.Active))
+                throw new AuthException("This inventory is already held or unavailable for quarantine.", HttpStatusCode.Conflict);
+            var quarantines = targetRollIds.Select(id => new Quarantine { DefectReportId = defect.Id,
+                InventoryRollId = id, Reason = dto.Reason.Trim(), Status = QuarantineStatus.Active,
+                CreatedAt = DateTime.UtcNow }).ToList();
+            foreach (var roll in physical)
             {
-                throw new AuthException("Inventory roll does not belong to the defect batch.");
+                await ChangeAvailableStockAsync(roll, -roll.CurrentQuantity, "QUARANTINED");
+                roll.Status = "Quarantined";
             }
-
-            if (inventoryRolls.Any(i => i.Status != InventoryStatus.Available))
-            {
-                throw new AuthException("Inventory roll is not available for quarantine.", HttpStatusCode.Conflict);
-            }
-
-            var alreadyQuarantined = await _db.Quarantines.AnyAsync(q =>
-                targetRollIds.Contains(q.InventoryRollId) && q.Status == QuarantineStatus.Active);
-            if (alreadyQuarantined)
-            {
-                throw new AuthException("This inventory is already quarantined.", HttpStatusCode.Conflict);
-            }
-
-            var quarantines = inventoryRolls.Select(inventoryRoll => new Quarantine
-            {
-                DefectReportId = defect.Id,
-                InventoryRollId = inventoryRoll.Id,
-                Reason = dto.Reason.Trim(),
-                Status = QuarantineStatus.Active,
-                CreatedAt = DateTime.UtcNow
-            }).ToList();
-
-            foreach (var inventoryRoll in inventoryRolls)
-            {
-                inventoryRoll.Status = InventoryStatus.Quarantined;
-            }
+            foreach (var roll in legacy) roll.Status = InventoryStatus.Quarantined;
 
             _db.Quarantines.AddRange(quarantines);
             await _db.SaveChangesAsync();
@@ -134,21 +114,25 @@ namespace ManufacturingCoordinator.Api.Services
                 return ToDto(quarantine);
             }
 
-            var inventoryRoll = await _db.InventoryRolls
-                .FirstOrDefaultAsync(i => i.Id == quarantine.InventoryRollId);
-            if (inventoryRoll == null)
-            {
+            var physical = await _db.StockRolls.Include(r => r.RawMaterial)
+                .SingleOrDefaultAsync(r => r.RollIdentifier == quarantine.InventoryRollId);
+            var legacy = await _db.InventoryRolls.SingleOrDefaultAsync(r => r.Id == quarantine.InventoryRollId);
+            if (physical == null && legacy == null)
                 throw new AuthException("Inventory roll was not found.", HttpStatusCode.NotFound);
-            }
-
-            if (inventoryRoll.Status != InventoryStatus.Quarantined)
-            {
+            if ((physical != null && physical.Status != "Quarantined") ||
+                (legacy != null && legacy.Status != InventoryStatus.Quarantined))
                 throw new AuthException("Inventory roll is not currently quarantined.", HttpStatusCode.Conflict);
-            }
-
             quarantine.Status = QuarantineStatus.Released;
             quarantine.ReleasedAt = DateTime.UtcNow;
-            inventoryRoll.Status = InventoryStatus.Available;
+            if (physical != null)
+            {
+                if (!await _db.Quarantines.AnyAsync(q => q.Id != id && q.InventoryRollId == quarantine.InventoryRollId && q.Status == QuarantineStatus.Active))
+                {
+                    await ChangeAvailableStockAsync(physical, physical.CurrentQuantity, "RELEASED");
+                    physical.Status = physical.CurrentQuantity > 0 ? "In Stock" : "Depleted";
+                }
+            }
+            if (legacy != null) legacy.Status = InventoryStatus.Available;
 
             if (!string.IsNullOrWhiteSpace(resolutionNote))
             {
@@ -170,9 +154,9 @@ namespace ManufacturingCoordinator.Api.Services
 
                     // Match explicitly associated workflows (by Roll ID, Defect ID, Quarantine ID, or specific Batch ID)
                     bool matchRoll = !string.IsNullOrEmpty(rollId) && (
-                        wf.WorkflowId.Contains(rollId, StringComparison.OrdinalIgnoreCase) ||
-                        (wf.Objective != null && wf.Objective.Contains(rollId, StringComparison.OrdinalIgnoreCase)) ||
-                        (wf.ValidationResults != null && wf.ValidationResults.Contains(rollId, StringComparison.OrdinalIgnoreCase))
+                        HasExactIdentifier(wf.WorkflowId, rollId) ||
+                        (wf.Objective != null && HasExactIdentifier(wf.Objective, rollId)) ||
+                        (wf.ValidationResults != null && HasExactIdentifier(wf.ValidationResults, rollId))
                     );
 
                     bool matchDefect = !string.IsNullOrEmpty(defectIdStr) && (
@@ -223,6 +207,22 @@ namespace ManufacturingCoordinator.Api.Services
             await _db.SaveChangesAsync();
 
             return ToDto(quarantine);
+        }
+
+        private static bool HasExactIdentifier(string value, string identifier) =>
+            System.Text.RegularExpressions.Regex.IsMatch(value, $@"(?<![A-Za-z0-9_-]){System.Text.RegularExpressions.Regex.Escape(identifier)}(?![A-Za-z0-9_-])", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            || value.Equals($"WF-DEFECT-{identifier}", StringComparison.OrdinalIgnoreCase);
+
+        private async Task ChangeAvailableStockAsync(backend.Models.InventoryRoll roll, decimal delta, string type)
+        {
+            var item = await _db.InventoryItems.SingleOrDefaultAsync(i => i.Sku == roll.RawMaterial!.SkuCode);
+            if (item == null || item.StockLevel + delta < 0)
+                throw new AuthException("Reconcile the physical roll with its SKU balance first.", HttpStatusCode.Conflict);
+            var previous = item.StockLevel;
+            item.StockLevel = checked(previous + decimal.ToInt32(delta));
+            _db.InventoryMovements.Add(new backend.Models.InventoryMovement { RawMaterialId = roll.RawMaterialId,
+                RollIdentifier = roll.RollIdentifier, TransactionType = type, Quantity = Math.Abs(delta),
+                PreviousStock = previous, NewStock = item.StockLevel, Reason = "QA quarantine state changed" });
         }
 
         private static System.Linq.Expressions.Expression<Func<Quarantine, QuarantineDto>> ToDtoExpression()

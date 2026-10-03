@@ -96,7 +96,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             result.TotalCost = cost;
 
             // 2. Material Specification Check
-            result.SpecificationMatches = !string.IsNullOrWhiteSpace(candidate.MaterialName) &&
+            result.SpecificationMatches = string.Equals(candidate.MaterialName?.Trim(), request.MaterialName?.Trim(), StringComparison.OrdinalIgnoreCase) &&
                                          !string.IsNullOrWhiteSpace(request.RequiredSpecification);
             if (!result.SpecificationMatches)
                 result.ValidationMessages.Add("Material specification does not match requested specification.");
@@ -109,7 +109,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             // 4. Quality Evidence Check
             result.QualityEvidenceSufficient = !string.IsNullOrWhiteSpace(candidate.QualityEvidence) &&
-                                               candidate.QualityEvidence.Length >= 5;
+                                               candidate.QualityEvidence.Length >= 5 &&
+                                               !string.Equals(candidate.QualityEvidence, "UNKNOWN", StringComparison.OrdinalIgnoreCase);
             if (!result.QualityEvidenceSufficient)
                 result.ValidationMessages.Add("Supplier does not provide sufficient quality certification evidence.");
 
@@ -133,7 +134,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     $"Calculated total cost ${cost:F2} exceeds maximum budget of ${request.MaximumBudget:F2}.");
 
             // Overall: all 6 core checks must pass
-            result.IsValid = result.SpecificationMatches &&
+            result.IsValid = candidate.UnitPrice > 0 && finalQty > 0 && result.SpecificationMatches &&
                              result.SupplierApproved &&
                              result.QualityEvidenceSufficient &&
                              result.MoqRespected &&
@@ -148,25 +149,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         public async Task<ProcurementResponseDto> CreateRequestAsync(CreateProcurementRequestDto dto, Guid? createdById = null)
         {
             var rawMaterial = await _context.RawMaterials.FindAsync(dto.RawMaterialId);
-            if (rawMaterial == null)
-            {
-                // Fallback: If not found by ID, try matching material name or pick first available material
-                if (!string.IsNullOrWhiteSpace(dto.MaterialName))
-                {
-                    rawMaterial = await _context.RawMaterials
-                        .FirstOrDefaultAsync(rm => rm.Name.ToLower() == dto.MaterialName.ToLower() ||
-                                                   rm.SkuCode.ToLower() == dto.MaterialName.ToLower());
-                }
-
-                if (rawMaterial == null)
-                {
-                    rawMaterial = await _context.RawMaterials.FirstOrDefaultAsync();
-                }
-
-                if (rawMaterial == null)
-                    throw new KeyNotFoundException($"RawMaterial with ID {dto.RawMaterialId} was not found.");
-            }
-
+            if (rawMaterial == null) throw new KeyNotFoundException($"RawMaterial {dto.RawMaterialId} was not found. Select an existing material.");
             // Verify createdById actually exists in Users table to avoid FK constraint violation
             if (createdById.HasValue)
             {
@@ -177,23 +160,17 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
             }
 
-            // Auto-calculate stock parameters if not supplied
-            decimal currentStock = dto.CurrentStock;
-            decimal openPoQty = dto.ExistingOpenPoQuantity;
-
-            // NOTE: Stock levels live in ManufacturingContext (StockAlert/InventoryItem).
-            // The Flutter/React caller is responsible for passing currentStock from the Inventory API.
-            // We only auto-query open PO quantity from OrderLines in ApplicationDbContext.
-            if (openPoQty == 0)
-            {
-                var openOrderQty = await _context.OrderLines
-                    .Where(ol => ol.RawMaterialId == rawMaterial.Id &&
-                                 (ol.PurchaseOrder.Status == PurchaseOrderStatus.Draft ||
-                                  ol.PurchaseOrder.Status == PurchaseOrderStatus.PendingApproval))
-                    .SumAsync(ol => (decimal?)ol.Quantity) ?? 0m;
-                openPoQty = openOrderQty;
-            }
-
+            var inventory = await _context.InventoryItems.SingleOrDefaultAsync(i => i.Sku == rawMaterial.SkuCode)
+                ?? throw new InvalidOperationException("Register the SKU balance before requesting procurement.");
+            decimal currentStock = inventory.StockLevel;
+            var committedLines = await _context.OrderLines.Where(ol => ol.RawMaterialId == rawMaterial.Id &&
+                (ol.PurchaseOrder.Status == PurchaseOrderStatus.Approved || ol.PurchaseOrder.Status == PurchaseOrderStatus.Payment ||
+                 ol.PurchaseOrder.Status == PurchaseOrderStatus.PaymentPending || ol.PurchaseOrder.Status == PurchaseOrderStatus.Paid ||
+                 ol.PurchaseOrder.Status == PurchaseOrderStatus.Sent || ol.PurchaseOrder.Status == PurchaseOrderStatus.InTransit))
+                .Select(ol => new { ol.Id, ol.Quantity }).ToListAsync();
+            var lineIds = committedLines.Select(l => l.Id).ToList();
+            var delivered = await _context.GoodsReceipts.Where(r => lineIds.Contains(r.OrderLineId)).ToListAsync();
+            decimal openPoQty = committedLines.Sum(l => Math.Max(0, l.Quantity - delivered.Where(r => r.OrderLineId == l.Id).Sum(r => r.Quantity)));
             // AUTHORITATIVE NET DEFICIT CALCULATION — ASP.NET Core only, NOT AI
             var netQty = CalculateNetRequiredQuantity(
                 dto.ProductionRequirement, dto.SafetyStock, currentStock, openPoQty);
@@ -201,7 +178,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var request = new ProcurementRequest
             {
                 RawMaterialId = rawMaterial.Id,
-                MaterialName = !string.IsNullOrWhiteSpace(dto.MaterialName) ? dto.MaterialName : rawMaterial.Name,
+                MaterialName = rawMaterial.Name,
                 RequiredSpecification = dto.RequiredSpecification,
                 ProductionRequirement = dto.ProductionRequirement,
                 CurrentStock = currentStock,
@@ -219,14 +196,6 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 UpdatedAt = DateTime.UtcNow
             };
 
-            // If calculated net quantity is 0 or less, ensure research benchmark quantity is positive
-            if (request.CalculatedNetQuantity <= 0)
-            {
-                request.CalculatedNetQuantity = request.ProductionRequirement > 0
-                    ? request.ProductionRequirement
-                    : 1000m;
-            }
-
             _context.ProcurementRequests.Add(request);
             await _context.SaveChangesAsync();
 
@@ -243,14 +212,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (request == null)
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
 
-            // If net deficit was recorded as 0, use the production requirement as research quantity
             if (request.CalculatedNetQuantity <= 0)
-            {
-                request.CalculatedNetQuantity = request.ProductionRequirement > 0
-                    ? request.ProductionRequirement
-                    : 1000m;
-            }
-
+                throw new InvalidOperationException("There is no uncovered material deficit to procure.");
             request.Status = ProcurementRequestStatus.Researching;
             request.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();

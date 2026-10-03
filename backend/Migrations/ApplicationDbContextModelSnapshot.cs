@@ -44,24 +44,41 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<Guid?>("MachineId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Objective")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("PurchaseOrderId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("StartedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("timezone('utc', now())");
 
+                    b.Property<string>("StateJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidationResults")
                         .HasColumnType("text");
 
                     b.Property<string>("WorkflowId")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("WorkflowType")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -425,6 +442,47 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("Shifts");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.GoodsReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BatchId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("OrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PurchaseOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ReceiptKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReceivedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RollIdentifier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptKey")
+                        .IsUnique();
+
+                    b.ToTable("GoodsReceipts");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.OrderLine", b =>
                 {
                     b.Property<int>("Id")
@@ -518,6 +576,200 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("PaymentTransactions");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.ProcurementOutcome", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ActualLeadTime")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<bool>("DeliverySuccess")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("EstimatedLeadTime")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("EstimatedPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("FinalOrderedQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("FinalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ManagerDecision")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ManagerRevision")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Material")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("PaymentSuccess")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("ProcurementRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ProcurementSuccess")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("PurchaseOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QualityEvidence")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("QualityOutcome")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("RecommendedQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("RecommendedSupplier")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("RequestedQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("SelectedSupplier")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SupplierVerification")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProcurementOutcomes");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.ProcurementRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CalculatedNetQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("CurrentStock")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("ExistingOpenPoQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int?>("GeneratedPurchaseOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaterialName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("MaximumBudget")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PreferredRegion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("ProductionRequirement")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("QualityRequirement")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("RawMaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RecommendedSupplierId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RequiredByDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequiredSpecification")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("SafetyStock")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<string>("WorkflowId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("GeneratedPurchaseOrderId");
+
+                    b.HasIndex("RawMaterialId");
+
+                    b.HasIndex("RecommendedSupplierId");
+
+                    b.ToTable("ProcurementRequests");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -525,6 +777,9 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ActualDeliveryDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("ApprovalThreshold")
                         .ValueGeneratedOnAdd()
@@ -536,6 +791,21 @@ namespace ManufacturingCoordinator.Api.Migrations
 
                     b.Property<Guid?>("ApprovedById")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("BankReferenceNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BankSlipStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("BankSlipUploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BankSlipUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<decimal>("BudgetLimit")
                         .HasColumnType("decimal(18,2)");
@@ -555,6 +825,10 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasColumnType("character varying(10)")
                         .HasDefaultValue("USD");
 
+                    b.Property<string>("DeliveryRemarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("EmailFailureReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -565,6 +839,18 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Property<string>("EmailStatus")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("ExpectedDeliveryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsAcknowledgedByScm")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFinancialVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsQualityVerified")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -579,6 +865,9 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int?>("ProcurementRequestId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -591,6 +880,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -607,6 +897,17 @@ namespace ManufacturingCoordinator.Api.Migrations
 
                     b.Property<decimal>("TotalCost")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("TrackingNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TrackingStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Draft");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -739,6 +1040,154 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("Suppliers");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.SupplierCandidate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("In Stock");
+
+                    b.Property<decimal>("ConfidenceScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("USD");
+
+                    b.Property<bool>("IsValidated")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LeadTimeDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaterialName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("MinimumOrderQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("PackSize")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<int>("ProcurementRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QualityEvidence")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("RecommendedOrderQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SupplierName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SupplierStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("UNVERIFIED");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ValidationRemarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProcurementRequestId");
+
+                    b.HasIndex("SupplierId");
+
+                    b.ToTable("SupplierCandidates");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.SupplierMaterialQuote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AvailableQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LeadTimeDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("MinimumOrderQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("PackSize")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("QualityEvidence")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("RawMaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplierId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SupplierMaterialQuotes");
                 });
 
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.SupplierPerformance", b =>
@@ -882,6 +1331,90 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("Quarantines");
                 });
 
+            modelBuilder.Entity("backend.Models.InventoryItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PackagingTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RawMaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReorderThreshold")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SkuNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StockLevel")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Sku")
+                        .IsUnique();
+
+                    b.ToTable("InventoryItems");
+                });
+
+            modelBuilder.Entity("backend.Models.InventoryMovement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("NewStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("PreviousStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("RawMaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RollIdentifier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InventoryMovements");
+                });
+
             modelBuilder.Entity("backend.Models.InventoryRoll", b =>
                 {
                     b.Property<int>("Id")
@@ -894,10 +1427,14 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("BatchId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("CurrentQuantity")
+                        .IsConcurrencyToken()
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("InitialQuantity")
@@ -914,6 +1451,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -924,7 +1462,10 @@ namespace ManufacturingCoordinator.Api.Migrations
 
                     b.HasIndex("RawMaterialId");
 
-                    b.ToTable("InventoryRoll");
+                    b.HasIndex("RollIdentifier")
+                        .IsUnique();
+
+                    b.ToTable("InventoryRolls", (string)null);
                 });
 
             modelBuilder.Entity("backend.Models.PackagingType", b =>
@@ -1015,6 +1556,71 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.ToTable("RawMaterials", (string)null);
                 });
 
+            modelBuilder.Entity("backend.Models.StockAlert", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CurrentStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaterialName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("NetDeficit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OpenPurchaseQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("PackagingType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("QuantityRequested")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SafetyStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkerId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("StockAlerts");
+                });
+
             modelBuilder.Entity("backend.Models.StockLevel", b =>
                 {
                     b.Property<int>("Id")
@@ -1040,7 +1646,7 @@ namespace ManufacturingCoordinator.Api.Migrations
 
                     b.HasIndex("RawMaterialId");
 
-                    b.ToTable("StockLevel");
+                    b.ToTable("StockLevels");
                 });
 
             modelBuilder.Entity("ManufacturingCoordinator.Models.Authentication.OtpVerification", b =>
@@ -1117,6 +1723,38 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Navigation("PurchaseOrder");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.ProcurementRequest", b =>
+                {
+                    b.HasOne("ManufacturingCoordinator.Models.Authentication.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder", "GeneratedPurchaseOrder")
+                        .WithMany()
+                        .HasForeignKey("GeneratedPurchaseOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("backend.Models.RawMaterial", "RawMaterial")
+                        .WithMany()
+                        .HasForeignKey("RawMaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ManufacturingCoordinator.Models.PurchaseOrders.Supplier", "RecommendedSupplier")
+                        .WithMany()
+                        .HasForeignKey("RecommendedSupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("GeneratedPurchaseOrder");
+
+                    b.Navigation("RawMaterial");
+
+                    b.Navigation("RecommendedSupplier");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder", b =>
                 {
                     b.HasOne("ManufacturingCoordinator.Models.Authentication.User", "ApprovedBy")
@@ -1160,6 +1798,24 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.SupplierCandidate", b =>
+                {
+                    b.HasOne("ManufacturingCoordinator.Models.PurchaseOrders.ProcurementRequest", "ProcurementRequest")
+                        .WithMany("Candidates")
+                        .HasForeignKey("ProcurementRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ManufacturingCoordinator.Models.PurchaseOrders.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ProcurementRequest");
+
+                    b.Navigation("Supplier");
+                });
+
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.SupplierPerformance", b =>
                 {
                     b.HasOne("ManufacturingCoordinator.Models.PurchaseOrders.Supplier", "Supplier")
@@ -1197,7 +1853,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.HasOne("backend.Models.RawMaterial", "RawMaterial")
                         .WithMany("InventoryRolls")
                         .HasForeignKey("RawMaterialId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("RawMaterial");
@@ -1240,6 +1896,11 @@ namespace ManufacturingCoordinator.Api.Migrations
             modelBuilder.Entity("ManufacturingCoordinator.Models.Production.Machine", b =>
                 {
                     b.Navigation("MaintenanceLogs");
+                });
+
+            modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.ProcurementRequest", b =>
+                {
+                    b.Navigation("Candidates");
                 });
 
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder", b =>

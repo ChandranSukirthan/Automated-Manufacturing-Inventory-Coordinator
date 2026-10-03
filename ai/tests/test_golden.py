@@ -135,9 +135,9 @@ def test_end_to_end_workflow_with_human_approval():
     resumed = approve_and_resume(wf_id)
 
     assert resumed is not None
-    assert resumed["status"] == WorkflowStatus.Completed
+    assert resumed["status"] == WorkflowStatus.WaitingForApproval
     assert resumed["approval_status"] == ApprovalStatus.Approved
-    assert resumed["current_agent"] == "Execution"
+    assert resumed["current_agent"] == "Payment / Dispatch"
     assert resumed["final_outcome"] is not None
 
 
@@ -159,24 +159,24 @@ def test_api_tool_production_impact():
     assert data["adjustedOutput"] == 6000
 
 
-def test_api_trigger_and_approve_workflow():
+def test_api_trigger_and_approve_workflow(auth_headers):
     payload = {
         "objective": "Replenish BoxPouch film because inventory is low.",
         "workflowId": "WF-API-TEST",
         "material_id": "CR-001",
         "required_quantity": 2000.0,
     }
-    response = client.post("/api/workflows/run", json=payload)
+    response = client.post("/api/workflows/run", json=payload, headers=auth_headers)
     assert response.status_code == 201
     data = response.json()
     assert data["workflow_id"] == "WF-API-TEST"
     assert data["status"] == "WaitingForApproval"
 
     # Approve
-    approve_resp = client.post("/api/workflows/WF-API-TEST/approve")
+    approve_resp = client.post("/api/workflows/WF-API-TEST/approve", headers=auth_headers)
     assert approve_resp.status_code == 200
     approved_data = approve_resp.json()
-    assert approved_data["status"] == "Completed"
+    assert approved_data["status"] == "WaitingForApproval"
 
 
 # =======================================================

@@ -1,6 +1,9 @@
 import api from './api';
 
 export const supplierService = {
+  async getQuotes(id) { return (await api.get(`/suppliers/${id}/quotes`)).data; },
+  async saveQuote(id, data) { return (await (data.id ? api.put(`/suppliers/${id}/quotes/${data.id}`, data) : api.post(`/suppliers/${id}/quotes`, data))).data; },
+  async deactivateQuote(id, quoteId) { await api.delete(`/suppliers/${id}/quotes/${quoteId}`); },
   async getSuppliers() {
     const response = await api.get('/suppliers');
     return response.data;

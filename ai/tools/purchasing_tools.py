@@ -251,6 +251,9 @@ def search_external_supplier_market(
     except Exception as ex:
         logger.warning(f"Gemini search grounding failed: {ex}. Falling back to market pool.")
 
+    if not settings.demo_mode:
+        return []
+
     supplier_pool = [
         {"supplierName": "Apex Polymer Solutions Ltd", "productName": f"{material_clean} - Industrial Grade", "materialName": material_clean, "specification": spec_clean or "ASTM A36 / ISO certified", "unitPrice": 1.45, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 3, "qualityEvidence": "ISO 9001 Certified", "certifications": ["ISO 9001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://apexpolymer.example.com", "sourceWebsite": "Apex Polymer Solutions Ltd", "region": region_clean},
         {"supplierName": "SteelTech Industries", "productName": f"{material_clean} - Premium Grade", "materialName": material_clean, "specification": "ASTM A36, tensile strength ≥400 MPa, mill certified", "unitPrice": 1.85, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 7, "qualityEvidence": "ISO 9001:2015, ASTM certified", "certifications": ["ISO 9001", "ASTM"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://steeltech.example.com/products", "sourceWebsite": "SteelTech Industries", "region": "North America"},
@@ -428,10 +431,37 @@ def calculate_total_cost(
 # Tool 4: query_internal_supplier_data
 # =====================================================================
 
+def _live_material_quotes(material):
+    connection = get_db_connection()
+    if connection is None:
+        raise ValueError("Supplier quotes are unavailable; retry or use manual procurement")
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT s."Id", s."SupplierCode", s."Name", q."UnitPrice", q."MinimumOrderQuantity",
+                       q."PackSize", q."AvailableQuantity", q."LeadTimeDays", q."QualityEvidence", q."Currency"
+                FROM "SupplierMaterialQuotes" q JOIN "Suppliers" s ON s."Id" = q."SupplierId"
+                JOIN "RawMaterials" m ON m."Id" = q."RawMaterialId"
+                WHERE q."IsActive" = true AND s."IsActive" = true
+                  AND (m."SkuCode" = %s OR m."Name" = %s OR m."Id"::text = %s)
+                ORDER BY q."UpdatedAt" DESC;
+            ''', (material, material, material))
+            rows = cursor.fetchall()
+    connection.close()
+    return [{"supplierId": row[0], "supplierCode": row[1], "supplierName": row[2],
+             "name": row[2], "unitPrice": float(row[3]), "pricePerUnit": float(row[3]),
+             "minimumOrderQuantity": float(row[4]), "minOrderQuantity": float(row[4]),
+             "packSize": float(row[5]), "availableQuantity": float(row[6]),
+             "leadTimeDays": row[7], "qualityEvidence": row[8], "currency": row[9],
+             "isActive": True, "verificationStatus": "VERIFIED", "supplierStatus": "APPROVED"} for row in rows]
+
+
 def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Queries PostgreSQL Suppliers table for internal approved suppliers.
     """
+    if not settings.demo_mode:
+        return _live_material_quotes(material_name)
     conn = get_db_connection()
     suppliers = []
 
@@ -766,6 +796,9 @@ def query_supplier_rates(
             or material_id_or_supplier.upper().startswith("SUPPLIER")
         )
     )
+
+    if not settings.demo_mode and not is_specific_supplier:
+        return _live_material_quotes(material_id_or_supplier)
 
     # Query list of suppliers (for general material catalog queries)
     if not is_specific_supplier:

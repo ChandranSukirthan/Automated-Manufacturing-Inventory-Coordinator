@@ -21,12 +21,15 @@ using ManufacturingCoordinator.Enums;
 using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Api.Interfaces;
+using ManufacturingCoordinator.Models.Quality;
 using backend.Data;
+using backend.Models;
 
 namespace ManufacturingCoordinator.Services.PurchaseOrders
 {
     public class PurchaseOrderService : IPurchaseOrderService
     {
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContext;
         private readonly ApplicationDbContext _context;
         private readonly ManufacturingContext? _mfgContext;
         private readonly IStripeService _stripeService;
@@ -42,8 +45,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             IEmailService emailService,
             IConfiguration configuration,
             ILogger<PurchaseOrderService> logger,
-            ManufacturingContext? mfgContext = null)
+            ManufacturingContext? mfgContext = null, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContext = null)
         {
+            _httpContext = httpContext;
             _context = context;
             _stripeService = stripeService;
             _emailService = emailService;
@@ -485,14 +489,16 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         var wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
                         if (wf != null)
                         {
-                            wf.Status = WorkflowStatus.Completed;
+                            wf.Status = WorkflowStatus.WaitingForApproval;
                             wf.ApprovalStatus = ApprovalStatus.Approved;
-                            wf.CurrentAgent = "Execution";
-                            wf.CompletedAt = DateTime.UtcNow;
+                            wf.CurrentAgent = "Payment / Dispatch";
+                            wf.CompletedAt = null;
                             await _context.SaveChangesAsync();
                         }
 
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                        var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
+                        if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
                         await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/approve", null);
                     }
                 }
@@ -502,111 +508,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 _logger.LogWarning(ex, "Failed to sync approval to AI workflow for PO {Id}", id);
             }
 
-            // Replenish inventory stock and resolve alerts
-            if (_mfgContext != null)
-            {
-                await ReplenishInventoryAsync(approvedPo);
-            }
-
+            // Approval records an incoming commitment. Physical stock changes only on receipt.
             return (await GetByIdAsync(approvedPo.Id))!;
-        }
-
-        private async Task ReplenishInventoryAsync(PurchaseOrder po)
-        {
-            if (_mfgContext == null) return;
-
-            try
-            {
-                var lines = po.OrderLines;
-                if (lines == null || !lines.Any())
-                {
-                    lines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
-                }
-
-                foreach (var line in lines)
-                {
-                    backend.Models.RawMaterial? material = null;
-                    if (line.RawMaterialId > 0)
-                    {
-                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => m.Id == line.RawMaterialId);
-                    }
-
-                    if (material == null && !string.IsNullOrEmpty(line.Description))
-                    {
-                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => 
-                            line.Description.Contains(m.SkuCode) || line.Description.Contains(m.Name));
-                    }
-
-                    if (material == null && !string.IsNullOrEmpty(po.Notes))
-                    {
-                        material = await _mfgContext.RawMaterials.FirstOrDefaultAsync(m => 
-                            po.Notes.Contains(m.SkuCode) || po.Notes.Contains(m.Name));
-                    }
-
-                    material ??= await _mfgContext.RawMaterials.FirstOrDefaultAsync();
-
-                    if (material != null)
-                    {
-                        var defaultBatch = await _context.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH001");
-                        if (defaultBatch == null)
-                        {
-                            _context.Batches.Add(new ManufacturingCoordinator.Models.Inventory.Batch { Id = "BATCH001", ProductType = ProductType.Can });
-                            await _context.SaveChangesAsync();
-                        }
-
-                        // 1. Create newly received inventory roll
-                        var rollId = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
-                        var newRoll = new backend.Models.InventoryRoll
-                        {
-                            RollIdentifier = rollId,
-                            RawMaterialId = material.Id,
-                            InitialQuantity = line.Quantity,
-                            CurrentQuantity = line.Quantity,
-                            Status = "In Stock",
-                            BarcodeUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={rollId}",
-                            ReceivedDate = DateTime.UtcNow,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-                        _mfgContext.InventoryRolls.Add(newRoll);
-
-                        // 2. Update StockLevel if present
-                        var stockLevel = await _mfgContext.StockLevels.FirstOrDefaultAsync(s => s.RawMaterialId == material.Id);
-                        if (stockLevel != null)
-                        {
-                            stockLevel.TotalQuantity += line.Quantity;
-                            stockLevel.RecordedAt = DateTime.UtcNow;
-                        }
-
-                        // 3. Update legacy/general InventoryItem if exists
-                        var item = await _mfgContext.InventoryItems.FirstOrDefaultAsync(i => 
-                            i.Sku == material.SkuCode || i.Name.ToLower() == material.Name.ToLower());
-                        if (item != null)
-                        {
-                            item.StockLevel += (int)line.Quantity;
-                        }
-
-                        // 4. Resolve any pending or in-progress alerts for this SKU!
-                        var alerts = await _mfgContext.StockAlerts
-                            .Where(a => a.Sku == material.SkuCode && (a.Status == "Pending" || a.Status == "Processing" || a.Status == "Acknowledged"))
-                            .ToListAsync();
-
-                        foreach (var a in alerts)
-                        {
-                            a.Status = "Resolved";
-                        }
-
-                        _logger.LogInformation("Replenished {Qty} units for raw material {Sku}. Created Roll {RollId} and resolved {AlertCount} alerts.", 
-                            line.Quantity, material.SkuCode, rollId, alerts.Count);
-                    }
-                }
-
-                await _mfgContext.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to automatically replenish inventory for PO {PoNumber}", po.PoNumber);
-            }
         }
 
         public async Task<PurchaseOrderResponseDto> RejectAsync(int id, Guid approverId, string? reason)
@@ -645,11 +548,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         {
                             wf.Status = WorkflowStatus.Failed;
                             wf.ApprovalStatus = ApprovalStatus.Rejected;
-                            wf.CompletedAt = DateTime.UtcNow;
+                            wf.CompletedAt = null;
                             await _context.SaveChangesAsync();
                         }
 
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                        var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
+                        if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
                         await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/reject", null);
                     }
                 }
@@ -797,6 +702,29 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         }
 
         /// <summary>
+        /// Calculates the count of active quarantines or locked inventory rolls that specifically belong
+        /// to the materials or rolls in this purchase order. Unrelated quarantined items are excluded.
+        /// </summary>
+        private async Task<int> GetMaterialQuarantinedRollsCountAsync(PurchaseOrder po)
+        {
+            if (po.OrderLines == null || !po.OrderLines.Any())
+                po.OrderLines = await _context.OrderLines.Where(l => l.PurchaseOrderId == po.Id).ToListAsync();
+            var materialIds = po.OrderLines.Select(l => l.RawMaterialId).Where(id => id > 0).Distinct().ToList();
+            var skus = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id)).Select(m => m.SkuCode).ToListAsync();
+            var physicalRollIds = await _context.StockRolls.Where(r => materialIds.Contains(r.RawMaterialId))
+                .Select(r => r.RollIdentifier).ToListAsync();
+            var lockedRollIds = await _context.StockRolls.Where(r => materialIds.Contains(r.RawMaterialId) &&
+                (r.Status == "Quarantined" || r.Status == "Locked" || r.Status == "On Hold"))
+                .Select(r => r.RollIdentifier).ToListAsync();
+            var holds = await _context.Quarantines.Where(q => q.Status == QuarantineStatus.Active).ToListAsync();
+            var reportIds = holds.Select(q => q.DefectReportId).ToList();
+            var matchingReportIds = await _context.DefectReports.Where(d => reportIds.Contains(d.Id) && skus.Contains(d.SkuCode))
+                .Select(d => d.Id).ToListAsync();
+            return holds.Where(q => physicalRollIds.Contains(q.InventoryRollId) || matchingReportIds.Contains(q.DefectReportId))
+                .Select(q => q.InventoryRollId).Concat(lockedRollIds).Distinct().Count();
+        }
+
+        /// <summary>
         /// BACKEND APPROVAL GATE: Authoritative verification against PostgreSQL state,
         /// ensuring active supplier, valid math/lines, and that any QA/quarantine issue
         /// has been manually resolved and quarantine released before approval is granted.
@@ -860,6 +788,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             {
                 throw new InvalidOperationException($"Approval blocked: Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).");
             }
+
+            if (await GetMaterialQuarantinedRollsCountAsync(po) > 0)
+                throw new InvalidOperationException("Approval blocked: This material has an active quarantine. Release the affected inventory after QA inspection.");
+            var expectedTotal = po.OrderLines.Sum(l => Math.Round(l.Quantity * l.UnitPrice, 2));
+            if (Math.Abs(po.TotalCost - expectedTotal) > 0.01m)
+                throw new InvalidOperationException("Approval blocked: Order total does not match its lines.");
 
             // 3. Find associated AgentWorkflow (AI Validation / QA)
             AgentWorkflow? wf = null;
@@ -932,6 +866,25 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     var isValid = root.TryGetProperty("isValid", out var iv) && iv.ValueKind == JsonValueKind.True;
 
                     bool isQuarantineRequired = qualitySafetyStatus == "QUARANTINE_REQUIRED" || qualitySafetyStatus == "QUARANTINE_ACTIVE";
+
+                    // Verify whether active quarantine hold actually applies to this PO's materials
+                    if (isQuarantineRequired && manualResolutionStatus != "RESOLVED")
+                    {
+                        var activeQuarantinesCount = await GetMaterialQuarantinedRollsCountAsync(po);
+                        if (activeQuarantinesCount == 0)
+                        {
+                            // No active quarantine holds apply to this order's specific materials.
+                            // Clear false alarm from unrelated inventory items.
+                            isQuarantineRequired = false;
+                            qualitySafetyStatus = "CLEAR";
+                            if (!string.IsNullOrWhiteSpace(rejectionReason) && rejectionReason.Contains("quarantine", StringComparison.OrdinalIgnoreCase))
+                            {
+                                rejectionReason = null;
+                            }
+                            isValid = true;
+                        }
+                    }
+
                     bool isManualReviewRequired = qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || isQuarantineRequired;
 
                     if (isManualReviewRequired)
@@ -962,7 +915,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not parse ValidationResults for workflow {WorkflowId}", wf.WorkflowId);
+                    throw new InvalidOperationException("Approval blocked: Validation result is unreadable. Re-run validation.", ex);
                 }
             }
         }
@@ -1008,6 +961,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 w.WorkflowId == $"WF-{po.PoNumber}" || 
                 w.WorkflowId == $"WF-2026-{(100 + po.Id):D3}");
 
+            if (existingWf != null) { existingWf.PurchaseOrderId = po.Id; existingWf.WorkflowType = "Procurement"; }
             // 2. Validate Supplier against PostgreSQL ERP master catalog
             var supplier = po.Supplier ?? await _context.Suppliers.FindAsync(po.SupplierId);
             string supplierValidation = "PASSED";
@@ -1100,72 +1054,32 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             int quarantinedRollsCount = 0;
             Dictionary<string, object?>? historicalRisk = null;
 
-            var activeQuarantines = await _context.Quarantines
-                .Where(q => q.Status == QuarantineStatus.Active)
-                .ToListAsync();
+            var activeQuarantinesCount = await GetMaterialQuarantinedRollsCountAsync(po);
 
-            if (activeQuarantines.Any())
+            if (activeQuarantinesCount > 0)
             {
-                quarantinedRollsCount = activeQuarantines.Count;
+                quarantinedRollsCount = activeQuarantinesCount;
                 qualitySafetyStatus = "QUARANTINE_ACTIVE";
                 isValid = false;
+                rejectionReason ??= $"{quarantinedRollsCount} inventory roll(s) or batch holds currently active for this material. QA review required.";
             }
             else
             {
-                // Check historical quality risk on PO raw materials
-                // RawMaterial -> InventoryRolls -> DefectReports / Quarantines
-                var matIds = po.OrderLines?.Select(l => l.RawMaterialId).Where(id => id > 0).Distinct().ToList() ?? new List<int>();
-                if (matIds.Any())
+                var materialIds = po.OrderLines.Select(l => l.RawMaterialId).Distinct().ToList();
+                var materials = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id)).ToListAsync();
+                var skus = materials.Select(m => m.SkuCode).ToList();
+                var report = await _context.DefectReports.Where(d => skus.Contains(d.SkuCode) &&
+                    d.Status != DefectStatus.Resolved && (d.Severity == DefectSeverity.HIGH || d.Severity == DefectSeverity.Critical))
+                    .OrderByDescending(d => d.CreatedAt).FirstOrDefaultAsync();
+                if (report != null)
                 {
-                    var materials = await _context.RawMaterials.Where(m => matIds.Contains(m.Id)).ToListAsync();
-
-                    foreach (var mat in materials)
-                    {
-                        var isIron = mat.Name.Contains("Iron", StringComparison.OrdinalIgnoreCase) || 
-                                     mat.SkuCode.Contains("IRON", StringComparison.OrdinalIgnoreCase);
-
-                        // Query defect reports specifically matching this material, batch, or iron historical data
-                        var matNameLower = mat.Name.ToLower();
-                        var defectReport = await _context.DefectReports
-                            .Where(d => d.Description.ToLower().Contains(matNameLower) || 
-                                       d.BatchId.ToLower().Contains(matNameLower) ||
-                                       (isIron && (d.BatchId == "BATCH-IRON-001" || d.Description.ToLower().Contains("iron") || (d.AffectedInventoryJson != null && d.AffectedInventoryJson.Contains("IRON-ROLL-001")))))
-                            .OrderByDescending(d => d.CreatedAt)
-                            .FirstOrDefaultAsync();
-
-                        if (isIron || defectReport != null)
-                        {
-                            var relatedRoll = isIron ? "IRON-ROLL-001" : "ROLL-HISTORICAL-001";
-                            if (defectReport?.AffectedInventoryJson != null && defectReport.AffectedInventoryJson.Contains("["))
-                            {
-                                try
-                                {
-                                    var rolls = JsonSerializer.Deserialize<List<string>>(defectReport.AffectedInventoryJson);
-                                    if (rolls != null && rolls.Any())
-                                    {
-                                        relatedRoll = rolls[0];
-                                    }
-                                }
-                                catch { }
-                            }
-
-                            var issueText = isIron ? "Previous quality defect detected: surface oxidation and micro-fractures" : (defectReport?.Description ?? "Previous quality defect detected");
-                            var severityText = defectReport?.Severity.ToString() ?? "Medium";
-
-                            historicalRisk = new Dictionary<string, object?>
-                            {
-                                ["material"] = mat.Name,
-                                ["relatedRoll"] = relatedRoll,
-                                ["issue"] = issueText,
-                                ["severity"] = severityText
-                            };
-
-                            qualitySafetyStatus = "MANUAL_REVIEW_REQUIRED";
-                            isValid = false;
-                            rejectionReason ??= $"Historical quality risk detected on {mat.Name} ({relatedRoll}). Manual QA review required.";
-                            break;
-                        }
-                    }
+                    historicalRisk = new Dictionary<string, object?> {
+                        ["material"] = materials.First(m => m.SkuCode == report.SkuCode).Name,
+                        ["relatedRoll"] = JsonSerializer.Deserialize<List<string>>(report.AffectedInventoryJson)?.FirstOrDefault(),
+                        ["issue"] = report.Description, ["severity"] = report.Severity.ToString() };
+                    qualitySafetyStatus = "MANUAL_REVIEW_REQUIRED";
+                    isValid = false;
+                    rejectionReason = "An unresolved severe defect on this material requires QA review.";
                 }
             }
 
@@ -1203,13 +1117,24 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     var prevStatus = root.TryGetProperty("manualResolutionStatus", out var mrs) ? mrs.GetString() : null;
                     if (prevStatus == "RESOLVED")
                     {
-                        manualResolutionStatus = "RESOLVED";
-                        qualitySafetyStatus = "CLEAR";
-                        isValid = supplierValidation == "PASSED" && budgetCheck == "PASSED" && poMathematicalCheck == "PASSED" && materialValidation == "PASSED";
-                        if (isValid) rejectionReason = null;
-                        if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
-                        if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
-                        if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                        if (quarantinedRollsCount > 0 || qualitySafetyStatus == "QUARANTINE_ACTIVE")
+                        {
+                            // Active quarantine hold detected on this material/roll. Cannot honor stale RESOLVED.
+                            manualResolutionStatus = "PENDING_REVIEW";
+                            qualitySafetyStatus = "QUARANTINE_ACTIVE";
+                            isValid = false;
+                            rejectionReason ??= $"{quarantinedRollsCount} inventory roll(s) currently held in quarantine. Quality inspection required.";
+                        }
+                        else
+                        {
+                            manualResolutionStatus = "RESOLVED";
+                            qualitySafetyStatus = "CLEAR";
+                            isValid = supplierValidation == "PASSED" && budgetCheck == "PASSED" && poMathematicalCheck == "PASSED" && materialValidation == "PASSED";
+                            if (isValid) rejectionReason = null;
+                            if (root.TryGetProperty("manualResolutionNote", out var mrn)) manualResolutionNote = mrn.GetString();
+                            if (root.TryGetProperty("resolvedBy", out var rb)) resolvedBy = rb.GetString();
+                            if (root.TryGetProperty("resolvedAt", out var ra)) resolvedAt = ra.GetString();
+                        }
                     }
                     else if (prevStatus == "REJECTED")
                     {
@@ -1235,7 +1160,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             if (manualResolutionStatus == null)
             {
-                if (activeQuarantines.Any() || qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED")
+                if (quarantinedRollsCount > 0 || qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || qualitySafetyStatus == "QUARANTINE_ACTIVE" || qualitySafetyStatus == "QUARANTINE_REQUIRED")
                 {
                     manualResolutionStatus = "PENDING_REVIEW";
                 }
@@ -1274,8 +1199,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (existingWf != null)
             {
                 existingWf.ValidationResults = json;
-                existingWf.StartedAt = DateTime.UtcNow;
-                if (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment || po.Status == PurchaseOrderStatus.Sent)
+                existingWf.CurrentAgent = "Validation/Safety";
+                if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
                 {
                     existingWf.Status = WorkflowStatus.Completed;
                     existingWf.ApprovalStatus = ApprovalStatus.Approved;
@@ -1291,10 +1216,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
                 else if (isQaPassed)
                 {
-                    existingWf.Status = WorkflowStatus.Completed;
-                    existingWf.ApprovalStatus = ApprovalStatus.Approved;
-                    existingWf.CompletedAt = DateTime.UtcNow;
-                    existingWf.CurrentAgent = "Validation/Safety";
+                    existingWf.Status = WorkflowStatus.WaitingForApproval;
+                    existingWf.ApprovalStatus = po.ApprovedAt.HasValue ? ApprovalStatus.Approved : ApprovalStatus.Pending;
+                    existingWf.CompletedAt = null;
+                    existingWf.CurrentAgent = po.ApprovedAt.HasValue ? "Payment / Dispatch" : "Human Approval";
                     existingWf.FinalOutcome = $"PO {po.PoNumber} automated validation & safety checks passed (4/4)";
                 }
                 else
@@ -1315,12 +1240,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     Id = Guid.NewGuid(),
                     WorkflowId = workflowId,
                     Objective = $"Autonomous validation & procurement safety assessment for PO {po.PoNumber}",
-                    CurrentAgent = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? "Execution" : "Validation/Safety",
-                    Status = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? WorkflowStatus.Completed : (po.Status == PurchaseOrderStatus.Rejected ? WorkflowStatus.Failed : WorkflowStatus.WaitingForApproval),
-                    ApprovalStatus = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
+                    CurrentAgent = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? "Execution" : "Validation/Safety",
+                    Status = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? WorkflowStatus.Completed : (po.Status == PurchaseOrderStatus.Rejected ? WorkflowStatus.Failed : WorkflowStatus.WaitingForApproval),
+                    ApprovalStatus = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
                     StartedAt = DateTime.UtcNow,
-                    CompletedAt = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent || isQaPassed) ? DateTime.UtcNow : null,
-                    FinalOutcome = (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Sent) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
+                    CompletedAt = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? DateTime.UtcNow : null,
+                    FinalOutcome = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
                     ValidationResults = json
                 };
                 _context.AgentWorkflows.Add(newWf);
@@ -1368,7 +1293,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         public async Task<PurchaseOrderResponseDto> ProcessPaymentAsync(int id, Guid? approverId = null, bool forceDispatch = false)
         {
             var po = await LoadPoAsync(id);
-            if (po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
+            if (po.Status == PurchaseOrderStatus.Paid)
+            {
+                await ValidateApprovalGateAsync(po);
+                await SendPoEmailAsync(po, approverId);
+                return (await GetByIdAsync(id))!;
+            }
+            if (po.Status == PurchaseOrderStatus.InTransit || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
             {
                 return (await GetByIdAsync(id))!;
             }
@@ -1378,7 +1309,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     $"Purchase Order must be in Approved or Payment status to process payment. Current status is {po.Status}.");
             }
 
-            await ProcessPaymentInternalAsync(po, approverId, forceDispatch);
+            await ValidateApprovalGateAsync(po);
+            await ProcessPaymentInternalAsync(po, approverId, false);
             return (await GetByIdAsync(id))!;
         }
 
@@ -1473,6 +1405,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             try
             {
+                await ValidateApprovalGateAsync(poFull);
                 // Generate PDF
                 var pdfBytes = GeneratePoPdf(poFull);
                 var fileName = $"{poFull.PoNumber}.pdf";
@@ -1513,26 +1446,9 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 // Record audit: email failed
                 await RecordAuditAsync(poFull.Id, "email failed", approverId, $"Dispatch error: {ex.Message}");
 
-                _logger.LogError(ex, "Failed to send PO email for {PoNumber}. Status stays at Payment.", poFull.PoNumber);
+                _logger.LogError(ex, "Failed to send PO email for {PoNumber}. Status remains Paid so dispatch can be retried without another payment.", poFull.PoNumber);
 
-                // If forceDispatch is active in dev/sandbox evaluation, complete the transition to Sent
-                if (forceDispatch)
-                {
-                    using (var tx = await BeginTransactionIfSupportedAsync())
-                    {
-                        TransitionStatus(poFull, PurchaseOrderStatus.Sent);
-                        poFull.EmailStatus = "Sent (Sandbox Dispatch)";
-                        poFull.EmailSentAt = DateTime.UtcNow;
-                        poFull.UpdatedAt = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
 
-                        await RecordAuditAsync(poFull.Id, "email sent (sandbox)", approverId, $"Sandbox evaluation dispatch completed. Note: {ex.Message}");
-
-                        if (tx is not null) await tx.CommitAsync();
-                    }
-
-                    _logger.LogInformation("PO {PoNumber} advanced to Sent via sandbox dispatch fallback.", poFull.PoNumber);
-                }
             }
         }
 
@@ -1867,6 +1783,11 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var po = await LoadPoAsync(id);
 
+            if (po.Status is not (PurchaseOrderStatus.Approved or PurchaseOrderStatus.Payment or PurchaseOrderStatus.PaymentPending or PurchaseOrderStatus.PaymentFailed))
+                throw new InvalidOperationException("Bank evidence can be submitted only for an approved unpaid order.");
+            if (await _context.PurchaseOrders.AnyAsync(p => p.Id != id && p.BankReferenceNumber == referenceNumber.Trim()))
+                throw new InvalidOperationException("This bank reference already belongs to another order.");
+            await ValidateApprovalGateAsync(po);
             // Create uploads directory in wwwroot
             var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "slips");
             Directory.CreateDirectory(uploadsDir);
@@ -1892,55 +1813,66 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             }
             else
             {
-                uniqueFileName = $"slip_{po.PoNumber}_{Guid.NewGuid():N}.html";
-                var filePath = Path.Combine(uploadsDir, uniqueFileName);
-                var content = $@"<!DOCTYPE html><html><head><title>Bank Transfer Receipt - {po.PoNumber}</title>
-<style>body{{font-family:sans-serif;padding:30px;background:#0f172a;color:#f8fafc}} .box{{background:#1e293b;padding:24px;border-radius:12px;border:1px solid #334155;max-width:500px;margin:auto;}} h2{{color:#38bdf8;margin-top:0;}} .row{{display:flex;justify-content:space-between;margin:12px 0;border-bottom:1px solid #334155;padding-bottom:8px;}} .badge{{background:#10b981;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:bold;}}</style>
-</head><body><div class='box'><h2>Bank Transfer Verification</h2>
-<div class='row'><span>Purchase Order</span><strong>{po.PoNumber}</strong></div>
-<div class='row'><span>Reference Number</span><strong>{referenceNumber}</strong></div>
-<div class='row'><span>Amount Paid</span><strong>${po.TotalCost:N2} {po.Currency}</strong></div>
-<div class='row'><span>Status</span><span class='badge'>VERIFIED</span></div>
-<div class='row'><span>Date</span><span>{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</span></div>
-<p style='color:#94a3b8;font-size:12px;margin-top:16px;'>{notes ?? "Electronic bank transfer confirmation."}</p>
-</div></body></html>";
-                await File.WriteAllTextAsync(filePath, content);
+                throw new ArgumentException("Upload the actual bank transfer receipt before verification.");
             }
-
             po.BankSlipUrl = $"/uploads/slips/{uniqueFileName}";
             po.BankReferenceNumber = referenceNumber.Trim();
-            po.BankSlipStatus = "VERIFIED";
+            po.BankSlipStatus = "SUBMITTED";
             po.BankSlipUploadedAt = DateTime.UtcNow;
-            po.TrackingStatus = "Paid";
+            po.TrackingStatus = "PaymentPending";
+            if (po.Status != PurchaseOrderStatus.PaymentPending) TransitionStatus(po, PurchaseOrderStatus.PaymentPending);
             po.UpdatedAt = DateTime.UtcNow;
-
-            // Transition status to Paid if already Approved
-            if (po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment)
-            {
-                TransitionStatus(po, PurchaseOrderStatus.Paid);
-            }
-
-            // Record transaction
-            var txRecord = new PaymentTransaction
-            {
-                PurchaseOrderId = po.Id,
-                TransactionId = $"SLIP-{referenceNumber.Trim()}",
-                Amount = po.TotalCost,
-                Currency = po.Currency.ToLowerInvariant(),
-                PaymentStatus = "succeeded (bank slip)",
-                FailureReason = null,
-                Timestamp = DateTime.UtcNow
-            };
-            _context.PaymentTransactions.Add(txRecord);
-
-            await RecordAuditAsync(po.Id, "bank slip uploaded", userId, $"Bank slip verified with ref {referenceNumber}.");
-
             await _context.SaveChangesAsync();
-
-            // After payment settlement, auto-dispatch email with receipt to supplier
-            await SendPoEmailAsync(po, userId, forceDispatch: true);
-
+            await RecordAuditAsync(po.Id, "bank slip submitted", userId, "Awaiting manager verification against bank records.");
             return (await GetByIdAsync(po.Id))!;
+        }
+
+        public async Task<PurchaseOrderResponseDto> VerifyBankSlipAsync(int id, Guid? userId)
+        {
+            var po = await LoadPoAsync(id);
+            if (po.BankSlipStatus == "VERIFIED") return (await GetByIdAsync(id))!;
+            if (po.Status != PurchaseOrderStatus.PaymentPending || po.BankSlipStatus != "SUBMITTED")
+                throw new InvalidOperationException("Submit bank evidence before verifying payment.");
+            await ValidateApprovalGateAsync(po);
+            po.BankSlipStatus = "VERIFIED";
+            po.IsFinancialVerified = true;
+            TransitionStatus(po, PurchaseOrderStatus.Paid);
+            po.TrackingStatus = "Paid";
+            _context.PaymentTransactions.Add(new PaymentTransaction { PurchaseOrderId = id,
+                TransactionId = $"SLIP-{po.BankReferenceNumber}", Amount = po.TotalCost, Currency = po.Currency,
+                PaymentStatus = "succeeded", Timestamp = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+            await RecordAuditAsync(id, "bank payment verified", userId, "Manager verified submitted evidence against bank records.");
+            await SendPoEmailAsync(po, userId);
+            return (await GetByIdAsync(id))!;
+        }
+
+        public async Task<PurchaseOrderResponseDto> ConfirmCheckoutAsync(int id, string transactionId, decimal amount, string currency, Guid? userId)
+        {
+            var po = await LoadPoAsync(id);
+            if (amount != po.TotalCost || !string.Equals(currency, po.Currency, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Confirmed payment amount or currency does not match the order.");
+            var existing = await _context.PaymentTransactions.FirstOrDefaultAsync(t => t.TransactionId == transactionId);
+            if (existing != null)
+            {
+                if (existing.PurchaseOrderId != id) throw new InvalidOperationException("Payment is assigned to another order.");
+                if (po.Status == PurchaseOrderStatus.Paid) await SendPoEmailAsync(po, userId);
+                return (await GetByIdAsync(id))!;
+            }
+            if (po.Status is not (PurchaseOrderStatus.Approved or PurchaseOrderStatus.Payment or PurchaseOrderStatus.PaymentFailed))
+                throw new InvalidOperationException("The order is not awaiting card payment.");
+            // Recheck safety before dispatch. Record confirmed funds even if a new QA hold prevents dispatch.
+            po.StripePaymentIntentId = transactionId;
+            po.StripePaymentStatus = "succeeded";
+            po.Status = PurchaseOrderStatus.Paid;
+            po.TrackingStatus = "Paid";
+            po.IsFinancialVerified = true;
+            _context.PaymentTransactions.Add(new PaymentTransaction { PurchaseOrderId = id, TransactionId = transactionId,
+                Amount = amount, Currency = currency, PaymentStatus = "succeeded", Timestamp = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+            await ValidateApprovalGateAsync(po);
+            await SendPoEmailAsync(po, userId);
+            return (await GetByIdAsync(id))!;
         }
 
         public async Task<PurchaseOrderTrackingDto> GetTrackingAsync(int id)
@@ -1959,7 +1891,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 SupplierName = po.Supplier?.Name ?? "Supplier",
                 Status = po.Status.ToString(),
                 TrackingStatus = po.TrackingStatus ?? po.Status.ToString(),
-                TrackingNumber = po.TrackingNumber ?? $"TRK-{po.PoNumber}",
+                TrackingNumber = po.TrackingNumber,
                 TotalCost = po.TotalCost,
                 Currency = po.Currency,
                 PaymentMethod = !string.IsNullOrWhiteSpace(po.BankSlipUrl) ? "Bank Transfer (Slip)" : (!string.IsNullOrWhiteSpace(po.StripePaymentIntentId) ? "Stripe Sandbox" : "Pending"),
@@ -1976,7 +1908,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             bool isPendingApproval = po.Status >= PurchaseOrderStatus.PendingApproval && po.Status != PurchaseOrderStatus.Draft;
             bool isApproved = po.Status >= PurchaseOrderStatus.Approved && po.Status != PurchaseOrderStatus.PendingApproval && po.Status != PurchaseOrderStatus.Draft && po.Status != PurchaseOrderStatus.Rejected;
-            bool isPaid = po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed || !string.IsNullOrWhiteSpace(po.BankSlipUrl) || po.StripePaymentStatus == "succeeded";
+            bool isPaid = po.Status == PurchaseOrderStatus.Paid || po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed || po.BankSlipStatus == "VERIFIED" || po.StripePaymentStatus == "succeeded";
             bool isNotified = po.EmailStatus == "Sent" || po.EmailStatus == "Sent (Sandbox Dispatch)";
             bool isSent = po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed;
             bool isInTransit = (isSent || po.Status == PurchaseOrderStatus.InTransit) && po.Status != PurchaseOrderStatus.Delivered && po.Status != PurchaseOrderStatus.Completed;

@@ -14,6 +14,7 @@ namespace backend.Services
 {
     public class AgentIntegrationService : IAgentIntegrationService
     {
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContext;
         private readonly HttpClient _httpClient;
         private readonly ILogger<AgentIntegrationService> _logger;
         private readonly string _agentApiKey;
@@ -21,13 +22,17 @@ namespace backend.Services
         public AgentIntegrationService(
             HttpClient httpClient,
             IConfiguration configuration,
-            ILogger<AgentIntegrationService> logger)
+            ILogger<AgentIntegrationService> logger, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContext = null)
         {
+            _httpContext = httpContext;
             _httpClient = httpClient;
             _logger = logger;
 
             var agentBaseUrl = configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000";
             _httpClient.BaseAddress = new Uri(agentBaseUrl);
+            var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
+            if (!string.IsNullOrEmpty(authorization))
+                _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
 
             _agentApiKey = configuration["AgentServer:ApiKey"] ?? "default-dev-key";
             if (!_httpClient.DefaultRequestHeaders.Contains("X-API-Key"))

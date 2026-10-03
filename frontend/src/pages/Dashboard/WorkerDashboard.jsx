@@ -153,8 +153,7 @@ export default function WorkerDashboard() {
       showNotification('Inventory item created successfully!');
       loadData();
     } catch (err) {
-      const msg = err.response?.data?.message || (typeof err.response?.data === 'string' ? err.response?.data : null) || err.message || 'Failed to create inventory item';
-      setError(msg);
+      setError(err.response?.data?.message || 'Failed to create inventory item');
     }
   };
 
@@ -497,15 +496,6 @@ export default function WorkerDashboard() {
                     type="text" required placeholder="e.g. Cold Rolled Steel Sheet"
                     value={newItem.name}
                     onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Category</label>
-                  <input
-                    type="text" placeholder="e.g. Metal, Polymer, BoxPouch"
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                   />
                 </div>

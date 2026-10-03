@@ -34,6 +34,14 @@ namespace ManufacturingCoordinator.Data
         public DbSet<ProcurementRequest> ProcurementRequests { get; set; } = null!;
         public DbSet<SupplierCandidate> SupplierCandidates { get; set; } = null!;
         public DbSet<ProcurementOutcome> ProcurementOutcomes { get; set; } = null!;
+        // Canonical physical stock, shared with ManufacturingContext.
+        public DbSet<backend.Models.InventoryRoll> StockRolls { get; set; } = null!;
+        public DbSet<InventoryItem> InventoryItems { get; set; } = null!;
+        public DbSet<StockAlert> StockAlerts { get; set; } = null!;
+        public DbSet<StockLevel> StockLevels { get; set; } = null!;
+        public DbSet<InventoryMovement> InventoryMovements { get; set; } = null!;
+        public DbSet<GoodsReceipt> GoodsReceipts { get; set; } = null!;
+        public DbSet<SupplierMaterialQuote> SupplierMaterialQuotes { get; set; } = null!;
 
         // Student 3 — QA / Defect Reporting & Inventory
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
@@ -53,6 +61,20 @@ namespace ManufacturingCoordinator.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<InventoryItem>().Property(i => i.StockLevel).IsConcurrencyToken();
+            modelBuilder.Entity<backend.Models.InventoryRoll>(e =>
+            {
+                e.ToTable("InventoryRolls");
+                e.Property(r => r.CurrentQuantity).IsConcurrencyToken();
+                e.Property(r => r.Status).IsConcurrencyToken();
+                e.HasIndex(r => r.RollIdentifier).IsUnique();
+                e.HasOne(r => r.RawMaterial).WithMany(m => m.InventoryRolls)
+                    .HasForeignKey(r => r.RawMaterialId).OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<InventoryItem>().HasIndex(i => i.Sku).IsUnique();
+            modelBuilder.Entity<GoodsReceipt>().HasIndex(r => r.ReceiptKey).IsUnique();
+            modelBuilder.Entity<AgentWorkflow>().Property(w => w.PurchaseOrderId).IsConcurrencyToken();
+            modelBuilder.Entity<PurchaseOrder>().Property(p => p.Status).IsConcurrencyToken();
 
             // ---- User ----
             modelBuilder.Entity<User>(entity =>

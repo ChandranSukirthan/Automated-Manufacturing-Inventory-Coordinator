@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, status, Depends, BackgroundTasks
+import uuid
 from pydantic import BaseModel, Field
 
 from ai.core.state import WorkflowStatus, ApprovalStatus
@@ -23,7 +24,8 @@ from ai.core.request_context import (
     set_authorization_header,
 )
 
-router = APIRouter(prefix="/api/workflows", tags=["Agent Workflows"])
+from ai.security import require_actor, require_role
+router = APIRouter(prefix="/api/workflows", tags=["Agent Workflows"], dependencies=[Depends(require_actor)])
 tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
 
 
@@ -57,6 +59,9 @@ class RunWorkflowRequest(BaseModel):
     specification: Optional[str] = None
     purchasing_data: Optional[Dict[str, Any]] = None
     quality_data: Optional[Dict[str, Any]] = None
+    workflowType: str = "Procurement"
+    machineId: Optional[str] = None
+    background: bool = False
 
     # Legacy aliases (kept for backward compatibility)
     maximumBudget: Optional[float] = None
@@ -96,12 +101,32 @@ class ProductionImpactRequest(BaseModel):
 def trigger_workflow(
     request: RunWorkflowRequest,
     authorization: Optional[str] = Header(default=None),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Triggers the multi-agent procurement workflow.
     Called by ASP.NET Core ProcurementService.RunAiResearchAsync().
     All authoritative procurement values are passed directly — AI never invents them.
     """
+    if request.background and background_tasks is not None:
+        request.workflowId = request.workflowId or f"WF-{uuid.uuid4().hex[:20].upper()}"
+        existing = WORKFLOW_SESSIONS.get(request.workflowId)
+        if existing:
+            if existing.get("objective") != request.objective or existing.get("material_id") != (request.materialId or request.material_id):
+                raise HTTPException(409, "Workflow ID is already assigned to another request")
+            return get_final_output(existing)
+        queued = {"workflow_id": request.workflowId, "objective": request.objective,
+                  "workflow_type": request.workflowType, "machine_id": request.machineId,
+                  "material_id": request.materialId or request.material_id,
+                  "status": WorkflowStatus.Running, "approval_status": ApprovalStatus.Pending,
+                  "current_agent": "Queued", "queued_request": request.model_dump(), "errors": []}
+        WORKFLOW_SESSIONS[request.workflowId] = queued
+        from ai.graph.workflow import sync_to_database
+        sync_to_database(queued)
+        request.background = False
+        background_tasks.add_task(trigger_workflow, request, authorization)
+        return get_final_output(queued)
+
     # Resolve budget (accept both field names)
     budget = request.budgetLimit or request.maximumBudget
     resolved_material_id = request.materialId or request.material_id
@@ -136,7 +161,9 @@ def trigger_workflow(
     if request.unit:
         req_dict["unit"] = request.unit
 
-    state = run_workflow(
+    token = set_authorization_header(authorization)
+    try:
+        state = run_workflow(
         objective=request.objective,
         workflow_id=request.workflowId,
         procurement_requirement=req_dict if req_dict else None,
@@ -157,7 +184,36 @@ def trigger_workflow(
         procurement_request_id=request.procurementRequestId,
         purchasing_data=request.purchasing_data,
         quality_data=request.quality_data,
-    )
+        workflow_type=request.workflowType,
+        machine_id=request.machineId,
+        )
+        return get_final_output(state)
+    except ValueError as error:
+        raise HTTPException(409, str(error))
+    finally:
+        reset_authorization_header(token)
+
+
+@router.post("/{workflow_id}/retry")
+def retry_workflow(workflow_id: str, background_tasks: BackgroundTasks,
+                   authorization: Optional[str] = Header(default=None)):
+    state = WORKFLOW_SESSIONS.get(workflow_id)
+    if not state:
+        raise HTTPException(404, "Workflow was not found")
+    if state.get("status") != WorkflowStatus.Failed and state.get("current_agent") != "Supplier Review":
+        raise HTTPException(409, "Only failed analyses or supplier review without an order can be retried")
+    request = state.get("queued_request") or {
+        "objective": state["objective"], "workflowId": workflow_id,
+        "materialId": state.get("material_id"), "materialName": state.get("material_name"),
+        "requiredQuantity": state.get("required_quantity"), "currentStock": state.get("current_stock"),
+        "safetyStock": state.get("safety_stock"), "openPOQuantity": state.get("open_po_quantity"),
+        "netDeficit": state.get("net_deficit"), "budgetLimit": state.get("budget_limit"),
+        "unit": state.get("unit"), "workflowType": state.get("workflow_type", "Procurement"),
+        "machineId": state.get("machine_id")}
+    state.update(status=WorkflowStatus.Running, current_agent="Queued", errors=[])
+    WORKFLOW_SESSIONS[workflow_id] = state
+    background_tasks.add_task(trigger_workflow, RunWorkflowRequest(**{**request, "background": False}), authorization)
+    return get_final_output(state)
 
 
 @router.get("")
@@ -179,12 +235,16 @@ def get_workflow(workflow_id: str):
 
 
 @router.post("/{workflow_id}/approve")
-def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest()):
+def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest(), actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager APPROVE action.
     Resumes execution and persists procurement outcome for future learning.
     """
-    resumed = approve_and_resume(workflow_id, approved_by=request.approvedBy)
+    require_role(actor, "SupplyChainManager")
+    try:
+        resumed = approve_and_resume(workflow_id, approved_by=request.approvedBy)
+    except ValueError as error:
+        raise HTTPException(409, str(error))
     if not resumed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -194,11 +254,12 @@ def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest(
 
 
 @router.post("/{workflow_id}/reject")
-def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest):
+def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest, actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager REJECT action.
     Persists rejection reason for future learning dataset.
     """
+    require_role(actor, "SupplyChainManager")
     rejected = reject_workflow(
         workflow_id,
         reason=request.reason or "Rejected by Supply Chain Manager",
@@ -213,11 +274,12 @@ def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest):
 
 
 @router.post("/{workflow_id}/revision")
-def request_revision_endpoint(workflow_id: str, request: RevisionRequest):
+def request_revision_endpoint(workflow_id: str, request: RevisionRequest, actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager REQUEST_REVISION action.
     Sends structured revision requirement back into the purchasing → validation loop.
     """
+    require_role(actor, "SupplyChainManager")
     revised = request_revision(
         workflow_id,
         revision_notes=request.revisionNotes,

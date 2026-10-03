@@ -107,17 +107,6 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
             updates["material_name"] = "Arduino UNO R3"
             updates["specification"] = "MCU-UNO-R3"
 
-    # If net_deficit was not provided, infer default for replenishment objectives
-    if updates.get("net_deficit") is None and state.get("net_deficit") is None:
-        obj_lower = objective.lower()
-        if any(w in obj_lower for w in ["replenish", "procure", "low", "shortage", "reorder", "purchase"]):
-            req_qty = updates.get("required_quantity") or state.get("required_quantity")
-            updates["net_deficit"] = float(req_qty) if req_qty is not None else 1000.0
-            if updates.get("required_quantity") is None and state.get("required_quantity") is None:
-                updates["required_quantity"] = 1000.0
-            if updates.get("budget_limit") is None and state.get("budget_limit") is None:
-                updates["budget_limit"] = 20000.0
-
     completed = list(state.get("completed_steps") or [])
     completed.append("Planner: Generated structured execution plan")
 

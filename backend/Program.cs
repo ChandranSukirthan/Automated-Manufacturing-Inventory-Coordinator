@@ -92,6 +92,9 @@ builder.Services.AddScoped<ISupplierService, SupplierService>();
 builder.Services.AddScoped<IStripeService, StripeService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 builder.Services.AddScoped<IProcurementService, ProcurementService>();
+builder.Services.AddScoped<GoodsReceiptService>();
+builder.Services.AddScoped<WorkflowDraftService>();
+builder.Services.AddHostedService<WorkflowDraftWorker>();
 
 // Register Student 3 - Quality & Defect Services
 builder.Services.AddScoped<IDefectReportService, DefectReportService>();
@@ -186,7 +189,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// Auto-create database tables on startup & seed
+// Schema updates and demo seeding are explicit deployment choices.
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 using (var scope = app.Services.CreateScope())
 {
     try
@@ -204,12 +208,12 @@ using (var scope = app.Services.CreateScope())
         ");
 
         var mfgContext = scope.ServiceProvider.GetService<ManufacturingContext>();
-        if (mfgContext != null)
+        if (mfgContext != null && builder.Configuration.GetValue<bool>("Database:SeedDemoData"))
         {
             await StudentAInventorySeeder.SeedAsync(mfgContext);
         }
 
-        await DbInitializer.SeedAsync(app.Services);
+        if (builder.Configuration.GetValue<bool>("Database:SeedDemoData")) await DbInitializer.SeedAsync(app.Services);
     }
     catch (Exception ex)
     {

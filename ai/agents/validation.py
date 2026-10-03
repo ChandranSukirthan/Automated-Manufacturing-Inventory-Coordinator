@@ -6,6 +6,7 @@ Never bypasses budget rules, supplier verification, quality requirements, or hum
 from __future__ import annotations
 
 import logging
+import psycopg
 from typing import Any, Dict
 
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
@@ -15,114 +16,54 @@ from ai.agents.quality_agent import run_quality_validation
 logger = logging.getLogger("amic_agentic_ai.validation")
 
 
-def _check_quarantine_count() -> int:
-    """Returns count of active quarantines from PostgreSQL, or 0 on failure."""
+def _check_material_quarantine_count(mat_id: Any, mat_name: str = "", sku_code: str = "") -> int:
     try:
-        import psycopg
-        with psycopg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            dbname=settings.DB_NAME,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            connect_timeout=2,
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT COUNT(*) FROM "Quarantines" WHERE "Status" = \'Active\';')
-                row = cur.fetchone()
-                return row[0] if row else 0
+        with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    SELECT "Id", "SkuCode" FROM "RawMaterials"
+                    WHERE "Id"::text = %s OR "SkuCode" = %s OR "SkuCode" = %s
+                ''', (str(mat_id), str(mat_id), sku_code))
+                material = cursor.fetchone()
+                if not material:
+                    raise ValueError("The ordered material does not exist")
+                cursor.execute('''
+                    SELECT COUNT(DISTINCT r."RollIdentifier") FROM "InventoryRolls" r
+                    WHERE r."RawMaterialId" = %s AND (r."Status" IN ('Quarantined', 'Locked', 'On Hold')
+                      OR EXISTS (SELECT 1 FROM "Quarantines" q WHERE q."InventoryRollId" = r."RollIdentifier" AND q."Status" = 'Active'))
+                ''', (material[0],))
+                physical_count = cursor.fetchone()[0]
+                cursor.execute('''
+                    SELECT COUNT(*) FROM "Quarantines" q JOIN "DefectReports" d ON d."Id" = q."DefectReportId"
+                    WHERE q."Status" = 'Active' AND d."SkuCode" = %s
+                      AND NOT EXISTS (SELECT 1 FROM "InventoryRolls" r WHERE r."RollIdentifier" = q."InventoryRollId" AND r."RawMaterialId" = %s)
+                ''', (material[1], material[0]))
+                return physical_count + cursor.fetchone()[0]
     except Exception:
-        return 0
+        if settings.demo_mode:
+            return 0
+        raise ValueError("Live quarantine verification is unavailable; retry after restoring the database")
 
 
 def _check_historical_material_quality_risk(mat_id: Any, mat_name: str = "") -> dict[str, Any] | None:
-    """
-    Inspects historical quality data associated with the PO's raw material.
-    Relationship: RawMaterial -> InventoryRolls -> DefectReports / Quarantines.
-    Returns historicalRisk dict if a past quality issue/quarantine exists on this material, else None.
-    """
     try:
-        import psycopg
-        with psycopg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            dbname=settings.DB_NAME,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            connect_timeout=2,
-        ) as conn:
-            with conn.cursor() as cur:
-                # 1. Look for inventory rolls of this material with defect reports or quarantines
-                if str(mat_id).isdigit():
-                    cur.execute(
-                        '''
-                        SELECT ir."Id", ir."RollIdentifier", dr."Description", dr."Severity", q."Reason", r."Name"
-                        FROM "InventoryRolls" ir
-                        JOIN "RawMaterials" r ON r."Id" = ir."RawMaterialId"
-                        LEFT JOIN "Quarantines" q ON q."InventoryRollId" = ir."Id" OR q."InventoryRollId" = ir."RollIdentifier"
-                        LEFT JOIN "DefectReports" dr ON dr."Id" = q."DefectReportId" OR dr."BatchId" = ir."BatchId"
-                        WHERE ir."RawMaterialId" = %s AND (q."Id" IS NOT NULL OR dr."Id" IS NOT NULL)
-                        ORDER BY COALESCE(q."CreatedAt", dr."CreatedAt", ir."CreatedAt") DESC
-                        LIMIT 1;
-                        ''',
-                        (int(mat_id),)
-                    )
-                else:
-                    cur.execute(
-                        '''
-                        SELECT ir."Id", ir."RollIdentifier", dr."Description", dr."Severity", q."Reason", r."Name"
-                        FROM "InventoryRolls" ir
-                        JOIN "RawMaterials" r ON r."Id" = ir."RawMaterialId"
-                        LEFT JOIN "Quarantines" q ON q."InventoryRollId" = ir."Id" OR q."InventoryRollId" = ir."RollIdentifier"
-                        LEFT JOIN "DefectReports" dr ON dr."Id" = q."DefectReportId" OR dr."BatchId" = ir."BatchId"
-                        WHERE (r."SkuCode" = %s OR r."Name" ILIKE %s) AND (q."Id" IS NOT NULL OR dr."Id" IS NOT NULL)
-                        ORDER BY COALESCE(q."CreatedAt", dr."CreatedAt", ir."CreatedAt") DESC
-                        LIMIT 1;
-                        ''',
-                        (str(mat_id), f"%{mat_name or mat_id}%")
-                    )
-                row = cur.fetchone()
-                if row:
-                    roll_ident = row[1] or row[0] or "IRON-ROLL-001"
-                    issue_desc = row[2] or row[4] or "Previous quality defect detected"
-                    severity = str(row[3] or "Medium")
-                    material_label = row[5] or mat_name or "Iron"
-                    return {
-                        "material": material_label,
-                        "relatedRoll": roll_ident,
-                        "issue": issue_desc,
-                        "severity": severity
-                    }
-
-                # 2. Check if there are DefectReports mentioning the material directly (e.g. Iron defect)
-                cur.execute(
-                    '''
-                    SELECT dr."BatchId", dr."Description", dr."Severity", dr."AffectedInventoryJson"
-                    FROM "DefectReports" dr
-                    WHERE dr."Description" ILIKE %s OR dr."BatchId" ILIKE %s
-                    ORDER BY dr."CreatedAt" DESC LIMIT 1;
-                    ''',
-                    (f"%{mat_name or mat_id}%", f"%{mat_name or mat_id}%")
-                )
-                d_row = cur.fetchone()
-                if d_row:
-                    roll_ref = "IRON-ROLL-001"
-                    if d_row[3] and "[" in str(d_row[3]):
-                        try:
-                            import json
-                            items = json.loads(d_row[3])
-                            if items and len(items) > 0:
-                                roll_ref = str(items[0])
-                        except Exception:
-                            pass
-                    return {
-                        "material": mat_name or str(mat_id),
-                        "relatedRoll": roll_ref,
-                        "issue": d_row[1] or "Previous quality defect detected",
-                        "severity": str(d_row[2] or "Medium")
-                    }
-    except Exception as ex:
-        logger.warning(f"Historical quality risk check exception: {ex}")
+        with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute('''
+                    SELECT m."Name", d."Description", d."Severity", d."AffectedInventoryJson"
+                    FROM "DefectReports" d JOIN "RawMaterials" m ON m."SkuCode" = d."SkuCode"
+                    WHERE (m."Id"::text = %s OR m."SkuCode" = %s)
+                      AND d."Status" NOT IN ('Resolved', 'Closed') AND d."Severity" IN ('HIGH', 'High', 'Critical')
+                    ORDER BY d."CreatedAt" DESC LIMIT 1
+                ''', (str(mat_id), str(mat_id)))
+                row = cursor.fetchone()
+        if row:
+            import json
+            rolls = json.loads(row[3] or "[]")
+            return {"material": row[0], "issue": row[1], "severity": row[2], "relatedRoll": rolls[0] if rolls else None}
+    except Exception:
+        if not settings.demo_mode:
+            raise ValueError("Live defect verification is unavailable")
     return None
 
 
@@ -213,8 +154,15 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                             supplier_val = "INACTIVE_SUPPLIER"
                             is_valid = False
                             rejection_reasons.append(f"Supplier ID '{supplier_id}' not found in ERP master catalog.")
+                    elif not settings.demo_mode:
+                        supplier_val = "SUPPLIER_NOT_FOUND"
+                        is_valid = False
+                        rejection_reasons.append("Recommended supplier is not onboarded in the ERP.")
     except Exception:
-        pass
+        if not settings.demo_mode:
+            supplier_val = "UNAVAILABLE"
+            is_valid = False
+            rejection_reasons.append("Live supplier verification is unavailable.")
 
     # Material validation against PostgreSQL RawMaterials database
     material_val = "PASSED"
@@ -250,6 +198,10 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                         mat_name = mat_row[2] or ""
         except Exception as ex:
             logger.warning(f"Database material check error: {ex}")
+            if not settings.demo_mode:
+                material_val = "UNAVAILABLE"
+                is_valid = False
+                rejection_reasons.append("Live material verification is unavailable.")
 
     # ── 2. Quantity check ──────────────────────────────────────────────────────
     quantity_check = "PASS" if recommended_qty >= net_deficit else "FAIL"
@@ -273,8 +225,9 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     # ── 5. Quality, Historical Risk & Quarantine Safety Assessment ─────────────
     quality_safety_status = "CLEAR"
     quality_data = dict(state.get("quality_data") or {})
-    defect = quality_data.get("defect")
-    quarantined_rolls_count = _check_quarantine_count()
+    defect = quality_data.get("defect") or {}
+    sku_val = draft_po.get("materialSku") or state.get("sku") or ""
+    quarantined_rolls_count = _check_material_quarantine_count(mat_id, mat_name, sku_code=sku_val)
 
     # Historical Quality Risk Detection (Human-in-the-Loop requirement)
     historical_risk = _check_historical_material_quality_risk(mat_id, mat_name)
@@ -440,8 +393,8 @@ def execution_node(state: AgentState) -> Dict[str, Any]:
     completed.append(f"Execution: PO {po_num} registered in ERP staging queue")
 
     return {
-        "current_agent": "Execution",
-        "status": WorkflowStatus.Completed,
+        "current_agent": "Payment / Dispatch",
+        "status": WorkflowStatus.WaitingForApproval,
         "approval_status": ApprovalStatus.Approved,
         "completed_steps": completed,
         "final_outcome": (

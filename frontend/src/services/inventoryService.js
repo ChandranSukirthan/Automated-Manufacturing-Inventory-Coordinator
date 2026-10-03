@@ -153,13 +153,10 @@ const inventoryService = {
   },
 
   getActiveWorkflows: async () => {
-    try {
-      const response = await api.get('/agentworkflow/workflows');
-      return response.data;
-    } catch {
-      return [];
-    }
+    const response = await api.get('/agentworkflow/workflows');
+    return response.data;
   }
+
 };
 
 export default inventoryService;

@@ -295,7 +295,12 @@ class PurchaseOrderService {
   }
 
   /// POST /api/purchase-orders/{id}/process-payment
-  Future<PurchaseOrderDetail> processPayment(int id, {bool forceDispatch = true}) async {
+  Future<PurchaseOrderDetail> verifyBankSlip(int id) async {
+    final response = await _api.post('/purchase-orders/$id/verify-bank-slip');
+    return PurchaseOrderDetail.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<PurchaseOrderDetail> processPayment(int id, {bool forceDispatch = false}) async {
     final response = await _api.post('/purchase-orders/$id/process-payment?forceDispatch=$forceDispatch');
     return PurchaseOrderDetail.fromJson(response as Map<String, dynamic>);
   }
