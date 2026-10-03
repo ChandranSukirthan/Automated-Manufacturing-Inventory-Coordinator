@@ -57,11 +57,15 @@ namespace backend.Services
 
             foreach (var item in items.Where(i => !string.IsNullOrWhiteSpace(i.Sku)))
             {
-                if (!existingMatSkus.Contains(item.Sku.Trim().ToLowerInvariant()))
+                var cleanSku = item.Sku.Trim();
+                if (cleanSku.Length > 255) cleanSku = cleanSku.Substring(0, 255);
+                var skuKey = cleanSku.ToLowerInvariant();
+
+                if (!existingMatSkus.Contains(skuKey))
                 {
                     var newMat = new RawMaterial
                     {
-                        SkuCode = item.Sku.Trim(),
+                        SkuCode = cleanSku,
                         Name = item.Name,
                         Category = item.Category,
                         UnitOfMeasure = "UNITS",
@@ -71,7 +75,7 @@ namespace backend.Services
                     };
                     _context.RawMaterials.Add(newMat);
                     rawMaterials.Add(newMat);
-                    existingMatSkus.Add(item.Sku.Trim().ToLowerInvariant());
+                    existingMatSkus.Add(skuKey);
                     changed = true;
                 }
             }
@@ -84,7 +88,8 @@ namespace backend.Services
 
             foreach (var mat in rawMaterials.Where(m => !string.IsNullOrWhiteSpace(m.SkuCode)))
             {
-                if (!existingItemSkus.Contains(mat.SkuCode.Trim().ToLowerInvariant()))
+                var matSkuKey = mat.SkuCode.Trim().ToLowerInvariant();
+                if (!existingItemSkus.Contains(matSkuKey))
                 {
                     // Compute actual stock from rolls or stock levels
                     var rollQty = rolls.Where(r => r.RawMaterialId == mat.Id).Sum(r => (int)r.CurrentQuantity);
@@ -101,14 +106,21 @@ namespace backend.Services
                     };
                     _context.InventoryItems.Add(newItem);
                     items.Add(newItem);
-                    existingItemSkus.Add(mat.SkuCode.Trim().ToLowerInvariant());
+                    existingItemSkus.Add(matSkuKey);
                     changed = true;
                 }
             }
 
             if (changed)
             {
-                await _context.SaveChangesAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Background synchronization notice during GetInventoryItemsAsync");
+                }
             }
 
             return items
@@ -603,13 +615,32 @@ namespace backend.Services
                 roll.BatchId = batchId;
             }
 
-            if (string.IsNullOrWhiteSpace(roll.RollIdentifier))
+            var cleanIdentifier = roll.RollIdentifier?.Trim();
+            if (string.IsNullOrWhiteSpace(cleanIdentifier))
             {
-                roll.RollIdentifier = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
+                cleanIdentifier = $"ROLL-{DateTime.UtcNow:yyyyMMddHHmmss}-{new Random().Next(100, 999)}";
             }
+            roll.RollIdentifier = cleanIdentifier;
+
+            var duplicateExists = await _context.InventoryRolls
+                .AnyAsync(r => r.RollIdentifier.ToLower() == cleanIdentifier.ToLower() || r.Id.ToLower() == cleanIdentifier.ToLower());
+            if (duplicateExists)
+            {
+                throw new InvalidOperationException($"An inventory roll with identifier '{cleanIdentifier}' already exists. Please choose a unique identifier.");
+            }
+
             if (string.IsNullOrWhiteSpace(roll.Id))
             {
-                roll.Id = roll.RollIdentifier;
+                roll.Id = cleanIdentifier;
+            }
+            else
+            {
+                roll.Id = roll.Id.Trim();
+                var idExists = await _context.InventoryRolls.AnyAsync(r => r.Id.ToLower() == roll.Id.ToLower());
+                if (idExists)
+                {
+                    roll.Id = $"{cleanIdentifier}-{Guid.NewGuid().ToString("N")[..6]}";
+                }
             }
 
             roll.BarcodeUrl = _barcodeService.GenerateQrCodeUrl(roll.RollIdentifier);
@@ -620,7 +651,19 @@ namespace backend.Services
             if (string.IsNullOrWhiteSpace(roll.Status)) roll.Status = "In Stock";
 
             _context.InventoryRolls.Add(roll);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException dbEx)
+            {
+                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                if (inner.Contains("PK_InventoryRolls") || inner.Contains("RollIdentifier") || inner.Contains("23505"))
+                {
+                    throw new InvalidOperationException($"An inventory roll with identifier '{cleanIdentifier}' already exists. Please choose a unique identifier.");
+                }
+                throw;
+            }
             return roll;
         }
 

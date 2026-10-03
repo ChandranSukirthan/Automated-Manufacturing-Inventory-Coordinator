@@ -40,7 +40,7 @@ namespace backend.Data
             modelBuilder.Entity<RawMaterial>(entity =>
             {
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.SkuCode).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.SkuCode).IsRequired().HasMaxLength(255);
                 entity.HasIndex(e => e.SkuCode).IsUnique();
                 entity.Property(e => e.Name).IsRequired();
             });

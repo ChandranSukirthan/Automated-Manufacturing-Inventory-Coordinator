@@ -154,9 +154,22 @@ namespace backend.Controllers
                 var created = await _inventoryService.CreateInventoryRollAsync(roll);
                 return CreatedAtAction(nameof(GetRollById), new { id = created.Id }, created);
             }
-            catch (System.Exception ex)
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(ex.Message);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                var innerMsg = dbEx.InnerException?.Message ?? dbEx.Message;
+                if (innerMsg.Contains("PK_InventoryRolls") || innerMsg.Contains("RollIdentifier") || innerMsg.Contains("unique constraint") || innerMsg.Contains("23505"))
+                {
+                    return BadRequest($"An inventory roll with identifier '{roll.RollIdentifier}' already exists. Please choose a unique identifier.");
+                }
+                return BadRequest(innerMsg);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.InnerException?.Message ?? ex.Message);
             }
         }
 
@@ -165,9 +178,16 @@ namespace backend.Controllers
         public async Task<IActionResult> UpdateRoll(string id, [FromBody] InventoryRoll roll)
         {
             if (id != roll.Id) return BadRequest("ID mismatch.");
-            var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
-            if (!updated) return NotFound();
-            return NoContent();
+            try
+            {
+                var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
+                if (!updated) return NotFound();
+                return NoContent();
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.InnerException?.Message ?? ex.Message);
+            }
         }
 
         // DELETE: api/inventory/rolls/{id}

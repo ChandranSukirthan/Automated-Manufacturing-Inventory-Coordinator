@@ -110,6 +110,7 @@ export default function WorkerDashboard() {
       setStockLevels(levelsData || []);
 
       if (rawMatsData && rawMatsData.length > 0) {
+        setRollRawMaterialId((prev) => (prev ? prev : String(rawMatsData[0].id)));
         const hist = await inventoryService.getHistory(rawMatsData[0].id).catch(() => []);
         setHistoryItems(hist || []);
       }
@@ -198,13 +199,27 @@ export default function WorkerDashboard() {
 
   const handleCreateRoll = async (e) => {
     e.preventDefault();
-    if (!rollIdentifier.trim()) return;
+    if (!rollIdentifier.trim()) {
+      setError('Please provide a roll identifier.');
+      return;
+    }
+    const matId = Number(rollRawMaterialId);
+    if (!matId || isNaN(matId)) {
+      setError('Please select a valid raw material.');
+      return;
+    }
+    const qty = Number(rollQuantity);
+    if (!qty || qty <= 0 || isNaN(qty)) {
+      setError('Roll quantity must be greater than zero.');
+      return;
+    }
+
     try {
       const created = await inventoryService.createRoll({
         rollIdentifier: rollIdentifier.trim(),
-        rawMaterialId: Number(rollRawMaterialId),
-        initialQuantity: Number(rollQuantity),
-        currentQuantity: Number(rollQuantity),
+        rawMaterialId: matId,
+        initialQuantity: qty,
+        currentQuantity: qty,
       });
       setRegisteredRoll(created);
       setRollIdentifier('');
@@ -212,7 +227,10 @@ export default function WorkerDashboard() {
       showNotification(`Inventory Roll ${created.rollIdentifier || rollIdentifier} registered!`);
       loadData();
     } catch (err) {
-      setError(err.response?.data || 'Failed to register inventory roll.');
+      const msg = typeof err.response?.data === 'string'
+        ? err.response.data
+        : err.response?.data?.message || err.message || 'Failed to register inventory roll.';
+      setError(msg);
     }
   };
 

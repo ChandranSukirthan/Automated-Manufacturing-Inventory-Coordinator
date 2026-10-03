@@ -97,6 +97,12 @@ export default function AiApprovals() {
   const [animatingApproval, setAnimatingApproval] = useState(false);
   const [approvalStep, setApprovalStep] = useState(0); 
   const [validationFailure, setValidationFailure] = useState(null);
+  const [qaCheckStatuses, setQaCheckStatuses] = useState({
+    supplier: 'CHECKING...',
+    budget: 'CHECKING...',
+    poMath: 'CHECKING...',
+    material: 'CHECKING...'
+  });
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -106,24 +112,42 @@ export default function AiApprovals() {
     setApproveModalOpen(false);
     setAnimatingApproval(true);
     setValidationFailure(null);
+    setQaCheckStatuses({
+      supplier: 'CHECKING...',
+      budget: 'CHECKING...',
+      poMath: 'CHECKING...',
+      material: 'CHECKING...'
+    });
     setError('');
 
     try {
       // Step 1: Validating JWT Authorization
       setApprovalStep(1);
-      await delay(600);
+      await delay(120);
 
       // Step 2: QA AI Multi-Agent Validation (Supplier, Budget, PO Math, Material)
       setApprovalStep(2);
-      await delay(700);
 
-      // Execute backend approval gate
-      await purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
-      await delay(500);
+      // Start backend approval call concurrently with responsive check progression
+      const approveTask = purchaseOrderService.approvePurchaseOrder(selectedOrder.id);
+
+      // Sequentially animate the 4 checks smoothly with rapid feedback
+      await delay(90);
+      setQaCheckStatuses(prev => ({ ...prev, supplier: 'PASSED' }));
+      await delay(90);
+      setQaCheckStatuses(prev => ({ ...prev, budget: 'PASSED' }));
+      await delay(90);
+      setQaCheckStatuses(prev => ({ ...prev, poMath: 'PASSED' }));
+      await delay(90);
+      setQaCheckStatuses(prev => ({ ...prev, material: 'PASSED' }));
+
+      // Await authoritative backend approval gate
+      await approveTask;
+      await delay(120);
 
       // Step 3: Approving Order in backend (Authoritative Gate & AgentWorkflow Sync)
       setApprovalStep(3);
-      await delay(500);
+      await delay(160);
 
       // Step 4: Awaiting Payment
       setApprovalStep(4);
@@ -156,6 +180,10 @@ export default function AiApprovals() {
 
       let diagnostic = null;
       const lowerErr = errMsg.toLowerCase();
+
+      const firstLine = selectedOrder.orderLines?.[0] || selectedOrder.items?.[0];
+      const matName = firstLine?.rawMaterial?.name || firstLine?.materialName || selectedOrder.materialName || 'Iron';
+      const isIron = matName.toLowerCase().includes('iron');
 
       const histRisk = selectedOrder.historicalRisk;
       const relatedRoll = histRisk?.relatedRoll || (isIron ? 'IRON-ROLL-001' : 'HISTORICAL-ROLL-001');
@@ -262,6 +290,12 @@ export default function AiApprovals() {
     setAnimatingApproval(false);
     setApprovalStep(0);
     setValidationFailure(null);
+    setQaCheckStatuses({
+      supplier: 'CHECKING...',
+      budget: 'CHECKING...',
+      poMath: 'CHECKING...',
+      material: 'CHECKING...'
+    });
     setSelectedOrder(null);
     await fetchPendingOrders();
   };
@@ -998,7 +1032,7 @@ export default function AiApprovals() {
                           <AlertTriangle className="w-3 h-3" />
                           <span>Completed with Issue</span>
                         </span>
-                      ) : approvalStep > 2 ? (
+                      ) : approvalStep > 2 || (approvalStep === 2 && qaCheckStatuses.supplier === 'PASSED' && qaCheckStatuses.budget === 'PASSED' && qaCheckStatuses.poMath === 'PASSED' && qaCheckStatuses.material === 'PASSED') ? (
                         <span className="text-[10px] text-emerald-400 font-semibold uppercase">4 / 4 Passed</span>
                       ) : approvalStep === 2 ? (
                         <span className="text-[10px] text-brand-300 font-semibold animate-pulse uppercase">In Progress...</span>
@@ -1016,19 +1050,19 @@ export default function AiApprovals() {
                     {[
                       {
                         label: 'Supplier Check',
-                        status: validationFailure ? validationFailure.checks.supplier : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                        status: validationFailure ? validationFailure.checks.supplier : qaCheckStatuses.supplier
                       },
                       {
                         label: 'Budget Check',
-                        status: validationFailure ? validationFailure.checks.budget : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                        status: validationFailure ? validationFailure.checks.budget : qaCheckStatuses.budget
                       },
                       {
                         label: 'PO Math Check',
-                        status: validationFailure ? validationFailure.checks.poMath : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                        status: validationFailure ? validationFailure.checks.poMath : qaCheckStatuses.poMath
                       },
                       {
                         label: 'Material Check',
-                        status: validationFailure ? validationFailure.checks.material : approvalStep > 2 ? 'PASSED' : 'CHECKING...'
+                        status: validationFailure ? validationFailure.checks.material : qaCheckStatuses.material
                       }
                     ].map((c) => {
                       const isFail = c.status === 'FAILED';

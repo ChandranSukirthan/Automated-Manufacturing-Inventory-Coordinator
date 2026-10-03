@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { QrCode, Search, Trash2, Copy, Check, PlusCircle } from 'lucide-react';
+import { QrCode, Search, Trash2, Copy, Check, PlusCircle, Sparkles } from 'lucide-react';
 import EmptyState from './EmptyState';
 
 /* ── Status color helper ────────────────────────────────────── */
@@ -58,6 +58,12 @@ export default function RollsTab({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handleGenerateIdentifier = () => {
+    const ts = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    const rand = Math.floor(100 + Math.random() * 900);
+    setRollIdentifier(`ROLL-${ts}-${rand}`);
   };
 
   return (
@@ -154,9 +160,18 @@ export default function RollsTab({
 
           <form onSubmit={onCreateRoll} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Roll Identifier
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Roll Identifier
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGenerateIdentifier}
+                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition font-medium"
+                >
+                  <Sparkles className="w-3 h-3" /> Auto-generate
+                </button>
+              </div>
               <input
                 type="text"
                 required
