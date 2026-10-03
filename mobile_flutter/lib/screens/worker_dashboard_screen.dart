@@ -13,11 +13,13 @@ class WorkerDashboardScreen extends StatefulWidget {
   const WorkerDashboardScreen({
     required this.qualityService,
     this.appState,
+    this.initialIndex = 0,
     super.key,
   });
 
   final QualityService qualityService;
   final AppState? appState;
+  final int initialIndex;
 
   @override
   State<WorkerDashboardScreen> createState() => _WorkerDashboardScreenState();
@@ -82,6 +84,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex;
     _load();
   }
 

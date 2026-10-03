@@ -143,7 +143,6 @@ class DefectReport {
     required this.description,
     required this.createdAt,
     required this.status,
-    this.skuCode,
     this.reportedByUserId,
     this.affectedInventory = const [],
   });
@@ -156,7 +155,6 @@ class DefectReport {
   final String description;
   final DateTime createdAt;
   final String status;
-  final String? skuCode;
   final String? reportedByUserId;
   final List<String> affectedInventory;
 
@@ -170,7 +168,6 @@ class DefectReport {
     createdAt:
         DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     status: json['status'] as String? ?? '',
-    skuCode: json['skuCode'] as String?,
     reportedByUserId: json['reportedByUserId']?.toString(),
     affectedInventory: (json['affectedInventory'] as List<dynamic>? ?? [])
         .map((item) => item.toString())
@@ -186,7 +183,6 @@ extension DefectReportCopy on DefectReport {
     String? severity,
     String? description,
     String? status,
-    String? skuCode,
     String? reportedByUserId,
     List<String>? affectedInventory,
   }) => DefectReport(
@@ -198,7 +194,6 @@ extension DefectReportCopy on DefectReport {
     description: description ?? this.description,
     createdAt: createdAt,
     status: status ?? this.status,
-    skuCode: skuCode ?? this.skuCode,
     reportedByUserId: reportedByUserId ?? this.reportedByUserId,
     affectedInventory: affectedInventory ?? this.affectedInventory,
   );

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -39,8 +38,9 @@ class ApiException implements Exception {
 class ApiClient {
   static const requestTimeout = Duration(seconds: 15);
 
-  ApiClient({required this.storage, String? baseUrl, this.onSessionExpired})
-: baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
+  ApiClient({SessionStorage? storage, String? baseUrl, this.onSessionExpired})
+      : storage = storage ?? SessionStorage(),
+        baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
 
   final String aiBaseUrl = _defaultAiBaseUrl.replaceAll(RegExp(r'/$'), '');
   final SessionStorage storage;

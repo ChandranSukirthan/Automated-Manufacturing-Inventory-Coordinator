@@ -192,7 +192,6 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
       DefectsScreen(
         service: QualityService(widget.apiClient),
         showAppBar: false,
-        readOnly: true,
       ),
     ];
 
