@@ -158,6 +158,7 @@ def trigger_workflow(
         purchasing_data=request.purchasing_data,
         quality_data=request.quality_data,
     )
+    return get_final_output(state)
 
 
 @router.get("")

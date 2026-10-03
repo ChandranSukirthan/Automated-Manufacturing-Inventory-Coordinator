@@ -4,15 +4,26 @@ Use ``agents.data_extraction_agent`` for new code. This module remains so
 existing commands that import ``data_extraction_agent`` continue to work.
 """
 
-from agents.data_extraction_agent import (
-    ALLOWED_TOOLS,
-    DATA_EXTRACTION_GRAPH,
-    DATA_EXTRACTION_PROMPT,
-    get_inventory_levels,
-    query_production_db,
-    run_data_extraction_agent,
-    run_data_extraction_agent_json,
-)
+try:
+    from ai.agents.data_extraction_agent import (
+        ALLOWED_TOOLS,
+        DATA_EXTRACTION_GRAPH,
+        DATA_EXTRACTION_PROMPT,
+        get_inventory_levels,
+        query_production_db,
+        run_data_extraction_agent,
+        run_data_extraction_agent_json,
+    )
+except ImportError:
+    from agents.data_extraction_agent import (
+        ALLOWED_TOOLS,
+        DATA_EXTRACTION_GRAPH,
+        DATA_EXTRACTION_PROMPT,
+        get_inventory_levels,
+        query_production_db,
+        run_data_extraction_agent,
+        run_data_extraction_agent_json,
+    )
 
 __all__ = [
     "ALLOWED_TOOLS",

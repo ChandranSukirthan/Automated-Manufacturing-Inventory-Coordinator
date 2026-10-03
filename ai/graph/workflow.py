@@ -89,6 +89,12 @@ def sync_to_database(state: AgentState) -> None:
             connect_timeout=3,
         ) as conn:
             with conn.cursor() as cur:
+                try:
+                    cur.execute('ALTER TABLE "AgentWorkflows" ADD COLUMN IF NOT EXISTS "ValidationResults" text;')
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+
                 cur.execute(
                     """
                     INSERT INTO "AgentWorkflows"
