@@ -215,11 +215,31 @@ def test_cross_agent_quality_and_planner_coordination():
 
     result = validation_node(state)
 
-    # Must require approval due to High severity defect quarantine recommendation
-    assert result["requires_approval"] is True
-    assert result["status"] == WorkflowStatus.WaitingForApproval
+    # A failed quality check must never expose a payment approval. The
+    # supervisor sends the work back to Student 2 for another supplier.
+    assert result["requires_approval"] is False
+    assert result["status"] == WorkflowStatus.Running
+    assert result["automatic_retry_required"] is True
     assert "quality_data" in result
     assert result["validation_results"]["qualitySafetyStatus"] == "QUARANTINE_REQUIRED"
     assert any("Quality Agent: Quarantine required" in step for step in result["completed_steps"])
+
+
+def test_validation_stops_after_third_rejected_supplier():
+    from agents.validation import validation_node
+
+    result = validation_node({
+        "supplier_selection_attempt": 3,
+        "max_supplier_selection_attempts": 3,
+        "purchasing_data": {"draft_po": {"quantity": 10, "estimatedCostUsd": 100}},
+        "completed_steps": [],
+        "errors": [],
+    })
+
+    assert result["requires_approval"] is False
+    assert result["status"] == WorkflowStatus.Failed
+    assert result["automatic_retry_required"] is False
+    assert len(result["validation_history"]) == 1
+    assert "No payment approval was created" in result["final_outcome"]
 
 

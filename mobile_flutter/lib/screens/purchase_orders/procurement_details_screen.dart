@@ -70,37 +70,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
             _loading = false;
           });
         }
-      } else {
-        // Fallback demo/initial mock data so Floor Worker sees live UI even prior to backend records
-        if (mounted) {
-          setState(() {
-            _statusTracking = const ProcurementStatusTracking(
-              procurementId: 101,
-              materialName: 'Food Grade BOPP Film',
-              requiredSpecification: 'Grade A 50 Micron',
-              netDeficit: 800.0,
-              procurementStatus: 'WaitingForApproval',
-              workflowId: 'WF-PROC-101',
-              purchaseOrderId: 42,
-              purchaseOrderNumber: 'PO-2026-0042',
-              purchaseOrderStatus: 'PendingApproval',
-              paymentStatus: 'Pending',
-              supplierNotificationStatus: 'Queued',
-              supplierName: 'Apex Packaging Materials Ltd',
-              supplierStatus: 'APPROVED',
-              recommendedQuantity: 1000.0,
-              unitPrice: 3.50,
-              totalCost: 3500.0,
-              qualityEvidence: 'ISO 9001:2015 & ASTM F1249 Certified',
-              leadTimeDays: 5,
-              availability: 'In Stock',
-              requiresSupplierVerification: false,
-              requiresHumanApproval: true,
-              lastUpdated: null,
-            );
-            _loading = false;
-          });
-        }
+      } else if (mounted) {
+        setState(() {
+          _error = 'No procurement workflow is available.';
+          _loading = false;
+        });
       }
     } catch (err) {
       if (mounted) {
@@ -246,7 +220,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,9 +241,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: emeraldAccent.withOpacity(0.15),
+                  color: emeraldAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: emeraldAccent.withOpacity(0.3)),
+                  border: Border.all(color: emeraldAccent.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   step.title,
@@ -321,9 +295,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.25),
+          color: Colors.black.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withOpacity(0.06)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -361,10 +335,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E170A),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: amberAccent.withOpacity(0.5), width: 1.5),
+        border: Border.all(color: amberAccent.withValues(alpha: 0.5), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: amberAccent.withOpacity(0.12),
+            color: amberAccent.withValues(alpha: 0.12),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -378,7 +352,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: amberAccent.withOpacity(0.2),
+                  color: amberAccent.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.lock_outline_rounded, color: amberAccent, size: 22),
@@ -435,7 +409,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -454,9 +428,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: cyanAccent.withOpacity(0.15),
+                  color: cyanAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: cyanAccent.withOpacity(0.3)),
+                  border: Border.all(color: cyanAccent.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   'Stage ${currentIdx + 1} of ${steps.length}',
@@ -504,7 +478,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                           width: 2,
                           height: 28,
                           color: isCompleted
-                              ? emeraldAccent.withOpacity(0.6)
+                              ? emeraldAccent.withValues(alpha: 0.6)
                               : Colors.white12,
                         ),
                     ],
@@ -535,7 +509,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: cyanAccent.withOpacity(0.2),
+                                    color: cyanAccent.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -597,7 +571,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cyanAccent.withOpacity(0.25)),
+        border: Border.all(color: cyanAccent.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,7 +581,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: cyanAccent.withOpacity(0.15),
+                  color: cyanAccent.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.auto_awesome, color: cyanAccent, size: 18),
@@ -655,9 +629,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: supplierColor.withOpacity(0.15),
+                  color: supplierColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: supplierColor.withOpacity(0.4)),
+                  border: Border.all(color: supplierColor.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -685,9 +659,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: qualityColor.withOpacity(0.15),
+                  color: qualityColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: qualityColor.withOpacity(0.4)),
+                  border: Border.all(color: qualityColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   'Quality: $qualityStatus',
@@ -723,7 +697,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: emeraldAccent.withOpacity(0.25)),
+        border: Border.all(color: emeraldAccent.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -768,7 +742,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cyanAccent.withOpacity(0.3)),
+        border: Border.all(color: cyanAccent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -793,9 +767,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: deliveryStatus.color.withOpacity(0.15),
+                  color: deliveryStatus.color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: deliveryStatus.color.withOpacity(0.4)),
+                  border: Border.all(color: deliveryStatus.color.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   deliveryStatus.label,
@@ -811,13 +785,13 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           const SizedBox(height: 12),
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 12),
-          _buildDetailRow('PO Number', t.purchaseOrderNumber ?? 'PO-${t.purchaseOrderId ?? 101}'),
-          _buildDetailRow('Supplier', t.supplierName ?? 'Apex Packaging'),
+          _buildDetailRow('PO Number', t.purchaseOrderNumber ?? 'Not created'),
+          _buildDetailRow('Supplier', t.supplierName ?? 'Not selected'),
           _buildDetailRow('Material', t.materialName),
-          _buildDetailRow('Quantity', '${t.recommendedQuantity?.toStringAsFixed(0) ?? '1000'} units'),
+          _buildDetailRow('Quantity', t.recommendedQuantity == null ? 'Not recorded' : '${t.recommendedQuantity!.toStringAsFixed(0)} units'),
           _buildDetailRow(
             'Expected Delivery',
-            DateTime.now().add(Duration(days: t.leadTimeDays ?? 5)).toString().substring(0, 10),
+            t.leadTimeDays == null ? 'Not recorded' : DateTime.now().add(Duration(days: t.leadTimeDays!)).toString().substring(0, 10),
           ),
         ],
       ),
@@ -835,7 +809,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cyanAccent.withOpacity(0.2)),
+        border: Border.all(color: cyanAccent.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -865,7 +839,7 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               ElevatedButton.icon(
                 onPressed: _handleTriggerResearch,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: cyanAccent.withOpacity(0.15),
+                  backgroundColor: cyanAccent.withValues(alpha: 0.15),
                   foregroundColor: cyanAccent,
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -912,10 +886,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 return Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.25),
+                    color: Colors.black.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isApproved ? emeraldAccent.withOpacity(0.3) : amberAccent.withOpacity(0.3),
+                      color: isApproved ? emeraldAccent.withValues(alpha: 0.3) : amberAccent.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Column(
@@ -937,9 +911,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: c.statusBadgeColor.withOpacity(0.15),
+                              color: c.statusBadgeColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: c.statusBadgeColor.withOpacity(0.4)),
+                              border: Border.all(color: c.statusBadgeColor.withValues(alpha: 0.4)),
                             ),
                             child: Text(
                               c.supplierStatus,

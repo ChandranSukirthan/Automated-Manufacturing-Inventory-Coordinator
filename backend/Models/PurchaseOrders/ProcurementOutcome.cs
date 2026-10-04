@@ -59,9 +59,9 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [MaxLength(1000)]
         public string? ManagerRevision { get; set; }
 
-        public bool ProcurementSuccess { get; set; } = true;
+        public bool ProcurementSuccess { get; set; } = false;
 
-        public bool PaymentSuccess { get; set; } = true;
+        public bool PaymentSuccess { get; set; } = false;
 
         public bool DeliverySuccess { get; set; } = false;
 

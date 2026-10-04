@@ -5,6 +5,8 @@ export const parseErrorMessage = (err, defaultMsg = 'An error occurred. Please t
   if (data) {
     if (typeof data === 'string') return data;
     if (data.message) return data.message;
+    if (typeof data.detail === 'string') return data.detail;
+    if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg;
     if (data.errors && typeof data.errors === 'object') {
       const firstKey = Object.keys(data.errors)[0];
       if (firstKey && data.errors[firstKey] && data.errors[firstKey].length > 0) {

@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <Compile Remove="Tests\**" />
+    <!-- Generated alignment experiments duplicate existing migrations and must never run. -->
+    <Compile Remove="Migrations\AlignmentTemporary\**;Migrations\ManufacturingAlignmentTemporary\**" />
     <Content Remove="Tests\**" />
     <EmbeddedResource Remove="Tests\**" />
     <None Remove="Tests\**" />

@@ -246,7 +246,7 @@ namespace ManufacturingCoordinator.Api.Services
         public async Task<object> TriggerWorkflowAsync(string objective, string? workflowId)
         {
             var match = System.Text.RegularExpressions.Regex.Match(objective ?? "",
-                @"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+                @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b");
             if (!match.Success || !Guid.TryParse(match.Value, out var machineId))
                 throw new AuthException("Select a machine and include its ID in the maintenance request. Start procurement from the replenishment or procurement page.");
             var machine = await _db.Machines.FindAsync(machineId)

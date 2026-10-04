@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
@@ -40,7 +40,7 @@ import StatusBadge from '../../components/Common/StatusBadge';
 import ConfirmModal from '../../components/Common/ConfirmModal';
 import GoodsReceiptPanel from '../../components/PurchaseOrders/GoodsReceiptPanel';
 import purchaseOrderService from '../../services/purchaseOrderService';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderDetail() {
@@ -57,7 +57,6 @@ export default function PurchaseOrderDetail() {
 
   // 10-Stage Tracking State
   const [tracking, setTracking] = useState(null);
-  const [trackingLoading, setTrackingLoading] = useState(false);
 
   // Dual Payment Gateway State
   const [paymentTab, setPaymentTab] = useState('stripe'); // 'stripe' | 'bank_slip'
@@ -88,19 +87,16 @@ export default function PurchaseOrderDetail() {
     }
   };
 
-  const fetchTrackingDetails = async () => {
-    setTrackingLoading(true);
+  const fetchTrackingDetails = useCallback(async () => {
     try {
       const data = await purchaseOrderService.getTracking(id);
       setTracking(data);
-    } catch (err) {
+    } catch {
       // silent fallback
-    } finally {
-      setTrackingLoading(false);
     }
-  };
+  }, [id]);
 
-  const fetchPoDetails = async () => {
+  const fetchPoDetails = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -111,11 +107,10 @@ export default function PurchaseOrderDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    fetchPoDetails();
-    fetchTrackingDetails();
+    const initialLoad = setTimeout(() => { fetchPoDetails(); fetchTrackingDetails(); }, 0);
 
     const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get('session_id')) {
@@ -126,7 +121,8 @@ export default function PurchaseOrderDetail() {
       }).catch(err => setError(parseErrorMessage(err, 'Failed to complete payment settlement.')));
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [id]);
+    return () => clearTimeout(initialLoad);
+  }, [id, fetchPoDetails, fetchTrackingDetails]);
 
   // Submit PO
   const handleSubmitConfirm = async () => {
@@ -213,7 +209,7 @@ export default function PurchaseOrderDetail() {
     }
 
     setActionLoading(true);
-    setActionMessage('Uploading bank slip receipt and verifying payment transaction...');
+    setActionMessage('Submitting bank slip for manager verification...');
     setError('');
     setSlipSuccessMessage('');
 
@@ -239,7 +235,7 @@ export default function PurchaseOrderDetail() {
       setBankSlipFile(null);
       setBankReferenceNumber('');
       setBankNotes('');
-      setSlipSuccessMessage('Bank transfer verified successfully! Payment recorded and purchase order dispatched.');
+      setSlipSuccessMessage('Bank slip submitted. Confirm the payment against bank records before dispatch.');
       await fetchPoDetails();
       await fetchTrackingDetails();
     } catch (err) {
@@ -341,30 +337,6 @@ export default function PurchaseOrderDetail() {
   const currentStepIdx = getStepIndex(po.status);
   const isRejected = po.status === 'Rejected';
   const isRevision = po.status === 'RevisionRequested';
-  const isPaymentFailed = po.status === 'PaymentFailed' || po.stripePaymentStatus === 'Payment Failed';
-
-  // Stripe Payment Status resolution (Requirement 7)
-  const getStripeStatusDisplay = () => {
-    if (po.status === 'Paid' || po.status === 'Sent' || po.status === 'InTransit' || po.status === 'Delivered' || po.status === 'Completed' || po.stripePaymentStatus === 'Succeeded') {
-      return { text: 'Payment Successful', badgeClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dotClass: 'bg-emerald-400' };
-    }
-    if (po.status === 'PaymentFailed' || po.stripePaymentStatus === 'Failed' || po.paymentFailureReason) {
-      return { text: 'Payment Failed', badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dotClass: 'bg-rose-400' };
-    }
-    return { text: 'Payment Pending', badgeClass: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dotClass: 'bg-amber-400' };
-  };
-
-  // Supplier Notification resolution (Requirement 7)
-  const getEmailStatusDisplay = () => {
-    if (po.emailStatus === 'Sent' || po.status === 'SupplierNotified' || po.status === 'Sent' || po.status === 'InTransit' || po.status === 'Delivered' || po.status === 'Completed') {
-      return { text: 'SENT', badgeClass: 'bg-blue-500/10 text-blue-400 border-blue-500/30', dotClass: 'bg-blue-400' };
-    }
-    if (po.emailStatus === 'Failed') {
-      return { text: 'FAILED', badgeClass: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dotClass: 'bg-rose-400' };
-    }
-    return { text: 'PENDING', badgeClass: 'bg-slate-800 text-slate-400 border-slate-700', dotClass: 'bg-slate-500' };
-  };
-
   return (
     <AppLayout
       title={`Order ${po.poNumber}`}
@@ -717,7 +689,7 @@ export default function PurchaseOrderDetail() {
             <form onSubmit={handleBankSlipUpload} className="space-y-4">
               <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-4">
                 <p className="text-xs text-slate-300">
-                  Upload your bank transfer deposit receipt or wire confirmation PDF/image. Once submitted, accounting verification marks the order as <strong className="text-emerald-400">Paid</strong> and dispatches the PO to the vendor.
+                  Upload your bank transfer receipt or wire confirmation. A Supply Chain Manager must confirm it against bank records before payment is recorded and dispatch can proceed.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -997,14 +969,14 @@ export default function PurchaseOrderDetail() {
       {/* AI Recommendation & Agentic Pipeline Cockpit */}
       {(() => {
         const firstLine = po.orderLines?.[0] || {};
-        const materialName = firstLine.rawMaterialName || 'Industrial Grade Material';
-        const materialSku = firstLine.rawMaterialSku || `RM-${firstLine.rawMaterialId || 1}`;
-        const totalQty = po.orderLines?.reduce((sum, l) => sum + (l.quantity || 0), 0) || firstLine.quantity || 2000;
-        const avgUnitPrice = firstLine.unitPrice || 4.5;
-        const totalAmount = po.totalCost || totalQty * avgUnitPrice;
-        const budgetLimit = po.budgetLimit || 15000;
-        const workflowId = `WF-2026-${(100 + po.id).toString().padStart(3, '0')}`;
-        const riskLevel = totalAmount > 10000 ? 'Moderate Risk' : 'Low Risk';
+        const materialName = firstLine.rawMaterialName || 'Not recorded';
+        const materialSku = firstLine.rawMaterialSku || 'Not recorded';
+        const totalQty = po.orderLines?.reduce((sum, l) => sum + (l.quantity || 0), 0) || 0;
+        const avgUnitPrice = firstLine.unitPrice || 0;
+        const totalAmount = po.totalCost || 0;
+        const budgetLimit = po.budgetLimit;
+        const workflowId = po.workflowId || 'Not linked';
+        const riskLevel = po.validationResults?.overallStatus || 'Requires review';
 
         return (
           <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 via-slate-900/80 to-slate-950 border border-brand-500/30 shadow-2xl space-y-5">
@@ -1033,7 +1005,7 @@ export default function PurchaseOrderDetail() {
                     : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                   }`}>
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Risk Level: {riskLevel}</span>
+                  <span>Validation: {riskLevel}</span>
                 </span>
                 <button
                   onClick={() => setShowAiDetails(!showAiDetails)}
@@ -1074,7 +1046,7 @@ export default function PurchaseOrderDetail() {
                       3. Inventory Findings
                     </span>
                     <p className="text-slate-200 leading-relaxed">
-                      Stock for <strong className="text-white">{materialName} ({materialSku})</strong> is at 340 kg, below safety threshold (500 kg). Projected stockout in <span className="text-amber-400 font-bold">3.2 days</span> without replenishment.
+                      Material <strong className="text-white">{materialName} ({materialSku})</strong>. See the inventory record for current stock, threshold, and burn-rate evidence.
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5">
@@ -1082,7 +1054,7 @@ export default function PurchaseOrderDetail() {
                       4. Production Findings
                     </span>
                     <p className="text-slate-200 leading-relaxed">
-                      Active manufacturing work orders on lines #1 and #3 consume 180.5 kg/day. Current lead time allows seamless replenishment without downtime.
+                      No production-impact evidence is attached to this purchase order.
                     </p>
                   </div>
                 </div>
@@ -1103,24 +1075,8 @@ export default function PurchaseOrderDetail() {
                         <span>{po.supplierName}</span>
                         <span className="text-emerald-400">BEST MATCH</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono">Unit Price: ${avgUnitPrice.toFixed(2)} | Lead: 3-5 days</p>
-                      <p className="text-[11px] text-slate-400">SLA: 98.5% On-Time Delivery</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1 opacity-75">
-                      <div className="flex justify-between font-bold text-slate-300">
-                        <span>Apex Materials</span>
-                        <span className="text-slate-500">Candidate 2</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 font-mono">Unit Price: ${(avgUnitPrice * 1.08).toFixed(2)} | Lead: 5 days</p>
-                      <p className="text-[11px] text-slate-400">SLA: 94.0% On-Time Delivery</p>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 space-y-1 opacity-75">
-                      <div className="flex justify-between font-bold text-slate-300">
-                        <span>Global Logistics Corp</span>
-                        <span className="text-slate-500">Candidate 3</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 font-mono">Unit Price: ${(avgUnitPrice * 1.15).toFixed(2)} | Lead: 7 days</p>
-                      <p className="text-[11px] text-slate-400">SLA: 91.2% On-Time Delivery</p>
+                      <p className="text-[11px] text-slate-400 font-mono">Recorded unit price: ${avgUnitPrice.toFixed(2)}</p>
+                      <p className="text-[11px] text-slate-400">Alternative candidates are shown only when stored by the procurement workflow.</p>
                     </div>
                   </div>
                 </div>
@@ -1172,7 +1128,7 @@ export default function PurchaseOrderDetail() {
                       {po.requiresApproval ? 'MANAGER APPROVAL' : 'AUTO-APPROVE'}
                     </p>
                     <span className="text-[11px] text-slate-400 block">
-                      {po.requiresApproval ? 'Exceeds $5,000 threshold' : 'Under $5,000 threshold'}
+                      {po.requiresApproval ? 'Recorded as requiring human approval' : 'No approval requirement recorded'}
                     </span>
                   </div>
                 </div>
@@ -1185,26 +1141,12 @@ export default function PurchaseOrderDetail() {
                       <span>Agent Execution Pipeline</span>
                     </span>
                     <div className="space-y-1.5 text-[11px]">
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Planner Agent: Generated multi-step procurement workflow</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Data Extraction Agent: Extracted BOM requirements</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Purchasing Agent: Matched vendor quotes &amp; catalog pricing</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-emerald-400">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Validation/Safety Agent: Budget check, supplier validation, QA safety audit</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-brand-300">
-                        <Clock className="w-3.5 h-3.5 animate-spin" />
-                        <span>Backend Approval Gate: Authoritative verification against PostgreSQL state</span>
-                      </div>
+                      {Array.isArray(po.completedSteps) && po.completedSteps.length > 0 ? po.completedSteps.map((step) => (
+                        <div key={step} className="flex items-center gap-2 text-emerald-400">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{step}</span>
+                        </div>
+                      )) : <span className="text-slate-500">No agent execution steps are attached to this order.</span>}
                     </div>
                   </div>
 
@@ -1214,11 +1156,11 @@ export default function PurchaseOrderDetail() {
                       <span>Tool Execution Summary</span>
                     </span>
                     <div className="text-[11px] text-slate-400 space-y-1">
-                      <p>• calculate_burn_rate('{materialSku}') → 180.5 kg/day</p>
-                      <p>• calculate_days_remaining() → 3.2 days</p>
-                      <p>• query_supplier_sla(id={po.supplierId}) → 98.5% on-time</p>
-                      <p>• validate_budget_cap(${totalAmount.toFixed(2)}) → APPROVED</p>
-                      <p>• flag_threshold_exceeded() → {po.requiresApproval ? 'TRUE (> $5,000)' : 'FALSE'}</p>
+                      <p>• material → {materialSku}</p>
+                      <p>• recorded quantity → {totalQty}</p>
+                      <p>• recorded total → ${totalAmount.toFixed(2)}</p>
+                      <p>• budget limit → {budgetLimit == null ? 'Not recorded' : `$${Number(budgetLimit).toFixed(2)}`}</p>
+                      <p>• approval required → {po.requiresApproval ? 'YES' : 'NO'}</p>
                     </div>
                   </div>
                 </div>
@@ -1298,6 +1240,16 @@ export default function PurchaseOrderDetail() {
       </div>
 
       {/* Confirmation Modals */}
+      <ConfirmModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        onConfirm={handleCancelDraftConfirm}
+        title="Cancel Draft Purchase Order"
+        message="Delete this draft purchase order?"
+        confirmText="Delete Draft"
+        variant="danger"
+        loading={actionLoading}
+      />
       <ConfirmModal
         isOpen={submitModalOpen}
         onClose={() => setSubmitModalOpen(false)}

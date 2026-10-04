@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
-import '../../widgets/app_widgets.dart';
 
 class POCreateScreen extends StatefulWidget {
   const POCreateScreen({
@@ -107,7 +106,7 @@ class _POCreateScreenState extends State<POCreateScreen> {
                 const Text('Select Supplier', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
-                  value: _selectedSupplierId,
+                  initialValue: _selectedSupplierId,
                   dropdownColor: const Color(0xFF1E293B),
                   style: const TextStyle(color: Colors.white),
                   items: _suppliers.map((s) => DropdownMenuItem(

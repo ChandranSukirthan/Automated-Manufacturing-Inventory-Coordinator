@@ -26,5 +26,7 @@ public sealed class GoodsReceiptsController(GoodsReceiptService service, Applica
         catch (KeyNotFoundException ex) { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
         catch (DbUpdateException) { return Conflict(new { message = "This delivery changed concurrently or was already recorded. Refresh and retry with the same receipt key." }); }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState is "40001" or "40P01")
+        { return Conflict(new { message = "Another delivery changed this order. Refresh and retry with the same receipt key." }); }
     }
 }

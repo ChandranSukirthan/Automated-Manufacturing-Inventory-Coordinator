@@ -403,7 +403,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(pr => pr.RawMaterial)
                 .Include(pr => pr.RecommendedSupplier)
                 .Include(pr => pr.GeneratedPurchaseOrder)
-                    .ThenInclude(po => po.Transactions)
+                    .ThenInclude(po => po!.Transactions)
                 .Include(pr => pr.Candidates)
                 .FirstOrDefaultAsync(pr => pr.Id == procurementRequestId);
 
@@ -478,6 +478,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             if (request == null)
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
+
+            var priorOrder = await _context.PurchaseOrders.SingleOrDefaultAsync(p => p.ProcurementRequestId == procurementRequestId);
+            var priorId = request.GeneratedPurchaseOrderId ?? priorOrder?.Id;
+            if (priorId.HasValue)
+                return await _poService.GetByIdAsync(priorId.Value)
+                    ?? throw new InvalidOperationException("The linked purchase order could not be loaded. Reconcile this request before retrying.");
 
             var candidate = await _context.SupplierCandidates
                 .FirstOrDefaultAsync(c => c.Id == candidateId && c.ProcurementRequestId == procurementRequestId);
@@ -663,40 +669,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             SupplierCandidate candidate,
             Guid? userId = null)
         {
-            // Auto-create a minimal Supplier record from candidate data if not already linked
             if (!candidate.SupplierId.HasValue)
-            {
-                var targetEmail = candidate.SupplierName.ToLower().Replace(" ", "") + "@supplier.example.com";
-                var autoSupplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.ContactEmail == targetEmail);
-                if (autoSupplier == null)
-                {
-                    autoSupplier = new Supplier
-                    {
-                        SupplierCode = "SUP-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant(),
-                        Name = candidate.SupplierName,
-                        ContactEmail = targetEmail,
-                        ContactPhone = string.Empty,
-                        Address = candidate.SourceUrl ?? string.Empty,
-                        PaymentTerms = "Net 30",
-                        LeadTimeDays = candidate.LeadTimeDays > 0 ? candidate.LeadTimeDays : 7,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    _context.Suppliers.Add(autoSupplier);
-                }
-                else
-                {
-                    autoSupplier.IsActive = true;
-                }
-                await _context.SaveChangesAsync();
-                candidate.SupplierId = autoSupplier.Id;
-                await _context.SaveChangesAsync();
-            }
+                throw new InvalidOperationException("Onboard and verify a real supplier contact before creating an order.");
 
             var poDto = new CreatePurchaseOrderDto
             {
                 SupplierId = candidate.SupplierId.Value,
+                ProcurementRequestId = request.Id,
                 Currency = string.IsNullOrWhiteSpace(candidate.Currency) ? "USD" : candidate.Currency,
                 BudgetLimit = request.MaximumBudget,
                 Notes = $"AI-Assisted Procurement for Request #{request.Id}. " +
@@ -726,19 +705,19 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     Material = request.MaterialName ?? request.RawMaterial?.Name ?? "Raw Material",
                     RequestedQuantity = request.ProductionRequirement > 0 ? request.ProductionRequirement : request.CalculatedNetQuantity,
                     RecommendedQuantity = candidate.RecommendedOrderQuantity,
-                    FinalOrderedQuantity = candidate.RecommendedOrderQuantity,
+                    FinalOrderedQuantity = 0,
                     RecommendedSupplier = candidate.SupplierName,
                     SelectedSupplier = candidate.SupplierName,
                     EstimatedPrice = candidate.UnitPrice,
-                    FinalPrice = candidate.UnitPrice,
+                    FinalPrice = 0,
                     EstimatedLeadTime = candidate.LeadTimeDays,
-                    ActualLeadTime = candidate.LeadTimeDays,
+                    ActualLeadTime = 0,
                     QualityEvidence = candidate.QualityEvidence ?? string.Empty,
                     SupplierVerification = candidate.SupplierStatus ?? "VERIFIED",
                     ManagerDecision = "Draft Created",
                     ManagerRevision = null,
-                    ProcurementSuccess = true,
-                    PaymentSuccess = true,
+                    ProcurementSuccess = false,
+                    PaymentSuccess = false,
                     DeliverySuccess = false,
                     QualityOutcome = "Pending Delivery Inspection",
                     CreatedAt = DateTime.UtcNow,

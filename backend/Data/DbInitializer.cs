@@ -83,6 +83,34 @@ namespace ManufacturingCoordinator.Data
         private static async Task SeedEntitiesAsync(ApplicationDbContext db, backend.Data.ManufacturingContext? mfgDb = null)
         {
             await EnsureProcurementTablesAsync(db);
+
+            // Student A's physical roll register and Student 3's batch register
+            // share the database through separate contexts. Reconcile their
+            // batch identities before QA tries to inspect a SKU.
+            var physicalRollBatches = await db.StockRolls
+                .Include(roll => roll.RawMaterial)
+                .Where(roll => roll.BatchId != null && roll.BatchId != "")
+                .Select(roll => new
+                {
+                    BatchId = roll.BatchId!,
+                    Category = roll.RawMaterial != null ? roll.RawMaterial.Category : string.Empty,
+                })
+                .Distinct()
+                .ToListAsync();
+            var knownBatchIds = (await db.Batches.Select(batch => batch.Id).ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var physicalBatch in physicalRollBatches)
+            {
+                if (knownBatchIds.Contains(physicalBatch.BatchId)) continue;
+                var enumName = new string((physicalBatch.Category ?? string.Empty)
+                    .Where(char.IsLetterOrDigit)
+                    .ToArray());
+                if (!Enum.TryParse<ProductType>(enumName, true, out var productType)) continue;
+                db.Batches.Add(new Batch { Id = physicalBatch.BatchId, ProductType = productType });
+                knownBatchIds.Add(physicalBatch.BatchId);
+            }
+            await db.SaveChangesAsync();
+
             // 2. Seed RawMaterials
             if (!await db.RawMaterials.AnyAsync())
             {
@@ -174,6 +202,55 @@ namespace ManufacturingCoordinator.Data
                 };
 
                 db.Suppliers.AddRange(suppliers);
+                await db.SaveChangesAsync();
+            }
+
+            // Give Student 2 authoritative, material-specific quotes to compare.
+            // This remains additive so existing installations receive any missing
+            // supplier/material combinations without replacing edited quote data.
+            var quoteSuppliers = await db.Suppliers
+                .Where(s => s.IsActive)
+                .OrderBy(s => s.SupplierCode)
+                .ToListAsync();
+            var quoteMaterials = await db.RawMaterials
+                .OrderBy(m => m.SkuCode)
+                .ToListAsync();
+            var existingQuoteKeys = await db.SupplierMaterialQuotes
+                .Select(q => new { q.SupplierId, q.RawMaterialId })
+                .ToListAsync();
+            var existingQuoteSet = existingQuoteKeys
+                .Select(q => $"{q.SupplierId}:{q.RawMaterialId}")
+                .ToHashSet(StringComparer.Ordinal);
+            var newQuotes = new List<SupplierMaterialQuote>();
+
+            for (var materialIndex = 0; materialIndex < quoteMaterials.Count; materialIndex++)
+            {
+                for (var supplierIndex = 0; supplierIndex < quoteSuppliers.Count; supplierIndex++)
+                {
+                    var supplier = quoteSuppliers[supplierIndex];
+                    var material = quoteMaterials[materialIndex];
+                    if (existingQuoteSet.Contains($"{supplier.Id}:{material.Id}")) continue;
+
+                    newQuotes.Add(new SupplierMaterialQuote
+                    {
+                        SupplierId = supplier.Id,
+                        RawMaterialId = material.Id,
+                        UnitPrice = Math.Round(1.25m + materialIndex * 0.18m + supplierIndex * 0.12m, 2),
+                        MinimumOrderQuantity = 100m,
+                        PackSize = 50m,
+                        AvailableQuantity = Math.Max(1000m, 8000m + supplierIndex * 1500m - materialIndex * 100m),
+                        LeadTimeDays = supplier.LeadTimeDays,
+                        QualityEvidence = "Approved supplier record; ISO 9001 quality evidence on file",
+                        Currency = "USD",
+                        IsActive = true,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            if (newQuotes.Count > 0)
+            {
+                db.SupplierMaterialQuotes.AddRange(newQuotes);
                 await db.SaveChangesAsync();
             }
 
@@ -598,6 +675,21 @@ namespace ManufacturingCoordinator.Data
                 await db.SaveChangesAsync();
             }
 
+            // Raw materials require a valid packaging type on the shared schema.
+            var standardRollPackaging = await db.PackagingTypes
+                .FirstOrDefaultAsync(type => type.Name == "Standard Roll");
+            if (standardRollPackaging == null)
+            {
+                standardRollPackaging = new backend.Models.PackagingType
+                {
+                    Name = "Standard Roll",
+                    ShortCode = "SR",
+                    IsActive = true
+                };
+                db.PackagingTypes.Add(standardRollPackaging);
+                await db.SaveChangesAsync();
+            }
+
             // Ensure Iron raw material exists in ApplicationDbContext
             var ironMat = await db.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
             if (ironMat == null)
@@ -609,6 +701,7 @@ namespace ManufacturingCoordinator.Data
                     Category = "Metal",
                     UnitOfMeasure = "KG",
                     Description = "Standard grade structural raw iron rolls",
+                    PackagingTypeId = standardRollPackaging.Id,
                     ReorderThreshold = 300m,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -638,6 +731,7 @@ namespace ManufacturingCoordinator.Data
                         UnitOfMeasure = "KG",
                         Category = "Metal",
                         Description = "Standard grade structural raw iron rolls",
+                        PackagingTypeId = standardRollPackaging.Id,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };

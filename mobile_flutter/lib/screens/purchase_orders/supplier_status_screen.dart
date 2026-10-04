@@ -166,7 +166,7 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                                 decoration: BoxDecoration(
                                   color: cardBg,
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,7 +186,7 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                           decoration: BoxDecoration(
-                                            color: amberAccent.withOpacity(0.15),
+                                            color: amberAccent.withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Row(
@@ -238,9 +238,9 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                           decoration: BoxDecoration(
-                                            color: sup.isActive ? const Color(0xFF10B981).withOpacity(0.15) : amberAccent.withOpacity(0.15),
+                                            color: sup.isActive ? const Color(0xFF10B981).withValues(alpha: 0.15) : amberAccent.withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: sup.isActive ? const Color(0xFF10B981).withOpacity(0.3) : amberAccent.withOpacity(0.3)),
+                                            border: Border.all(color: sup.isActive ? const Color(0xFF10B981).withValues(alpha: 0.3) : amberAccent.withValues(alpha: 0.3)),
                                           ),
                                           child: Text(
                                             sup.isActive ? 'VERIFIED & ACTIVE' : 'PENDING VERIFICATION',
@@ -431,7 +431,7 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

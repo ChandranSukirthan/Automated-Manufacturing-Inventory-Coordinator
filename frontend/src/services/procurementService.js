@@ -36,11 +36,11 @@ export const procurementService = {
     try {
       const response = await api.post(`/procurement-requests/${id}/analyze`);
       return response.data;
-    } catch (err) {
+    } catch {
       try {
         const response = await api.post(`/procurement/${id}/research`);
         return response.data;
-      } catch (err2) {
+      } catch {
         const response = await api.post(`/procurement/${id}/start`);
         return response.data;
       }

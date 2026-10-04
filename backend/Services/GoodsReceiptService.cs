@@ -51,10 +51,13 @@ public sealed class GoodsReceiptService(ApplicationDbContext db)
             ?? throw new InvalidOperationException("The ordered material was not found.");
         var item = await db.InventoryItems.SingleOrDefaultAsync(i => i.Sku == material.SkuCode)
             ?? throw new InvalidOperationException("Register the ordered SKU before receiving its rolls.");
-        if (!await db.Batches.AnyAsync(b => b.Id == request.BatchId.Trim()))
+        if (!Enum.TryParse<ProductType>(material.Category, true, out var productType))
+            throw new InvalidOperationException("Set a valid packaging category on this material before receiving a batch.");
+        var batch = await db.Batches.SingleOrDefaultAsync(b => b.Id == request.BatchId.Trim());
+        if (batch != null && batch.ProductType != productType)
+            throw new InvalidOperationException("The batch belongs to a different packaging category.");
+        if (batch == null)
         {
-            if (!Enum.TryParse<ProductType>(material.Category, true, out var productType))
-                throw new InvalidOperationException("Set a valid packaging category on this material before receiving a batch.");
             db.Batches.Add(new ManufacturingCoordinator.Models.Inventory.Batch { Id = request.BatchId.Trim(), ProductType = productType });
         }
         var receipt = new GoodsReceipt { PurchaseOrderId = poId, OrderLineId = line.Id, ReceiptKey = key,

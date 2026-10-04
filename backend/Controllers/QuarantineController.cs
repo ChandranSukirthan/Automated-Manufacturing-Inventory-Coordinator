@@ -33,7 +33,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/release")]
-[Authorize(Roles = "QualityInspector,ITAdmin")]
+[Authorize(Roles = "QualityInspector")]
         public async Task<IActionResult> Release(Guid id, [FromBody] ReleaseQuarantineDto? dto = null)
         {
             var resolvedBy = User.Identity?.Name ?? "QualityInspector";

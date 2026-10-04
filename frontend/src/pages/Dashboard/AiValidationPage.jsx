@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -247,7 +247,6 @@ const agentSteps = [
 ];
 
 export default function AiValidationPage() {
-  const navigate = useNavigate();
   const [aiValidation, setAiValidation] = useState(null);
   const [aiValidationLoading, setAiValidationLoading] = useState(true);
   const [aiValidationError, setAiValidationError] = useState('');
@@ -279,7 +278,7 @@ export default function AiValidationPage() {
   const [resolveError, setResolveError] = useState('');
   const [resolveSuccess, setResolveSuccess] = useState('');
 
-  const loadAiValidation = async () => {
+  const loadAiValidation = useCallback(async () => {
     setAiValidationLoading(true);
     setAiValidationError('');
     try {
@@ -295,9 +294,9 @@ export default function AiValidationPage() {
     } finally {
       setAiValidationLoading(false);
     }
-  };
+  }, []);
 
-  const loadAiValidationHistory = async () => {
+  const loadAiValidationHistory = useCallback(async () => {
     setHistoryLoading(true);
     setHistoryError('');
     try {
@@ -309,16 +308,17 @@ export default function AiValidationPage() {
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
-  const refreshAll = () => {
+  const refreshAll = useCallback(() => {
     loadAiValidation();
     loadAiValidationHistory();
-  };
+  }, [loadAiValidation, loadAiValidationHistory]);
 
   useEffect(() => {
-    refreshAll();
-  }, []);
+    const initialLoad = setTimeout(refreshAll, 0);
+    return () => clearTimeout(initialLoad);
+  }, [refreshAll]);
 
   const toggleRowExpansion = (workflowId) => {
     setExpandedRows((prev) => ({
@@ -1011,6 +1011,48 @@ export default function AiValidationPage() {
           </div>
         )}
       </section>
+
+      {Array.isArray(aiValidation?.validationHistory) && aiValidation.validationHistory.length > 0 && (
+        <section className="rounded-3xl border border-blue-500/25 bg-slate-900/70 p-4 sm:p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-blue-300">Student 3 agent audit trail</p>
+              <h2 className="mt-1 text-lg font-extrabold text-white">Every automated supplier verification attempt</h2>
+              <p className="mt-1 text-xs text-slate-400">Rejected suppliers return to the Supervisor and Student 2 for reselection. The workflow stops after three failed checks.</p>
+            </div>
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-mono text-blue-200">
+              {aiValidation.validationHistory.length} attempt(s)
+            </span>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {aiValidation.validationHistory.map((attempt, index) => {
+              const approved = String(attempt.decision).toUpperCase() === 'APPROVED';
+              const supplier = attempt.supplier || {};
+              return (
+                <article key={`${attempt.attemptNumber || index}-${attempt.checkedAt || index}`} className={`rounded-2xl border p-4 ${approved ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-rose-500/30 bg-rose-500/5'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-white">Attempt {attempt.attemptNumber || index + 1} of {attempt.maxAttempts || 3}</span>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${approved ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                      {approved ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                      {approved ? 'VERIFIED' : 'DISMISSED'}
+                    </span>
+                  </div>
+                  <dl className="mt-3 space-y-1.5 text-xs">
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Supplier</dt><dd className="text-right font-semibold text-slate-200">{supplier.supplierName || 'Not available'}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Unit price</dt><dd className="font-mono text-slate-200">{supplier.unitPrice != null ? `$${Number(supplier.unitPrice).toFixed(2)}` : 'Not available'}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Available</dt><dd className="font-mono text-slate-200">{supplier.availableQuantity ?? 'Not available'}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Order total</dt><dd className="font-mono text-slate-200">{supplier.totalCost != null ? `$${Number(supplier.totalCost).toFixed(2)}` : 'Not available'}</dd></div>
+                  </dl>
+                  <p className={`mt-3 rounded-xl border p-2.5 text-xs leading-5 ${approved ? 'border-emerald-500/20 text-emerald-100' : 'border-rose-500/20 text-rose-100'}`}>
+                    {attempt.reason || (approved ? 'All supplier, stock, price, budget, material, and quality checks passed.' : 'The recommendation failed one or more validation checks.')}
+                  </p>
+                  <p className="mt-2 text-[10px] text-slate-500">{formatTimestamp(attempt.checkedAt)}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 2.5 DEDICATED PENDING MANUAL QA REVIEWS SECTION (Human-in-the-Loop Quality Gate) */}
       {pendingReviewItems.length > 0 && (

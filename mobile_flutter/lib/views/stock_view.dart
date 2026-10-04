@@ -90,6 +90,7 @@ class _StockViewState extends State<StockView> {
   Future<void> _showRegisterRollForm() async {
     final identifierNumber = TextEditingController();
     final quantity = TextEditingController();
+    final batch = TextEditingController();
     final formKey = GlobalKey<FormState>();
     int? packagingTypeId = _packagingTypes
         .where((type) => _firstRollMaterialId(type.id) != null)
@@ -317,7 +318,10 @@ class _StockViewState extends State<StockView> {
                           ),
                         ),
                       ),
-                      if (submissionError != null) ...[
+                        TextFormField(controller: batch, maxLength: 80,
+                          decoration: const InputDecoration(labelText: 'Batch identifier'),
+                          validator: (value) => (value ?? '').trim().isEmpty ? 'Enter the batch identifier.' : null),
+                        if (submissionError != null) ...[
                         const SizedBox(height: 12),
                         Align(
                           alignment: Alignment.centerLeft,
@@ -333,7 +337,7 @@ class _StockViewState extends State<StockView> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
+                  onPressed: () => Navigator.pop(dialogContext),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
@@ -347,6 +351,7 @@ class _StockViewState extends State<StockView> {
                     try {
                       final roll = await _apiService.createRoll(
                         rollIdentifier: rollIdentifier,
+                        batchId: batch.text.trim(),
                         quantity: double.parse(quantity.text),
                         rawMaterialId: selectedMaterial.id,
                       );
@@ -374,6 +379,7 @@ class _StockViewState extends State<StockView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         identifierNumber.dispose();
         quantity.dispose();
+        batch.dispose();
       });
     }
   }

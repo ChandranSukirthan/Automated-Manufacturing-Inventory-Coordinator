@@ -9,7 +9,7 @@ import {
   Bot,
   PlusCircle,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
@@ -55,12 +55,18 @@ export default function WorkerDashboard() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('inventory');
+  const [tabChoice, setTabChoice] = useState(null);
+  const routeTab = location.pathname.includes('/rolls') ? 'rolls'
+    : location.pathname.includes('/stock-levels') ? 'stock-levels'
+    : location.pathname.includes('/low-stock') ? 'alerts'
+    : location.pathname.includes('/history') ? 'history' : 'inventory';
+  const activeTab = tabChoice?.path === location.pathname ? tabChoice.tab : routeTab;
+  const setActiveTab = (tab) => setTabChoice({ path: location.pathname, tab });
 
   // Modals
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [newItem, setNewItem] = useState({
-    sku: '', name: '', category: 'Metal', stockLevel: 100, reorderThreshold: 50,
+    rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0,
   });
   const [showAddAlertModal, setShowAddAlertModal] = useState(false);
   const [newAlert, setNewAlert] = useState({
@@ -69,6 +75,7 @@ export default function WorkerDashboard() {
 
   // Roll registration
   const [rollIdentifier, setRollIdentifier] = useState('');
+  const [rollBatchId, setRollBatchId] = useState('');
   const [rollQuantity, setRollQuantity] = useState('1');
   const [rollRawMaterialId, setRollRawMaterialId] = useState('');
   const [registeredRoll, setRegisteredRoll] = useState(null);
@@ -82,27 +89,17 @@ export default function WorkerDashboard() {
   const [triggeringAi, setTriggeringAi] = useState(false);
   const [aiWorkflowResult, setAiWorkflowResult] = useState(null);
 
-  // ── Route sync ──────────────────────────────────────────────
-  useEffect(() => {
-    const path = location.pathname;
-    if (path.includes('/rolls')) setActiveTab('rolls');
-    else if (path.includes('/stock-levels')) setActiveTab('stock-levels');
-    else if (path.includes('/low-stock')) setActiveTab('alerts');
-    else if (path.includes('/history')) setActiveTab('history');
-    else if (path.includes('/inventory')) setActiveTab('inventory');
-  }, [location.pathname]);
-
   // ── Data loading ────────────────────────────────────────────
   const loadData = async () => {
     setLoading(true);
     setError('');
     try {
       const [itemsData, rawMatsData, rollsData, alertsData, levelsData] = await Promise.all([
-        inventoryService.getItems().catch(() => []),
-        inventoryService.getRawMaterials().catch(() => []),
-        inventoryService.getRolls().catch(() => []),
-        inventoryService.getAlerts().catch(() => []),
-        inventoryService.getStockLevels().catch(() => []),
+        inventoryService.getItems(),
+        inventoryService.getRawMaterials(),
+        inventoryService.getRolls(),
+        inventoryService.getAlerts(),
+        inventoryService.getStockLevels(),
       ]);
       setItems(itemsData || []);
       setRawMaterials(rawMatsData || []);
@@ -122,7 +119,10 @@ export default function WorkerDashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const initialLoad = setTimeout(loadData, 0);
+    return () => clearTimeout(initialLoad);
+  }, []);
 
   const loadHistoryForMaterial = async (id) => {
     setSelectedHistoryMaterialId(id);
@@ -143,17 +143,21 @@ export default function WorkerDashboard() {
   const handleAddItem = async (e) => {
     e.preventDefault();
     try {
+      const material = rawMaterials.find((value) => value.id === Number(newItem.rawMaterialId));
+      if (!material?.packagingTypeId) throw new Error('Select a material with a reconciled packaging type.');
       await inventoryService.createItem({
-        ...newItem,
+        rawMaterialId: material.id,
+        packagingTypeId: material.packagingTypeId,
+        skuNumber: Number(newItem.skuNumber),
         stockLevel: Number(newItem.stockLevel),
         reorderThreshold: Number(newItem.reorderThreshold),
       });
       setShowAddItemModal(false);
-      setNewItem({ sku: '', name: '', category: 'Metal', stockLevel: 100, reorderThreshold: 50 });
+      setNewItem({ rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0 });
       showNotification('Inventory item created successfully!');
       loadData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create inventory item');
+      setError(parseErrorMessage(err, 'Failed to create inventory item'));
     }
   };
 
@@ -200,8 +204,8 @@ export default function WorkerDashboard() {
 
   const handleCreateRoll = async (e) => {
     e.preventDefault();
-    if (!rollIdentifier.trim()) {
-      setError('Please provide a roll identifier.');
+    if (!rollIdentifier.trim() || !rollBatchId.trim()) {
+      setError('Please provide the physical roll and batch identifiers.');
       return;
     }
     const matId = Number(rollRawMaterialId);
@@ -218,12 +222,14 @@ export default function WorkerDashboard() {
     try {
       const created = await inventoryService.createRoll({
         rollIdentifier: rollIdentifier.trim(),
+        batchId: rollBatchId.trim(),
         rawMaterialId: matId,
         initialQuantity: qty,
         currentQuantity: qty,
       });
       setRegisteredRoll(created);
       setRollIdentifier('');
+      setRollBatchId('');
       setRollQuantity('1');
       showNotification(`Inventory Roll ${created.rollIdentifier || rollIdentifier} registered!`);
       loadData();
@@ -261,11 +267,14 @@ export default function WorkerDashboard() {
     }
   };
 
-  const handleTriggerAiWorkflow = async (sku, qty = 2000) => {
+  const handleTriggerAiWorkflow = async (sku, qty) => {
     setTriggeringAi(true);
     setAiWorkflowResult(null);
     try {
-      const materialCode = sku || 'RM-STEEL-001';
+      const materialCode = sku;
+      if (!materialCode || !(Number(qty) > 0)) {
+        throw new Error('Select an exact material and enter a positive required quantity.');
+      }
       const result = await inventoryService.triggerWorkflow(
         `Floor Worker Stock Replenishment: Reorder ${qty} units of ${materialCode}`,
         materialCode,
@@ -412,6 +421,8 @@ export default function WorkerDashboard() {
             inventoryItems={items}
             rawMaterials={rawMaterials}
             rollIdentifier={rollIdentifier}
+            rollBatchId={rollBatchId}
+            setRollBatchId={setRollBatchId}
             setRollIdentifier={setRollIdentifier}
             rollQuantity={rollQuantity}
             setRollQuantity={setRollQuantity}
@@ -482,20 +493,23 @@ export default function WorkerDashboard() {
               </div>
               <form onSubmit={handleAddItem} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">SKU Code</label>
-                  <input
-                    type="text" required placeholder="e.g. RM-STEEL-001"
-                    value={newItem.sku}
-                    onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
+                  <label htmlFor="stock-material" className="block text-xs font-semibold text-slate-400 mb-1">Catalogue Material</label>
+                  <select id="stock-material"
+                    required value={newItem.rawMaterialId}
+                    onChange={(e) => setNewItem({ ...newItem, rawMaterialId: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                  />
+                  >
+                    <option value="">Select a material</option>
+                    {rawMaterials.filter((material) => material.packagingTypeId > 0).map((material) =>
+                      <option key={material.id} value={material.id}>{material.name} — {material.skuCode}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Item Name</label>
+                  <label htmlFor="stock-sequence" className="block text-xs font-semibold text-slate-400 mb-1">SKU Sequence Number</label>
                   <input
-                    type="text" required placeholder="e.g. Cold Rolled Steel Sheet"
-                    value={newItem.name}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    id="stock-sequence" type="number" min="1" max="999999" step="1" required
+                    value={newItem.skuNumber}
+                    onChange={(e) => setNewItem({ ...newItem, skuNumber: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                   />
                 </div>

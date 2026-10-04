@@ -41,6 +41,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string RawMaterialSku { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public decimal Quantity { get; set; }
+        public decimal CurrentStock { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalPrice { get; set; }
         public decimal Subtotal => TotalPrice;
@@ -124,6 +125,12 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string PoNumber { get; set; } = string.Empty;
         public int SupplierId { get; set; }
         public string SupplierName { get; set; } = string.Empty;
+        public string SupplierCode { get; set; } = string.Empty;
+        public string SupplierContactEmail { get; set; } = string.Empty;
+        public string SupplierContactPhone { get; set; } = string.Empty;
+        public string SupplierAddress { get; set; } = string.Empty;
+        public string SupplierPaymentTerms { get; set; } = string.Empty;
+        public int SupplierLeadTimeDays { get; set; }
         public string Status { get; set; } = string.Empty;
         public string Currency { get; set; } = "USD";
         public decimal TotalCost { get; set; }

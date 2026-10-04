@@ -4,10 +4,6 @@ import { useAuth } from '../../context/useAuth';
 import { ShieldAlert } from 'lucide-react';
 
 const ROLE_MAP = {
-  0: 'FloorWorker',
-  1: 'SupplyChainManager',
-  2: 'QualityInspector',
-  3: 'ITAdmin',
   '0': 'FloorWorker',
   '1': 'SupplyChainManager',
   '2': 'QualityInspector',

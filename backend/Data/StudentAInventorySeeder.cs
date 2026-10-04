@@ -55,14 +55,24 @@ namespace backend.Data
 
         public static async Task SeedAsync(ManufacturingContext context)
         {
-            if (!await context.PackagingTypes.AnyAsync())
-            {
-                context.PackagingTypes.AddRange(PackagingTypes.Select(seed => new PackagingType
+            var existingPackagingNames = await context.PackagingTypes
+                .Select(type => type.Name)
+                .ToListAsync();
+            var existingPackagingNameSet = existingPackagingNames
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingPackagingTypes = PackagingTypes
+                .Where(seed => !existingPackagingNameSet.Contains(seed.Name))
+                .Select(seed => new PackagingType
                 {
                     Name = seed.Name,
                     ShortCode = seed.ShortCode,
                     IsActive = true,
-                }));
+                })
+                .ToArray();
+
+            if (missingPackagingTypes.Length > 0)
+            {
+                context.PackagingTypes.AddRange(missingPackagingTypes);
                 await context.SaveChangesAsync();
             }
 
@@ -113,35 +123,69 @@ namespace backend.Data
                 await context.SaveChangesAsync();
             }
 
-            if (await context.InventoryRolls.AnyAsync()) return;
-
-            var rollSeeds = new[]
-            {
-                (Sku: "BP-LAM-001", Identifier: "ROLL-BP-LAM-001-01", Quantity: 240m),
-                (Sku: "BIS-MOP-001", Identifier: "ROLL-BIS-MOP-001-01", Quantity: 300m),
-                (Sku: "TB-FIL-001", Identifier: "ROLL-TB-FIL-001-01", Quantity: 80m),
-                (Sku: "BTL-PET-001", Identifier: "ROLL-BTL-PET-001-01", Quantity: 500m),
-            };
-
-            var rollSkus = rollSeeds.Select(seed => seed.Sku).ToArray();
-            var materialBySku = await context.RawMaterials
-                .Where(material => rollSkus.Contains(material.SkuCode))
-                .ToDictionaryAsync(material => material.SkuCode, StringComparer.OrdinalIgnoreCase);
+            // QA evaluates physical rolls, while the stock page is backed by
+            // aggregate InventoryItems. Keep those two views reconciled so a
+            // SKU offered by the defect form always has a real roll and batch.
+            // The operation is additive and preserves all existing roll data.
+            var inventoryItems = await context.InventoryItems
+                .Where(item => item.RawMaterialId.HasValue && item.StockLevel > 0)
+                .OrderBy(item => item.Sku)
+                .ToListAsync();
+            var materialIds = inventoryItems.Select(item => item.RawMaterialId!.Value).Distinct().ToList();
+            var materialsById = await context.RawMaterials
+                .Where(material => materialIds.Contains(material.Id))
+                .ToDictionaryAsync(material => material.Id);
+            var existingRolls = await context.InventoryRolls
+                .Where(roll => materialIds.Contains(roll.RawMaterialId))
+                .OrderBy(roll => roll.Id)
+                .ToListAsync();
+            var rollIdentifierSet = existingRolls
+                .Select(roll => roll.RollIdentifier)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var now = DateTime.UtcNow;
-            context.InventoryRolls.AddRange(rollSeeds
-                .Where(seed => materialBySku.ContainsKey(seed.Sku))
-                .Select(seed => new InventoryRoll
+
+            foreach (var item in inventoryItems)
+            {
+                if (!materialsById.TryGetValue(item.RawMaterialId!.Value, out var material)) continue;
+
+                var batchId = $"BATCH-{material.SkuCode}";
+                var materialRolls = existingRolls.Where(roll => roll.RawMaterialId == material.Id).ToList();
+                foreach (var roll in materialRolls.Where(roll => string.IsNullOrWhiteSpace(roll.BatchId)))
                 {
-                    RawMaterialId = materialBySku[seed.Sku].Id,
-                    RollIdentifier = seed.Identifier,
-                    BarcodeUrl = $"/api/inventory/rolls/{seed.Identifier}/qr",
-                    InitialQuantity = seed.Quantity,
-                    CurrentQuantity = seed.Quantity,
+                    roll.BatchId = batchId;
+                    roll.UpdatedAt = now;
+                }
+
+                var registeredQuantity = materialRolls.Sum(roll => Math.Max(0m, roll.CurrentQuantity));
+                var missingQuantity = Math.Max(0m, item.StockLevel - registeredQuantity);
+                if (missingQuantity <= 0) continue;
+
+                var sequence = materialRolls.Count + 1;
+                string identifier;
+                do
+                {
+                    identifier = $"ROLL-{material.SkuCode}-{sequence:D2}";
+                    sequence++;
+                } while (rollIdentifierSet.Contains(identifier));
+
+                var newRoll = new InventoryRoll
+                {
+                    RawMaterialId = material.Id,
+                    BatchId = batchId,
+                    RollIdentifier = identifier,
+                    BarcodeUrl = $"/api/inventory/rolls/{identifier}/qr",
+                    InitialQuantity = missingQuantity,
+                    CurrentQuantity = missingQuantity,
                     Status = "In Stock",
                     ReceivedDate = now,
                     CreatedAt = now,
                     UpdatedAt = now,
-                }));
+                };
+                context.InventoryRolls.Add(newRoll);
+                existingRolls.Add(newRoll);
+                rollIdentifierSet.Add(identifier);
+            }
+
             await context.SaveChangesAsync();
         }
 

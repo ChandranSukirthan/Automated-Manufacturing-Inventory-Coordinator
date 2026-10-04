@@ -30,7 +30,7 @@ def require_actor(authorization: str | None = Header(default=None)) -> dict:
         if claims.get("iss") != settings.jwt_issuer or settings.jwt_audience not in audiences:
             raise ValueError("Invalid token audience")
         return claims
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError, binascii.Error, UnicodeDecodeError):
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError, json.JSONDecodeError, binascii.Error, UnicodeDecodeError):
         raise HTTPException(401, "A valid backend bearer token is required")
 
 

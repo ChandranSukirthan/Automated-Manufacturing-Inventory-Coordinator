@@ -67,7 +67,7 @@ namespace backend.Controllers
                         {
                             Sku = prediction.Sku,
                             PackagingType = item.Category,
-                            QuantityRequested = 500, // This could be determined dynamically or by the agent
+                            QuantityRequested = Math.Max(0, item.ReorderThreshold - item.StockLevel),
                             WorkerId = "Agent-Triggered"
                         });
                         _logger.LogInformation("Agent successfully triggered an alert for SKU {Sku}", prediction.Sku);

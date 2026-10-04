@@ -139,7 +139,9 @@ class TestInventoryToolsGoldenCases(unittest.TestCase):
         self.assertAlmostEqual(extraction["burnRate"], 560.0 / 30, places=2)
         self.assertAlmostEqual(extraction["daysRemaining"], 18.75, places=2)
         self.assertFalse(extraction["lowStock"])
-        self.assertEqual(extraction["requiredQuantity"], 650.0)
+        self.assertIsNone(extraction["requiredQuantity"])
+        self.assertFalse(state.get("draft_po"))
+        self.assertFalse(state.get("purchasing_data"))
 
         # Check tool execution summary is recorded
         summary = state.get("tool_execution_summary")

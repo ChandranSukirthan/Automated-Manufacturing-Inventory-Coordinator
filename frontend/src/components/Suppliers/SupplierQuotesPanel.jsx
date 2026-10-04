@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import supplierService from '../../services/supplierService';
 import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 
 const emptyQuote = { rawMaterialId: '', unitPrice: '', minimumOrderQuantity: 1, packSize: 1, availableQuantity: '', leadTimeDays: '', qualityEvidence: '', currency: 'USD', isActive: true };
 export default function SupplierQuotesPanel({ supplierId }) {

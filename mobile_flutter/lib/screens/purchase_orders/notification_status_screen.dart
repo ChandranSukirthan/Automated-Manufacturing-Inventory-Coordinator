@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
-import 'po_details_screen.dart';
 import 'po_create_screen.dart';
 import 'procurement_details_screen.dart';
 
@@ -175,7 +174,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.06)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                             ),
                             child: const Center(
                               child: Text(
@@ -197,7 +196,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                 decoration: BoxDecoration(
                                   color: cardBg,
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: roseAccent.withOpacity(0.3)),
+                                  border: Border.all(color: roseAccent.withValues(alpha: 0.3)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,9 +213,9 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                           decoration: BoxDecoration(
-                                            color: roseAccent.withOpacity(0.15),
+                                            color: roseAccent.withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: roseAccent.withOpacity(0.3)),
+                                            border: Border.all(color: roseAccent.withValues(alpha: 0.3)),
                                           ),
                                           child: const Text('LOW STOCK', style: TextStyle(color: roseAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                                         ),
@@ -333,7 +332,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                 decoration: BoxDecoration(
                                   color: cardBg,
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,7 +381,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                         Text(
                                           'PDF Generated',
                                           style: TextStyle(
-                                            color: Colors.white.withOpacity(0.4),
+                                            color: Colors.white.withValues(alpha: 0.4),
                                             fontSize: 10,
                                           ),
                                         ),
@@ -406,7 +405,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -143,7 +143,7 @@ def _query_inventory_by_sku(
         )
         params: tuple[Any, ...] = (sku_code,)
         if selected_inventory:
-            query += ' AND i."Id" = ANY(%s)'
+            query += ' AND i."RollIdentifier" = ANY(%s)'
             params += (selected_inventory,)
         query += ' ORDER BY i."Id"'
         cursor.execute(query, params)
@@ -151,12 +151,19 @@ def _query_inventory_by_sku(
 
     if not rows:
         raise ValueError("No inventory rolls were found for the selected SKU")
+    if selected_inventory and len(rows) != len(set(selected_inventory)):
+        raise ValueError("Some selected physical roll identifiers do not belong to this SKU")
+    batches = sorted({str(row[5]).strip() for row in rows if row[5]})
+    if not batches:
+        raise ValueError("The inventory rolls have no batch identity; reconcile missing batches first")
+    batch_id = batches[0] if len(batches) == 1 else f"MULTI-{sku_code.upper()}"
     return {
-        "batchId": rows[0][5],
-        "affectedInventory": [str(row[0]) for row in rows],
+        "batchId": batch_id,
+        "batchIds": batches,
+        "affectedInventory": [str(row[1]) for row in rows],
         "inventoryContext": [
             {
-                "inventoryRollId": str(row[0]),
+                "inventoryRollId": str(row[1]),
                 "rollIdentifier": row[1] or str(row[0]),
                 "rawMaterialId": row[2],
                 "rawMaterialSku": row[3],
@@ -180,7 +187,7 @@ def _check_related_inventory(
             raise ValueError(f"Batch was not found: {batch_id}")
 
         cursor.execute(
-            'SELECT "Id" FROM "InventoryRolls" WHERE "BatchId" = %s ORDER BY "Id"',
+            'SELECT "RollIdentifier" FROM "InventoryRolls" WHERE "BatchId" = %s ORDER BY "Id"',
             (batch_id,),
         )
         affected_inventory = [str(row[0]) for row in cursor.fetchall() if row[0] is not None]

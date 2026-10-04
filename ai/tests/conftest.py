@@ -52,6 +52,8 @@ def mock_inventory_read_boundary(monkeypatch, tmp_path):
     monkeypatch.setattr(workflow, "sync_to_database", lambda *_: None)
     monkeypatch.setattr(workflow, "save_procurement_outcome", lambda *_: None)
     monkeypatch.setattr(workflow, "WORKFLOW_SESSIONS", SessionStore(tmp_path / "sessions.sqlite3"))
+    from ai.routes import workflow_routes
+    monkeypatch.setattr(workflow_routes, "WORKFLOW_SESSIONS", workflow.WORKFLOW_SESSIONS)
     import psycopg
     def offline_connection(*_args, **_kwargs):
         raise psycopg.OperationalError("Database boundary is mocked for offline tests")

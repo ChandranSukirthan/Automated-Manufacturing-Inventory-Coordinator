@@ -221,8 +221,8 @@ export default function AlertsTab({
                 <div className="flex items-center gap-2">
                   {onTriggerAi && !['Resolved', 'Dismissed'].includes(alert.status) && (
                     <button
-                      onClick={() => onTriggerAi(alert.sku, alert.quantityRequested || 2000)}
-                      disabled={triggeringAi}
+                      onClick={() => onTriggerAi(alert.sku, alert.quantityRequested ?? alert.netDeficit)}
+                      disabled={triggeringAi || !(Number(alert.quantityRequested ?? alert.netDeficit) > 0)}
                       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-semibold transition disabled:opacity-50"
                       title="Trigger autonomous replenishment AI workflow"
                     >

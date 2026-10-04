@@ -74,6 +74,8 @@ namespace backend.Services
 
         public async Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request)
         {
+            if (request.StockLevel < 0 || request.ReorderThreshold < 0)
+                throw new InvalidOperationException("Stock and reorder threshold cannot be negative.");
             var packagingType = await _context.PackagingTypes
                 .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId && type.IsActive);
             if (packagingType == null)
@@ -132,6 +134,10 @@ var item = new InventoryItem
                 ReorderThreshold = request.ReorderThreshold,
             };
             _context.InventoryItems.Add(item);
+            if (item.StockLevel > 0)
+                _context.InventoryMovements.Add(new InventoryMovement { RawMaterialId = materialSku.Id,
+                    TransactionType = "OPENING", Quantity = item.StockLevel, PreviousStock = 0,
+                    NewStock = item.StockLevel, Reason = "Explicit opening stock count" });
             await _context.SaveChangesAsync();
 
             // Auto-generate low stock alert if below or at reorder threshold
@@ -216,6 +222,8 @@ var existing = await _context.InventoryItems.FindAsync(id);
         {
             var item = await _context.InventoryItems.FindAsync(id);
             if (item == null) return false;
+            if (item.StockLevel != 0)
+                throw new InvalidOperationException("Record a stock adjustment before deleting a nonempty SKU.");
             if (await _context.InventoryRolls.AnyAsync(r => r.RawMaterialId == item.RawMaterialId))
                 throw new InvalidOperationException("This SKU has physical rolls. Remove eligible rolls before deleting the SKU.");
             if (_appContext != null && await _appContext.OrderLines.AnyAsync(l => l.RawMaterialId == item.RawMaterialId))
@@ -452,6 +460,9 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             var existing = await _context.RawMaterials.FindAsync(id);
             if (existing == null) return false;
 
+            if (material.SkuCode != existing.SkuCode || material.MaterialCode != existing.MaterialCode ||
+                material.PackagingTypeId != existing.PackagingTypeId || material.Category != existing.Category)
+                throw new InvalidOperationException("Catalogue identity is immutable. Add a new material instead of changing historical SKU links.");
             var oldSku = existing.SkuCode;
             existing.Name = material.Name;
             existing.SkuCode = material.SkuCode;
@@ -481,12 +492,15 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             var existing = await _context.RawMaterials.FindAsync(id);
             if (existing == null) return false;
 
-            if (await _context.InventoryRolls.AnyAsync(r => r.RawMaterialId == id) ||
+            if (await _context.InventoryMovements.AnyAsync(m => m.RawMaterialId == id) ||
+                await _context.InventoryRolls.AnyAsync(r => r.RawMaterialId == id) ||
                 (_appContext != null && await _appContext.OrderLines.AnyAsync(l => l.RawMaterialId == id)))
                 throw new InvalidOperationException("This material has roll or order history and cannot be deleted.");
             var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Sku.ToLower() == existing.SkuCode.ToLower());
             if (item != null)
             {
+                if (item.StockLevel != 0)
+                    throw new InvalidOperationException("Record a stock adjustment before deleting a nonempty material.");
                 _context.InventoryItems.Remove(item);
             }
 
@@ -637,14 +651,14 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 roll.RollIdentifier = $"ROLL-{Guid.NewGuid():N}";
             }
             else if (await _context.InventoryRolls.AnyAsync(existingRoll =>
-                existingRoll.RollIdentifier.ToUpper() == roll.RollIdentifier.Trim().ToUpper()))
+                existingRoll.RollIdentifier.ToUpper() == cleanIdentifier.ToUpper()))
             {
                 throw new InvalidOperationException(
                     "That roll identifier is already registered for this SKU.");
             }
             else
             {
-                roll.RollIdentifier = roll.RollIdentifier.Trim().ToUpperInvariant();
+                roll.RollIdentifier = cleanIdentifier.ToUpperInvariant();
             }
             // Store only this application's QR endpoint. The mobile app never
             // receives a third-party provider URL or calls a missing helper.
@@ -910,52 +924,9 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
         {
             var movements = await _context.InventoryMovements.Where(m => m.RawMaterialId == rawMaterialId)
                 .OrderByDescending(m => m.CreatedAt).ToListAsync();
-            if (movements.Count > 0)
-                return movements.Select(m => new InventoryHistoryItemDto { Date = m.CreatedAt,
+            return movements.Select(m => new InventoryHistoryItemDto { Date = m.CreatedAt,
                     TransactionType = m.TransactionType, Quantity = m.Quantity, PreviousStock = m.PreviousStock,
                     NewStock = m.NewStock, Reason = m.Reason, User = "Inventory operations" }).ToList();
-            var material = await _context.RawMaterials
-                .Include(r => r.InventoryRolls)
-                .FirstOrDefaultAsync(r => r.Id == rawMaterialId);
-
-            var history = new List<InventoryHistoryItemDto>();
-            if (material == null) return history;
-
-            decimal runningStock = 0m;
-            foreach (var roll in material.InventoryRolls.OrderBy(r => r.ReceivedDate))
-            {
-                var prev = runningStock;
-                runningStock += roll.InitialQuantity;
-                history.Add(new InventoryHistoryItemDto
-                {
-                    Date = roll.ReceivedDate,
-                    TransactionType = "RECEIVED",
-                    Quantity = roll.InitialQuantity,
-                    PreviousStock = prev,
-                    NewStock = runningStock,
-                    Reason = $"Received Roll {roll.RollIdentifier}",
-                    User = "Floor Receiving Clerk"
-                });
-
-                if (roll.InitialQuantity > roll.CurrentQuantity)
-                {
-                    var consumed = roll.InitialQuantity - roll.CurrentQuantity;
-                    var prevAfterReceive = runningStock;
-                    runningStock -= consumed;
-                    history.Add(new InventoryHistoryItemDto
-                    {
-                        Date = roll.UpdatedAt,
-                        TransactionType = "CONSUMED",
-                        Quantity = consumed,
-                        PreviousStock = prevAfterReceive,
-                        NewStock = runningStock,
-                        Reason = $"Production Consumption on Roll {roll.RollIdentifier}",
-                        User = "Shop Floor Operator"
-                    });
-                }
-            }
-
-            return history.OrderByDescending(h => h.Date).ToList();
         }
 
         // ========== Student 1: Proxy AI Replenishment Trigger via ASP.NET Core ==========
@@ -988,7 +959,7 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             {
                 var clean = dto.MaterialId.Trim().ToLower();
                 material = await _context.RawMaterials
-                    .FirstOrDefaultAsync(m => m.SkuCode.ToLower() == clean || m.Name.ToLower().Contains(clean));
+                    .SingleOrDefaultAsync(m => m.SkuCode.ToLower() == clean);
             }
             if (material == null)
             {
@@ -1035,7 +1006,7 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                     safetyStock = item?.ReorderThreshold ?? 0,
                     openPOQuantity = Math.Max(0, incoming - alreadyReceived),
                     netDeficit = deficit,
-                    budgetLimit = _configuration.GetValue<decimal>("Procurement:DefaultBudgetLimit", 15000m),
+                    budgetLimit = _configuration.GetValue<decimal>("Procurement:DefaultBudgetLimit", 0m),
                     unit = material.UnitOfMeasure,
                     material_id = materialSku,
                     required_quantity = (double)draftQty

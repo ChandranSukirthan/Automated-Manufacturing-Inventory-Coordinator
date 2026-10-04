@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   ShoppingCart,
   Building2,
@@ -25,12 +25,11 @@ import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import supplierService from '../../services/supplierService';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -73,6 +72,9 @@ export default function AdminDashboard() {
   const supplierPerformance = supplierCount > 0 ? Math.round((activeSuppliersCount / supplierCount) * 100) : 100;
   const aiWorkflowCount = orders.filter((o) => o.requiresApproval || o.status === 'Approved').length || orders.length;
   const highRiskOrders = orders.filter((o) => (o.totalCost || 0) > 10000 || o.requiresApproval);
+
+  if (loading) return <div className="p-8 text-slate-300">Loading dashboard…</div>;
+  if (error) return <div className="p-8 text-rose-400">{error}</div>;
 
   return (
     <AppLayout

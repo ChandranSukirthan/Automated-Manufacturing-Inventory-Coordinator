@@ -18,6 +18,8 @@ public class AuthorizationMetadataTests
             .Cast<AuthorizeAttribute>()
             .Single();
 
-        Assert.Equal("FloorWorker,SupplyChainManager,ITAdmin", authorization.Roles);
+        Assert.Equal(controllerType == typeof(InventoryController)
+            ? "FloorWorker,QualityInspector,SupplyChainManager,ITAdmin"
+            : "FloorWorker,SupplyChainManager,ITAdmin", authorization.Roles);
     }
 }

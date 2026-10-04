@@ -2969,6 +2969,7 @@ class _RegisterRollDialog extends StatefulWidget {
 
 class _RegisterRollDialogState extends State<_RegisterRollDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _batch = TextEditingController();
   late final TextEditingController _quantity;
   int? _selectedMaterial;
   bool _submitting = false;
@@ -2988,6 +2989,7 @@ class _RegisterRollDialogState extends State<_RegisterRollDialog> {
 
   @override
   void dispose() {
+    _batch.dispose();
     _quantity.dispose();
     super.dispose();
   }
@@ -3041,7 +3043,7 @@ class _RegisterRollDialogState extends State<_RegisterRollDialog> {
                             ),
                           ),
                           Text(
-                            'Create a tracked roll batch from available stock',
+                            'Register incoming stock with its physical batch',
                             style: TextStyle(color: AppColors.mutedText, fontSize: 11),
                           ),
                         ],
@@ -3207,12 +3209,19 @@ class _RegisterRollDialogState extends State<_RegisterRollDialog> {
                   controller: _quantity,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: AppColors.strongText, fontSize: 13),
-                  decoration: const InputDecoration(labelText: 'Roll Quantity (Units / KG) *'),
+                  decoration: const InputDecoration(labelText: 'Roll Quantity (Whole Units) *'),
                   validator: (value) {
                     final parsed = double.tryParse(value ?? '');
-                    if (parsed == null || parsed <= 0) return 'Enter a positive quantity.';
+                    if (parsed == null || parsed <= 0 || parsed != parsed.roundToDouble()) return 'Enter a positive whole quantity.';
                     return null;
                   },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _batch,
+                  maxLength: 80,
+                  decoration: const InputDecoration(labelText: 'Physical Batch ID *'),
+                  validator: (value) => value == null || value.trim().isEmpty ? 'Enter the physical batch ID.' : null,
                 ),
                 const SizedBox(height: 20),
                 Row(
@@ -3244,6 +3253,7 @@ class _RegisterRollDialogState extends State<_RegisterRollDialog> {
                                 try {
                                   await widget.inventory.createRoll(
                                     rollIdentifier: '',
+                                    batchId: _batch.text.trim(),
                                     quantity: double.parse(_quantity.text),
                                     rawMaterialId: _selectedMaterial!,
                                   );

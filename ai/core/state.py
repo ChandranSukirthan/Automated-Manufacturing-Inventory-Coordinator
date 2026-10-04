@@ -64,6 +64,10 @@ class AgentState(TypedDict, total=False):
     supplier_candidates: list[dict[str, Any]]
     recommended_supplier: dict[str, Any] | None
     alternative_suppliers: list[str]
+    supplier_selection_attempt: int
+    max_supplier_selection_attempts: int
+    excluded_supplier_ids: list[str]
+    automatic_retry_required: bool
     recommended_quantity: float | None
     estimated_unit_price: float | None
     estimated_total_cost: float | None
@@ -76,6 +80,7 @@ class AgentState(TypedDict, total=False):
 
     # ── Validation output ──────────────────────────────────────────────────────
     validation_results: dict[str, Any]
+    validation_history: list[dict[str, Any]]
 
     # ── Human approval gate ────────────────────────────────────────────────────
     requires_approval: bool
@@ -87,6 +92,7 @@ class AgentState(TypedDict, total=False):
     completed_steps: list[str]
     tool_call_log: list[dict[str, Any]]
     tool_results: dict[str, Any]
+    agent_handoffs: list[dict[str, Any]]
     errors: list[str]
     final_outcome: str | None
 

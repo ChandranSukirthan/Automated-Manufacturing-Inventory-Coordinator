@@ -47,18 +47,18 @@ export default function PurchaseOrderCreate() {
   // Form State
   const [supplierId, setSupplierId] = useState(paramSupplierId || '');
   const [currency, setCurrency] = useState('USD');
-  const [budgetLimit, setBudgetLimit] = useState('15000');
+  const [budgetLimit, setBudgetLimit] = useState('');
   const [notes, setNotes] = useState(
     isFromAiRecommendation
-      ? `Auto-drafted from AI Procurement Candidate #${paramCandidateId || 'rec'} for ${paramMaterialName || 'raw material supplies'}.`
+      ? `Auto-drafted from procurement candidate ${paramCandidateId || paramProcurementId}.`
       : ''
   );
   const [lines, setLines] = useState([
     {
       rawMaterialId: paramMaterialId || '',
       description: paramMaterialName || '',
-      quantity: paramQuantity || '100',
-      unitPrice: paramUnitPrice || '15.00'
+      quantity: paramQuantity || '',
+      unitPrice: paramUnitPrice || ''
     }
   ]);
 
@@ -75,34 +75,7 @@ export default function PurchaseOrderCreate() {
 
         if (!isMounted) return;
 
-        let activeSuppliers = (suppliersData || []).filter((s) => s.isActive !== false);
-        if (activeSuppliers.length === 0) {
-          activeSuppliers = [
-            { id: 1, name: 'Apex Industrial Metals', supplierCode: 'SUP-001', leadTimeDays: 7, paymentTerms: 'Net 30', contactEmail: 'orders@apeximetals.com', isActive: true },
-            { id: 2, name: 'Global Precision Fasteners', supplierCode: 'SUP-002', leadTimeDays: 14, paymentTerms: 'Net 60', contactEmail: 'procurement@globalfasteners.com', isActive: true },
-            { id: 3, name: 'Polymer & Composites Direct', supplierCode: 'SUP-003', leadTimeDays: 10, paymentTerms: 'Net 30', contactEmail: 'sales@polymerdirect.com', isActive: true }
-          ];
-        }
-
-        // Dynamically add AI candidate supplier if passed from AI research
-        if (paramSupplierName) {
-          const decodedName = decodeURIComponent(paramSupplierName);
-          const alreadyExists = activeSuppliers.some(
-            (s) => s.name.toLowerCase() === decodedName.toLowerCase()
-          );
-          if (!alreadyExists) {
-            const newSup = {
-              id: activeSuppliers.length + 10,
-              name: decodedName,
-              supplierCode: `SUP-AI-${activeSuppliers.length + 1}`,
-              leadTimeDays: 6,
-              paymentTerms: 'Net 30',
-              contactEmail: `orders@${decodedName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
-              isActive: true
-            };
-            activeSuppliers = [newSup, ...activeSuppliers];
-          }
-        }
+        const activeSuppliers = (suppliersData || []).filter((s) => s.isActive !== false);
 
         setSuppliers(activeSuppliers);
 
@@ -124,14 +97,7 @@ export default function PurchaseOrderCreate() {
 
         setSupplierId(effectiveSupplierId);
 
-        let mats = materialsData || [];
-        if (mats.length === 0) {
-          mats = [
-            { id: 1, name: 'High Strength Steel Coils', skuCode: 'MAT-STEEL-001' },
-            { id: 2, name: 'Industrial Barrier Laminated Pouch Film', skuCode: 'MAT-FILM-002' },
-            { id: 3, name: 'Precision Fasteners M8x40', skuCode: 'MAT-FAST-003' }
-          ];
-        }
+        const mats = materialsData || [];
         setMaterials(mats);
 
         // Match material from query param by ID or name
@@ -149,19 +115,19 @@ export default function PurchaseOrderCreate() {
           );
         }
 
-        const effectiveMatId = matchedMaterial ? matchedMaterial.id.toString() : (mats.length > 0 ? mats[0].id.toString() : '1');
-        const effectiveMatName = matchedMaterial ? matchedMaterial.name : (paramMaterialName ? decodeURIComponent(paramMaterialName) : (mats.length > 0 ? mats[0].name : 'Raw Material'));
+        const effectiveMatId = matchedMaterial ? matchedMaterial.id.toString() : '';
+        const effectiveMatName = matchedMaterial ? matchedMaterial.name : '';
 
         setLines([
           {
             rawMaterialId: effectiveMatId,
             description: effectiveMatName,
-            quantity: paramQuantity ? parseFloat(paramQuantity).toString() : '100',
-            unitPrice: paramUnitPrice ? parseFloat(paramUnitPrice).toFixed(2) : '15.00'
+            quantity: paramQuantity ? parseFloat(paramQuantity).toString() : '',
+            unitPrice: paramUnitPrice ? parseFloat(paramUnitPrice).toFixed(2) : ''
           }
         ]);
       } catch (err) {
-        console.error('Error loading PO prerequisites:', err);
+        if (isMounted) setErrorMessage(parseErrorMessage(err, 'Unable to load suppliers and materials.'));
       } finally {
         if (isMounted) setLoadingData(false);
       }
@@ -187,11 +153,11 @@ export default function PurchaseOrderCreate() {
   };
 
   const addLine = () => {
-    const firstMatId = materials.length > 0 ? materials[0].id.toString() : '1';
-    const firstMatName = materials.length > 0 ? materials[0].name : 'Raw Material';
+    const firstMatId = materials.length > 0 ? materials[0].id.toString() : '';
+    const firstMatName = materials.length > 0 ? materials[0].name : '';
     setLines([
       ...lines,
-      { rawMaterialId: firstMatId, description: firstMatName, quantity: '100', unitPrice: '10.00' }
+      { rawMaterialId: firstMatId, description: firstMatName, quantity: '', unitPrice: '' }
     ]);
   };
 

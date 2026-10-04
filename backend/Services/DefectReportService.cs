@@ -87,7 +87,7 @@ namespace ManufacturingCoordinator.Api.Services
             var isCatalogueSkuReport = !string.IsNullOrWhiteSpace(dto.SkuCode);
             var context = !isCatalogueSkuReport
                 ? await ResolveLegacyBatchContextAsync(dto.BatchId!, dto.ProductType)
-                : await ResolveInventoryContextAsync(dto.SkuCode);
+                : await ResolveInventoryContextAsync(dto.SkuCode, dto.BatchId, dto.AffectedInventory);
             var batchId = context.BatchId;
             var productType = context.ProductType;
 
@@ -151,7 +151,14 @@ namespace ManufacturingCoordinator.Api.Services
             ValidateEnums(productType, severity, status);
             if (isCatalogueSkuReport)
             {
-                productType = await ResolveProductTypeForSkuAsync(skuCode);
+                var related = dto.AffectedInventory ?? DeserializeInventory(report.AffectedInventoryJson);
+                if (await _db.Quarantines.AnyAsync(q => q.DefectReportId == id) &&
+                    (skuCode != report.SkuCode || batchId != report.BatchId ||
+                     !related.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(DeserializeInventory(report.AffectedInventoryJson))))
+                    throw new AuthException("A defect with quarantine history cannot be reassigned to other inventory.", HttpStatusCode.Conflict);
+                var context = await ResolveInventoryContextAsync(skuCode, dto.BatchId, related);
+                productType = context.ProductType;
+                if (related.Count > 0 || !string.IsNullOrWhiteSpace(dto.BatchId)) batchId = context.BatchId;
             }
             else
             {
@@ -235,10 +242,30 @@ namespace ManufacturingCoordinator.Api.Services
         }
 
         private async Task<(string BatchId, ProductType ProductType)> ResolveInventoryContextAsync(
-            string skuCode)
+            string skuCode, string? requestedBatch = null, List<string>? affectedInventory = null)
         {
             var cleanSku = skuCode.Trim().ToUpperInvariant();
             var productType = await ResolveProductTypeForSkuAsync(cleanSku);
+            var ids = (affectedInventory ?? new()).Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim().ToUpperInvariant()).Distinct().ToList();
+            if (ids.Count > 0)
+            {
+                var rolls = await _db.StockRolls.Include(r => r.RawMaterial)
+                    .Where(r => ids.Contains(r.RollIdentifier.ToUpper())).ToListAsync();
+                if (rolls.Count != ids.Count || rolls.Any(r => r.RawMaterial!.SkuCode != cleanSku))
+                    throw new AuthException("Select physical roll identifiers belonging to this SKU.");
+                var batches = rolls.Select(r => r.BatchId).Where(batch => !string.IsNullOrWhiteSpace(batch))
+                    .Select(batch => batch!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(batch => batch).ToList();
+                if (batches.Count == 0)
+                    throw new AuthException("Selected rolls must have known batches. Reconcile missing batches first.");
+                var resolvedBatch = batches.Count == 1 ? batches[0] : $"MULTI-{cleanSku}";
+                if (!string.IsNullOrWhiteSpace(requestedBatch) &&
+                    !requestedBatch.Trim().Equals(resolvedBatch, StringComparison.OrdinalIgnoreCase))
+                    throw new AuthException("The selected rolls do not belong to the requested batch.");
+                return (resolvedBatch, productType);
+            }
+            if (!string.IsNullOrWhiteSpace(requestedBatch))
+                return await ResolveLegacyBatchContextAsync(requestedBatch, productType);
 
             // A defect can be recorded as soon as the material/SKU is known.
             // A batch or a QR roll can be associated later by the quality

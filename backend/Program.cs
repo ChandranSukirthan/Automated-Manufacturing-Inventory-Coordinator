@@ -23,8 +23,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Load .env file (if exists)
-Env.Load();
+// Load .env defaults without overriding values supplied by the host environment.
+Env.NoClobber().Load();
 
 // Let appsettings.json provide the default connection and use .env values only
 // when they are explicitly supplied. Previously, absent .env values silently

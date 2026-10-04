@@ -15,7 +15,7 @@ import {
   UserCheck,
   Sparkles
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import StockAlertNotifications from '../Notifications/StockAlertNotifications';
 
@@ -36,7 +36,7 @@ export default function AppLayout({ children, title, subtitle, actionButton }) {
           const count = orders.filter((o) => o.status === 'PendingApproval').length;
           setPendingCount(count);
         }
-      } catch (err) {
+    } catch {
         // silent catch
       }
     };

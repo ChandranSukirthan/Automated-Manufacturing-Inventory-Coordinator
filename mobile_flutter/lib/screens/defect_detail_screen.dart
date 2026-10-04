@@ -61,7 +61,7 @@ class _DefectDetailScreenState extends State<DefectDetailScreen> {
       final rolls = results[2] as List<InventoryRollModel>;
       final materials = results[3] as List<RawMaterialModel>;
       final affectedRoll = rolls
-          .where((roll) => defect.affectedInventory.contains(roll.id))
+          .where((roll) => defect.affectedInventory.contains(roll.rollIdentifier))
           .firstOrNull;
       final material = materials
           .where((item) => item.id == affectedRoll?.rawMaterialId)

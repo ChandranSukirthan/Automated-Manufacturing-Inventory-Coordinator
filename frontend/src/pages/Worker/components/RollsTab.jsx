@@ -12,9 +12,10 @@ function statusBadge(status) {
 
 export default function RollsTab({
   rolls,
-  inventoryItems,
   rawMaterials,
   rollIdentifier,
+  rollBatchId,
+  setRollBatchId,
   setRollIdentifier,
   rollQuantity,
   setRollQuantity,
@@ -28,7 +29,6 @@ export default function RollsTab({
   qrSearchResult,
   qrSearching,
   onQrSearch,
-  loading,
 }) {
   const [rollSearch, setRollSearch] = useState('');
   const [rollMaterialFilter, setRollMaterialFilter] = useState('');
@@ -189,13 +189,17 @@ export default function RollsTab({
                 type="number"
                 required
                 min="1"
-                step="0.01"
+                step="1"
                 value={rollQuantity}
                 onChange={(e) => setRollQuantity(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
               />
-              <p className="mt-1 text-[11px] text-slate-500">Cannot exceed current stock.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Adds the physical quantity received to stock.</p>
             </div>
+            <label className="block text-xs font-semibold text-slate-300">Batch identifier
+              <input required maxLength={80} value={rollBatchId} onChange={e => setRollBatchId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white" />
+            </label>
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Raw Material

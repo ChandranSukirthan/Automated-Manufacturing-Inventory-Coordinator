@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
@@ -53,19 +53,19 @@ export default function PurchaseOrderList() {
 
   const [poForm, setPoForm] = useState({
     supplierId: preselectedSupplierId ? parseInt(preselectedSupplierId, 10) : '',
-    budgetLimit: 15000,
+    budgetLimit: '',
     notes: '',
     lines: [
       {
-        rawMaterialId: 1,
-        description: 'Standard Grade Industrial Material',
-        quantity: 2000,
-        unitPrice: 4.5
+        rawMaterialId: '',
+        description: '',
+        quantity: '',
+        unitPrice: ''
       }
     ]
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -75,14 +75,7 @@ export default function PurchaseOrderList() {
         rawMaterialService.getRawMaterials().catch(() => [])
       ]);
       setOrders(ordersData || []);
-      let activeSups = (suppliersData || []).filter((s) => s.isActive !== false);
-      if (activeSups.length === 0) {
-        activeSups = [
-          { id: 1, name: 'Apex Industrial Metals', supplierCode: 'SUP-001', leadTimeDays: 7, paymentTerms: 'Net 30', contactEmail: 'orders@apeximetals.com', isActive: true },
-          { id: 2, name: 'Global Precision Fasteners', supplierCode: 'SUP-002', leadTimeDays: 14, paymentTerms: 'Net 60', contactEmail: 'procurement@globalfasteners.com', isActive: true },
-          { id: 3, name: 'Polymer & Composites Direct', supplierCode: 'SUP-003', leadTimeDays: 10, paymentTerms: 'Net 30', contactEmail: 'sales@polymerdirect.com', isActive: true }
-        ];
-      }
+      const activeSups = (suppliersData || []).filter((s) => s.isActive !== false);
       setSuppliers(activeSups);
       setRawMaterials(materialsData || []);
 
@@ -98,11 +91,12 @@ export default function PurchaseOrderList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [poForm.supplierId]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const initialLoad = setTimeout(loadData, 0);
+    return () => clearTimeout(initialLoad);
+  }, [loadData]);
 
   // Compute calculated values in real-time for PO creation
   const calculatedTotalCost = useMemo(() => {

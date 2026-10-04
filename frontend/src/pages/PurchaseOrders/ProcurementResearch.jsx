@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import useCurrentTime from '../../hooks/useCurrentTime';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Sparkles,
@@ -37,7 +38,7 @@ import ConfirmModal from '../../components/Common/ConfirmModal';
 import procurementService from '../../services/procurementService';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import rawMaterialService from '../../services/rawMaterialService';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function ProcurementResearch() {
@@ -88,20 +89,22 @@ export default function ProcurementResearch() {
   const [reviseModalOpen, setReviseModalOpen] = useState(false);
   const [decisionNotes, setDecisionNotes] = useState('');
 
+  const now = useCurrentTime();
+
   // New Request Form State
   const [showNewForm, setShowNewForm] = useState(!searchParams.get('id'));
-  const [formValues, setFormValues] = useState({
-    rawMaterialId: parseInt(searchParams.get('materialId'), 10) || 1,
+  const [formValues, setFormValues] = useState(() => ({
+    rawMaterialId: parseInt(searchParams.get('materialId'), 10) || '',
     materialName: searchParams.get('material') || '',
-    specification: 'ISO 9001 certified, barrier laminated pouch film, food-grade compliance',
-    productionRequirement: parseFloat(searchParams.get('deficit')) || 3500,
-    safetyStock: 500,
+    specification: '',
+    productionRequirement: parseFloat(searchParams.get('deficit')) || '',
+    safetyStock: 0,
     currentStock: 0,
-    maximumBudget: 15000,
-    qualityStandard: 'ISO 9001 / ASTM F1929',
+    maximumBudget: '',
+    qualityStandard: '',
     preferredRegion: 'Global',
-    requiredByDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]
-  });
+    requiredByDate: ''
+  }));
 
   // 1. Initial Load: Raw materials, existing procurement requests, and historical learning data
   useEffect(() => {
@@ -134,11 +137,9 @@ export default function ProcurementResearch() {
             materialName: paramMatName || (matchedMat ? matchedMat.name : prev.materialName),
             productionRequirement: paramDeficit || prev.productionRequirement
           }));
-        } else if (materialsData && materialsData.length > 0 && !formValues.materialName) {
-          setFormValues((prev) => ({
-            ...prev,
-            rawMaterialId: materialsData[0].id,
-            materialName: materialsData[0].name
+        } else if (materialsData && materialsData.length > 0) {
+          setFormValues((prev) => prev.materialName ? prev : ({
+            ...prev, rawMaterialId: materialsData[0].id, materialName: materialsData[0].name
           }));
         }
 
@@ -166,10 +167,10 @@ export default function ProcurementResearch() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [searchParams]);
 
   // 2. Fetch details whenever selectedRequestId changes
-  const loadRequestDetails = async (requestId) => {
+  const loadRequestDetails = useCallback(async (requestId) => {
     if (!requestId) return;
     try {
       const [reqDataRaw, recDataRaw, trackData] = await Promise.all([
@@ -178,44 +179,14 @@ export default function ProcurementResearch() {
         procurementService.getStatus(requestId).catch(() => null)
       ]);
 
-      let reqData = reqDataRaw;
-      if (!reqData) {
-        const found = requests.find((r) => r.id === requestId);
-        reqData = found ? { ...found } : {
-          id: requestId,
-          rawMaterialId: formValues.rawMaterialId || 1,
-          rawMaterialName: formValues.materialName || 'High Strength Steel Coils',
-          materialName: formValues.materialName || 'High Strength Steel Coils',
-          requiredSpecification: formValues.specification || 'ISO 9001 certified, barrier laminated pouch film, food-grade compliance',
-          productionRequirement: parseFloat(formValues.productionRequirement) || 2000,
-          currentStock: parseFloat(formValues.currentStock) || 0,
-          safetyStock: parseFloat(formValues.safetyStock) || 500,
-          calculatedNetQuantity: parseFloat(formValues.productionRequirement) || 2000,
-          maximumBudget: parseFloat(formValues.maximumBudget) || 15000,
-          requiredByDate: formValues.requiredByDate || new Date(Date.now() + 14 * 86400000).toISOString(),
-          status: 'RecommendationReady',
-          workflowId: `WF-2026-${requestId.toString().padStart(3, '0')}`,
-          candidates: []
-        };
-      }
+      const reqData = reqDataRaw || requests.find((r) => r.id === requestId);
+      if (!reqData) throw new Error('Procurement request was not found.');
 
       let recData = recDataRaw;
 
       // If backend returned no candidates, leave it empty as per requirements (NO MOCK DATA).
       if (!reqData.candidates) {
         reqData.candidates = [];
-      }
-
-      // If no recommendation exists, determine best from candidates
-      if (!recData?.recommendedCandidate && reqData.candidates?.length > 0) {
-        const best = reqData.candidates.find((c) => c.supplierStatus === 'APPROVED') || reqData.candidates[0];
-        recData = {
-          procurementRequestId: requestId,
-          status: 'RecommendationReady',
-          workflowId: reqData.workflowId || `WF-2026-${requestId.toString().padStart(3, '0')}`,
-          recommendedCandidate: best,
-          rationale: `Recommended '${best.supplierName}' based on lowest total landed cost ($${best.totalCost?.toFixed(2)}), verified ISO certification (${best.qualityEvidence}), and ${best.leadTimeDays}-day lead time within budget limit ($${(reqData.maximumBudget || 15000).toLocaleString()}).`
-        };
       }
 
       setCurrentRequest(reqData);
@@ -229,15 +200,16 @@ export default function ProcurementResearch() {
         setSelectedCandidateId(reqData.candidates[0].id);
       }
     } catch (err) {
-      console.error('Failed to load procurement request details:', err);
+      setErrorMessage(parseErrorMessage(err, 'Failed to load procurement request details.'));
     }
-  };
+  }, [requests]);
 
   useEffect(() => {
     if (selectedRequestId) {
-      loadRequestDetails(selectedRequestId);
+      const initialLoad = setTimeout(() => loadRequestDetails(selectedRequestId), 0);
+      return () => clearTimeout(initialLoad);
     }
-  }, [selectedRequestId]);
+  }, [selectedRequestId, loadRequestDetails]);
 
   // Handle Material Dropdown Selection
   const handleMaterialSelect = (e) => {
@@ -274,55 +246,27 @@ export default function ProcurementResearch() {
         rawMaterialId: formValues.rawMaterialId,
         materialName: formValues.materialName,
         requiredSpecification: formValues.specification,
-        productionRequirement: parseFloat(formValues.productionRequirement) || 2000,
-        safetyStock: parseFloat(formValues.safetyStock) || 500,
+        productionRequirement: Number(formValues.productionRequirement),
+        safetyStock: Number(formValues.safetyStock),
         currentStock: parseFloat(formValues.currentStock) || 0,
-        maximumBudget: parseFloat(formValues.maximumBudget) || 15000,
-        requiredByDate: new Date(formValues.requiredByDate).toISOString(),
+        maximumBudget: Number(formValues.maximumBudget),
+        requiredByDate: formValues.requiredByDate ? new Date(formValues.requiredByDate).toISOString() : null,
         qualityRequirement: formValues.qualityStandard,
         preferredRegion: formValues.preferredRegion
       };
 
-      let newRequest = null;
-      try {
-        newRequest = await procurementService.createRequest(createDto);
-      } catch (createErr) {
-        console.warn('Backend createRequest failed, falling back to local workflow', createErr);
-        const netDeficit = Math.max(
-          1000,
-          parseFloat(formValues.productionRequirement || 2000) +
-            parseFloat(formValues.safetyStock || 500) -
-            parseFloat(formValues.currentStock || 0)
-        );
-        newRequest = {
-          id: (Date.now() % 9000) + 100,
-          rawMaterialId: formValues.rawMaterialId,
-          rawMaterialName: formValues.materialName || 'Raw Material',
-          materialName: formValues.materialName || 'Raw Material',
-          requiredSpecification: formValues.specification,
-          productionRequirement: parseFloat(formValues.productionRequirement) || 2000,
-          safetyStock: parseFloat(formValues.safetyStock) || 500,
-          currentStock: parseFloat(formValues.currentStock) || 0,
-          calculatedNetQuantity: netDeficit,
-          maximumBudget: parseFloat(formValues.maximumBudget) || 15000,
-          requiredByDate: new Date(formValues.requiredByDate).toISOString(),
-          status: 'Requested',
-          workflowId: `WF-2026-${(Date.now() % 1000).toString().padStart(3, '0')}`,
-          candidates: []
-        };
+      if (!createDto.rawMaterialId || !(createDto.productionRequirement > 0) ||
+          !(createDto.maximumBudget > 0) || !formValues.requiredByDate) {
+        throw new Error('Material, positive production requirement, budget, and required date are required.');
       }
+      const newRequest = await procurementService.createRequest(createDto);
 
       setSelectedRequestId(newRequest.id);
       setSearchParams({ id: newRequest.id });
 
       // Step B: Multi-agent execution in LangGraph (via ASP.NET Core: POST /api/procurement-requests/{id}/analyze)
       setAgentStep('purchasing');
-      let completedRequest = null;
-      try {
-        completedRequest = await procurementService.analyzeRequest(newRequest.id);
-      } catch (analyzeErr) {
-        console.warn('Backend analyzeRequest failed, using fallback market analysis', analyzeErr);
-      }
+      const completedRequest = await procurementService.analyzeRequest(newRequest.id);
 
       setAgentStep('validation');
       // Fetch recommendation and updated tracking
@@ -332,21 +276,17 @@ export default function ProcurementResearch() {
       const refreshedList = await procurementService.getAllRequests().catch(() => []);
       if (refreshedList && refreshedList.length > 0) {
         setRequests(refreshedList);
-      } else {
-        setRequests((prev) => [newRequest, ...prev.filter((r) => r.id !== newRequest.id)]);
       }
 
       setAgentStep('done');
       setShowNewForm(false);
-      const count = completedRequest?.candidates?.length || 3;
+      const count = completedRequest?.candidates?.length || 0;
       setSuccessMessage(
         `AI Multi-Agent research completed successfully! Evaluated ${count} supplier candidates shown below.`
       );
     } catch (err) {
-      console.warn('Procurement research error handled:', err);
-      // Still show results so user is not stuck on an empty screen
-      setShowNewForm(false);
-      setAgentStep('done');
+      setErrorMessage(parseErrorMessage(err, 'Procurement research failed.'));
+      setAgentStep('failed');
     } finally {
       setIsResearching(false);
     }
@@ -361,24 +301,17 @@ export default function ProcurementResearch() {
     setAgentStep('purchasing');
 
     try {
-      let refreshed = null;
-      try {
-        refreshed = await procurementService.analyzeRequest(selectedRequestId);
-      } catch (err) {
-        console.warn('analyzeRequest fallback in re-run', err);
-      }
+      const refreshed = await procurementService.analyzeRequest(selectedRequestId);
       setAgentStep('validation');
       await loadRequestDetails(selectedRequestId);
       setAgentStep('done');
-      const count = refreshed?.candidates?.length || currentRequest?.candidates?.length || 3;
+      const count = refreshed?.candidates?.length || currentRequest?.candidates?.length || 0;
       setSuccessMessage(
         `Procurement research refreshed! Evaluated ${count} supplier candidates.`
       );
     } catch (err) {
-      console.warn('Re-run error handled:', err);
-      await loadRequestDetails(selectedRequestId);
-      setAgentStep('done');
-      setSuccessMessage('Procurement research refreshed with latest market data.');
+      setAgentStep('failed');
+      setErrorMessage(parseErrorMessage(err, 'Unable to refresh procurement research.'));
     } finally {
       setIsResearching(false);
     }
@@ -389,11 +322,11 @@ export default function ProcurementResearch() {
     setCandidateToVerify(candidate);
     setVerifyForm({
       supplierName: candidate.supplierName,
-      contactEmail: `${candidate.supplierName.toLowerCase().replace(/[^a-z0-9]/g, '')}@example.com`,
-      contactPhone: '+1 (555) 234-5678',
-      address: '100 Industrial Parkway, Supply Hub, NY 10001',
-      paymentTerms: 'Net 30',
-      leadTimeDays: candidate.leadTimeDays || 7
+      contactEmail: '',
+      contactPhone: '',
+      address: '',
+      paymentTerms: '',
+      leadTimeDays: candidate.leadTimeDays || ''
     });
     setVerifyModalOpen(true);
   };
@@ -466,15 +399,7 @@ export default function ProcurementResearch() {
       setSuccessMessage('Purchase Order approved! Stripe payment initiated and invoice PDF emailed via SendGrid.');
       await loadRequestDetails(currentRequest.id);
     } catch (err) {
-      console.warn('Backend approvePurchaseOrder failed, applying local fallback', err);
-      setApproveModalOpen(false);
-      setSuccessMessage('Purchase Order approved! Stripe payment initiated and invoice PDF emailed via SendGrid.');
-      setStatusTracking((prev) => ({
-        ...prev,
-        poStatus: 'Approved',
-        paymentStatus: 'Paid',
-        emailNotificationSent: true
-      }));
+      setErrorMessage(parseErrorMessage(err, 'Purchase order approval failed.'));
     } finally {
       setActionLoading(false);
     }
@@ -529,17 +454,18 @@ export default function ProcurementResearch() {
    const validationChecks = useMemo(() => {
     if (!activeCandidate || !currentRequest) return null;
 
-    const netQty = currentRequest.calculatedNetQuantity || currentRequest.netDeficit || currentRequest.productionRequirement || 2000;
+    const netQty = currentRequest.calculatedNetQuantity ?? currentRequest.netDeficit ?? currentRequest.productionRequirement ?? 0;
     const moq = activeCandidate.minimumOrderQuantity || 0;
     const packSize = activeCandidate.packSize || 1;
     const unitPrice = activeCandidate.unitPrice || 0;
-    const maxBudget = currentRequest.maximumBudget || 15000;
+    const maxBudget = currentRequest.maximumBudget || 0;
     const leadTime = activeCandidate.leadTimeDays || 0;
-    const requiredDate = new Date(currentRequest.requiredByDate || currentRequest.requiredDeliveryDate || Date.now() + 14 * 86400000);
-    const estimatedArrival = new Date(Date.now() + leadTime * 86400000);
+    const requiredDate = new Date(currentRequest.requiredByDate || currentRequest.requiredDeliveryDate || NaN);
+    const estimatedArrival = new Date(now + leadTime * 86400000);
 
     // 1. MOQ / Pack size check
-    const moqPass = (activeCandidate.recommendedOrderQuantity || netQty) >= moq;
+    const quantity = activeCandidate.recommendedOrderQuantity ?? netQty;
+    const moqPass = quantity > 0 && quantity >= moq && packSize > 0 && Math.abs(quantity / packSize - Math.round(quantity / packSize)) < 1e-8;
 
     // 2. Quality certification check
     const qualityEvidence = (activeCandidate.qualityEvidence || '').trim();
@@ -547,7 +473,7 @@ export default function ProcurementResearch() {
 
     // 3. Budget compliance check
     const totalCost = activeCandidate.totalCost || (activeCandidate.recommendedOrderQuantity || netQty) * unitPrice;
-    const budgetPass = totalCost <= maxBudget * 2; // allow 2x budget for AI-ranked suppliers
+    const budgetPass = totalCost > 0 && maxBudget > 0 && totalCost <= maxBudget;
 
     // 4. Delivery lead time check (informational only — does not block PO)
     const leadTimePass = estimatedArrival <= requiredDate;
@@ -558,9 +484,7 @@ export default function ProcurementResearch() {
     // 6. Supplier verification check — the only hard gate
     const verifiedPass = activeCandidate.supplierStatus === 'APPROVED';
 
-    // Only require MOQ + verified to enable PO generation
-    // leadTime and credibility are shown as warnings but don't block creation
-    const allPassed = moqPass && verifiedPass;
+    const allPassed = moqPass && verifiedPass && qualityPass && budgetPass;
 
     return {
       moqPass,
@@ -572,7 +496,7 @@ export default function ProcurementResearch() {
       allPassed,
       totalCost: totalCost || 0
     };
-  }, [activeCandidate, currentRequest]);
+  }, [activeCandidate, currentRequest, now]);
 
 
   return (
@@ -603,7 +527,8 @@ export default function ProcurementResearch() {
                 if (!selectedRequestId && requests.length > 0) {
                   setSelectedRequestId(requests[0].id);
                 } else if (!selectedRequestId) {
-                  setSelectedRequestId(1);
+                  setErrorMessage('No procurement request is available to evaluate.');
+                  return;
                 }
                 setShowNewForm(false);
               }}
@@ -616,6 +541,7 @@ export default function ProcurementResearch() {
       }
     >
       {/* Notifications */}
+      {loadingInitial && <div className="mb-4 text-sm text-slate-400">Loading procurement data…</div>}
       {errorMessage && (
         <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3 animate-fade-in">
           <div className="flex items-center gap-2.5">

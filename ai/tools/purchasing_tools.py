@@ -200,8 +200,6 @@ Return ONLY a valid JSON array of up to 5 supplier candidate objects with the fo
 """
     import ssl as _ssl
     _ctx = _ssl.create_default_context()
-    _ctx.check_hostname = False
-    _ctx.verify_mode = _ssl.CERT_NONE
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
@@ -226,7 +224,8 @@ def search_external_supplier_market(
     quality_requirement: str = "",
     maximum_budget: float = 10000.0,
     preferred_region: Optional[str] = None,
-    required_by_date: Optional[str] = None
+    required_by_date: Optional[str] = None,
+    revision_notes: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieves supplier candidates from Gemini search grounding or resilient market pool.
@@ -234,6 +233,10 @@ def search_external_supplier_market(
     """
     material_clean = sanitize_untrusted_web_content(material_name)
     spec_clean = sanitize_untrusted_web_content(specification)
+    if revision_notes:
+        spec_clean += "\nRequested revision: " + sanitize_untrusted_web_content(revision_notes)
+    if required_by_date:
+        spec_clean += "\nRequired by: " + str(required_by_date)
     region_clean = sanitize_untrusted_web_content(preferred_region or "Global")
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -460,8 +463,13 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
     """
     Queries PostgreSQL Suppliers table for internal approved suppliers.
     """
-    if not settings.demo_mode:
-        return _live_material_quotes(material_name)
+    try:
+        live_quotes = _live_material_quotes(material_name)
+        if live_quotes:
+            return live_quotes
+    except Exception:
+        if not settings.demo_mode:
+            raise
     conn = get_db_connection()
     suppliers = []
 
@@ -541,6 +549,10 @@ def validate_supplier_candidate(
     Performs mandatory multi-point evaluation of a supplier candidate.
     """
     reasons = []
+    if not candidate.get("supplierId") or not candidate.get("supplierName"):
+        reasons.append("Supplier identity is missing from the approved registry.")
+    if candidate.get("verificationStatus") not in ("VERIFIED", "APPROVED"):
+        reasons.append("Supplier is not verified for operational purchasing.")
     unit_price = float(candidate.get("unitPrice", 0))
     if unit_price <= 0:
         reasons.append("Unit price must be strictly positive.")
@@ -797,8 +809,14 @@ def query_supplier_rates(
         )
     )
 
-    if not settings.demo_mode and not is_specific_supplier:
-        return _live_material_quotes(material_id_or_supplier)
+    if not is_specific_supplier:
+        try:
+            live_quotes = _live_material_quotes(material_id_or_supplier)
+            if live_quotes:
+                return live_quotes
+        except Exception:
+            if not settings.demo_mode:
+                raise
 
     # Query list of suppliers (for general material catalog queries)
     if not is_specific_supplier:

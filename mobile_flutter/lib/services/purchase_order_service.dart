@@ -137,8 +137,12 @@ class PurchaseOrderService {
       }
       return [];
     } catch (_) {
-      return [];
+      rethrow;
     }
+  }
+
+  Future<void> retryWorkflow(String workflowId) async {
+    await _api.post('/workflows/${Uri.encodeComponent(workflowId)}/retry');
   }
 
   /// GET /api/suppliers — list suppliers

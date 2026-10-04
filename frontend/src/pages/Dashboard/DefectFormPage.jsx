@@ -87,7 +87,7 @@ export default function DefectFormPage() {
         ]);
         setInventoryItems(items || []);
         setRawMaterials(materials || []);
-        setInventoryRolls(Array.from(new Map((rolls || []).map((roll) => [roll.id, roll])).values()));
+        setInventoryRolls(Array.from(new Map((rolls || []).map((roll) => [roll.rollIdentifier, { ...roll, id: roll.rollIdentifier }])).values()));
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load FloorWorker inventory.'));
       } finally {
@@ -125,6 +125,9 @@ export default function DefectFormPage() {
   }, [id, isEdit, inventoryRolls, inventoryItems, rawMaterials]);
 
   const createdMaterials = getCreatedMaterials(inventoryItems, rawMaterials);
+  const inspectableMaterials = createdMaterials.filter((material) =>
+    inventoryRolls.some((roll) => roll.rawMaterialId === material.id)
+  );
   const selectedMaterial = createdMaterials.find(
     (item) => item.skuCode.toLowerCase() === form.skuCode.toLowerCase()
   );
@@ -181,6 +184,9 @@ export default function DefectFormPage() {
   const activateAgent = async () => {
     const message = validate(false);
     if (message) return setAiError(message);
+    if (skuRolls.length === 0) {
+      return setAiError('This SKU has no registered physical inventory rolls. Receive or register a roll before activating the QA agent.');
+    }
     setAiLoading(true);
     setAiError('');
     setAiStepIndex(0);
@@ -249,12 +255,15 @@ export default function DefectFormPage() {
               className="mt-2 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 transition-colors"
             >
               <option value="">Select Inventory Roll</option>
-              {createdMaterials.map((item) => (
+              {inspectableMaterials.map((item) => (
                 <option key={item.skuCode} value={item.skuCode}>
                   {item.skuCode} ({item.name})
                 </option>
               ))}
             </select>
+            <span className="mt-2 block text-[11px] normal-case tracking-normal text-slate-500">
+              Only SKUs with registered physical rolls are available for AI inspection.
+            </span>
           </label>
 
           <label className="block text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -349,7 +358,7 @@ export default function DefectFormPage() {
                         {roll.rollIdentifier || roll.id}
                       </span>
                       <span className="block text-xs text-slate-400 mt-0.5">
-                        Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units — {roll.status}
+                        Batch: {roll.batchId || 'Unassigned'} · Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units — {roll.status}
                       </span>
                     </span>
                   </label>

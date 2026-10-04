@@ -73,6 +73,8 @@ namespace ManufacturingCoordinator.Data
             });
             modelBuilder.Entity<InventoryItem>().HasIndex(i => i.Sku).IsUnique();
             modelBuilder.Entity<GoodsReceipt>().HasIndex(r => r.ReceiptKey).IsUnique();
+            modelBuilder.Entity<PurchaseOrder>().HasIndex(p => p.ProcurementRequestId).IsUnique()
+                .HasFilter("\"ProcurementRequestId\" IS NOT NULL").HasDatabaseName("UX_PurchaseOrders_ProcurementRequestId");
             modelBuilder.Entity<AgentWorkflow>().Property(w => w.PurchaseOrderId).IsConcurrencyToken();
             modelBuilder.Entity<PurchaseOrder>().Property(p => p.Status).IsConcurrencyToken();
 

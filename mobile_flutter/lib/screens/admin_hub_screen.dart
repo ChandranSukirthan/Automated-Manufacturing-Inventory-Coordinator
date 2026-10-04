@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/admin_service.dart';
-import '../widgets/app_widgets.dart';
 
 class AdminHubScreen extends StatefulWidget {
   const AdminHubScreen({required this.adminService, super.key});
@@ -20,7 +19,7 @@ class _AdminHubScreenState extends State<AdminHubScreen>
   List<dynamic> _roles = [];
   List<dynamic> _auditLogs = [];
   Map<String, dynamic>? _health;
-  List<dynamic> _workflows = [];
+  String? _error;
 
   @override
   void initState() {
@@ -36,13 +35,12 @@ class _AdminHubScreenState extends State<AdminHubScreen>
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    setState(() { _loading = true; _error = null; });
     try {
       final users = await widget.adminService.getUsers();
       final roles = await widget.adminService.getRoles();
       final logs = await widget.adminService.getAuditLogs();
       final health = await widget.adminService.getSystemHealth();
-      final workflows = await widget.adminService.getAgentWorkflows();
 
       if (mounted) {
         setState(() {
@@ -50,12 +48,11 @@ class _AdminHubScreenState extends State<AdminHubScreen>
           _roles = roles;
           _auditLogs = logs;
           _health = health;
-          _workflows = workflows;
           _loading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (error) {
+      if (mounted) setState(() { _loading = false; _error = error.toString(); });
     }
   }
 
@@ -81,7 +78,9 @@ class _AdminHubScreenState extends State<AdminHubScreen>
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
+          : _error != null
+            ? Center(child: Text('Unable to load administration data: $_error'))
+            : TabBarView(
               controller: _tabController,
               children: [
                 _buildUsersTab(cardBg),
@@ -114,7 +113,7 @@ class _AdminHubScreenState extends State<AdminHubScreen>
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: isActive ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+              backgroundColor: isActive ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
               child: Icon(
                 isActive ? Icons.person : Icons.person_off,
                 color: isActive ? Colors.green : Colors.redAccent,
@@ -125,7 +124,7 @@ class _AdminHubScreenState extends State<AdminHubScreen>
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: isActive ? Colors.green.withOpacity(0.15) : Colors.red.withOpacity(0.15),
+                color: isActive ? Colors.green.withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -202,8 +201,6 @@ class _AdminHubScreenState extends State<AdminHubScreen>
   }
 
   Widget _buildHealthTab(Color cardBg) {
-    final isDbHealthy = _health?['database'] == 'Healthy' || _health?['db'] == true || true;
-    final isAiHealthy = _health?['aiService'] == 'Healthy' || true;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -215,21 +212,21 @@ class _AdminHubScreenState extends State<AdminHubScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.check_circle_outline, color: Colors.green, size: 28),
-                    SizedBox(width: 12),
+                    const Icon(Icons.monitor_heart_outlined, color: Colors.cyan, size: 28),
+                    const SizedBox(width: 12),
                     Text(
-                      'System Status: Operational',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      'System Status: ${_health?["overallStatus"] ?? "Unknown"}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
                 const Divider(height: 24, color: Colors.white24),
-                _healthRow('ASP.NET Core API', 'Running (Port 5070)', Colors.green),
-                _healthRow('FastAPI AI Service', 'Running (Port 8000)', Colors.green),
-                _healthRow('PostgreSQL Database', 'Connected & Active', Colors.green),
-                _healthRow('Google Sign-In OAuth', 'Enabled & Configured', Colors.green),
+                for (final service in (_health?['services'] as List? ?? []))
+                  _healthRow(service['name']?.toString() ?? 'Service',
+                    service['status']?.toString() ?? 'Unknown',
+                    service['status'] == 'ONLINE' ? Colors.green : Colors.orange),
               ],
             ),
           ),
@@ -248,7 +245,7 @@ class _AdminHubScreenState extends State<AdminHubScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),

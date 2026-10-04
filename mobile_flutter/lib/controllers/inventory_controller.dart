@@ -7,9 +7,8 @@ class InventoryController extends ChangeNotifier {
   final ApiService _apiService;
   final PurchaseOrderService? _poService;
 
-  InventoryController({ApiService? apiService, PurchaseOrderService? poService})
-      : _apiService = apiService ?? ApiService(),
-        _poService = poService;
+  InventoryController({ApiService? apiService, this._poService})
+      : _apiService = apiService ?? ApiService();
 
 String _materialName = 'Food Grade BOPP Film';
   String? _packagingType = 'Box Pouch';

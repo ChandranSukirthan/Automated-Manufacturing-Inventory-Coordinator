@@ -6,7 +6,6 @@ import 'po_details_screen.dart';
 import 'po_list_screen.dart';
 import 'procurement_details_screen.dart';
 import 'supplier_status_screen.dart';
-import 'notification_status_screen.dart';
 
 class POStatusDashboardScreen extends StatefulWidget {
   const POStatusDashboardScreen({
@@ -26,7 +25,6 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
   List<PurchaseOrderSummary> _orders = [];
   List<SupplierSummary> _suppliers = [];
   List<StockAlertItem> _stockAlerts = [];
-  SupplierAnalytics? _supplierAnalytics;
 
   @override
   void initState() {
@@ -43,14 +41,12 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
     try {
       final orders = await widget.service.getPurchaseOrders();
       final suppliers = await widget.service.getSuppliers();
-      final analytics = await widget.service.getSupplierAnalytics();
       final alerts = await widget.service.getStockAlerts();
 
       if (mounted) {
         setState(() {
           _orders = orders;
           _suppliers = suppliers;
-          _supplierAnalytics = analytics;
           _stockAlerts = alerts;
           _loading = false;
         });
@@ -187,7 +183,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cyanAccent.withOpacity(0.2)),
+        border: Border.all(color: cyanAccent.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,9 +194,9 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: cyanAccent.withOpacity(0.15),
+                  color: cyanAccent.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
-                  border: Border.all(color: cyanAccent.withOpacity(0.3)),
+                  border: Border.all(color: cyanAccent.withValues(alpha: 0.3)),
                 ),
                 child: const Icon(Icons.shield_outlined, color: Color(0xFF5CC8F8), size: 20),
               ),
@@ -219,7 +215,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: cyanAccent.withOpacity(0.15),
+                            color: cyanAccent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -265,7 +261,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.black38,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -358,7 +354,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +405,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -499,15 +495,15 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.3),
+          color: Colors.black.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: color.withOpacity(0.15), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 16),
             ),
             const SizedBox(width: 8),
@@ -553,7 +549,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,9 +592,9 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -617,7 +613,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: amberAccent.withOpacity(0.3)),
+        border: Border.all(color: amberAccent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,7 +706,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: roseAccent.withOpacity(0.3)),
+        border: Border.all(color: roseAccent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -783,7 +779,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -834,9 +830,9 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: po.statusColor.withOpacity(0.15),
+                            color: po.statusColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: po.statusColor.withOpacity(0.4)),
+                            border: Border.all(color: po.statusColor.withValues(alpha: 0.4)),
                           ),
                           child: Text(po.status, style: TextStyle(color: po.statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),

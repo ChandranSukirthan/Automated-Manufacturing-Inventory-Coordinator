@@ -138,7 +138,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     final defect = widget.defect;
     if (defect == null) return;
     final affected = defect.affectedInventory.toSet();
-    final roll = _rolls.where((item) => affected.contains(item.id)).firstOrNull;
+    final roll = _rolls.where((item) => affected.contains(item.rollIdentifier)).firstOrNull;
     final material = _materials
         .where((item) => item.id == roll?.rawMaterialId)
         .firstOrNull;
@@ -432,7 +432,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                             )
                           else
                             ...rolls.map((roll) {
-                              final selected = _selectedRolls.contains(roll.id);
+                              final selected = _selectedRolls.contains(roll.rollIdentifier);
                               return Material(
                                 color: Colors.transparent,
                                 child: CheckboxListTile(
@@ -440,9 +440,9 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                                   activeColor: AppColors.primary,
                                   onChanged: (val) => setState(() {
                                     if (val == true) {
-                                      _selectedRolls.add(roll.id);
+                                      _selectedRolls.add(roll.rollIdentifier);
                                     } else {
-                                      _selectedRolls.remove(roll.id);
+                                      _selectedRolls.remove(roll.rollIdentifier);
                                     }
                                   }),
                                   contentPadding: EdgeInsets.zero,
@@ -875,7 +875,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                 else
                   ...rec.affectedInventory.map((rollId) {
                     final roll = _rolls
-                        .where((r) => r.id == rollId)
+                        .where((r) => r.rollIdentifier == rollId)
                         .firstOrNull;
                     return Container(
                       margin: const EdgeInsets.only(bottom: 6),

@@ -227,10 +227,15 @@ async def lifespan(app: FastAPI):
     for workflow_id in list(WORKFLOW_SESSIONS):
         state = WORKFLOW_SESSIONS[workflow_id]
         if state.get("status") == "Running":
-            state.update(status="Failed", current_agent="Interrupted",
-                         errors=["Service restarted during execution. Retry to resume with fresh authorization."])
-            WORKFLOW_SESSIONS[workflow_id] = state
-            sync_to_database(state)
+            from ai.graph.workflow import _workflow_lock
+            try:
+                with _workflow_lock(workflow_id, blocking=False):
+                    state.update(status="Failed", current_agent="Interrupted",
+                                 errors=["Service restarted during execution. Retry to resume with fresh authorization."])
+                    WORKFLOW_SESSIONS[workflow_id] = state
+                    sync_to_database(state)
+            except BlockingIOError:
+                logger.info("Workflow %s is active in another AI worker; leaving it running", workflow_id)
     scanner = asyncio.create_task(autonomous_equipment_telemetry_scanner())
     monitor = asyncio.create_task(inventory_monitor_task())
     yield

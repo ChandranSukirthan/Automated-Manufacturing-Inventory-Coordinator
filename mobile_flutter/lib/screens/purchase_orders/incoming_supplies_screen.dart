@@ -176,7 +176,7 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,9 +195,9 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: status.color.withOpacity(0.15),
+                  color: status.color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: status.color.withOpacity(0.4)),
+                  border: Border.all(color: status.color.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   status.label,

@@ -1600,7 +1600,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _AttentionItem(
           type: 'DEFECT ALERT',
           title: 'Defect #${d.id.substring(0, 6)} (${d.severity})',
-          subtitle: 'SKU: ${d.skuCode ?? 'N/A'} • ${d.description}',
+          subtitle: 'SKU: ${d.skuCode} • ${d.description}',
           onInspect: () => Navigator.push<void>(
             context,
             MaterialPageRoute(

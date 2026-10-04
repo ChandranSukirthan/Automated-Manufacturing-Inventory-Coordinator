@@ -10,6 +10,7 @@ import re
 import psycopg
 from ai.core.config import settings
 from ai.core.state import AgentState, WorkflowStatus
+from ai.core.contracts import first_present
 from ai.data_extraction_agent import run_data_extraction_agent
 from ai.tools.inventory_tools import (
     get_inventory_levels,
@@ -94,12 +95,11 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
         })
 
         # Tool 4: detect_low_stock()
-        current_stock = state.get("current_stock")
         low_stock_analysis = detect_low_stock.invoke({
             "currentStock": levels["currentStock"],
             "minimumStock": levels["minimumStock"],
             "burnRate": burn.get("burnRate", 0),
-            "supplierLeadTime": 7.0,
+            "supplierLeadTime": 0.0,  # No supplier has been selected at this stage.
             "materialId": material_id
         })
 
@@ -108,8 +108,8 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
 
         curr_stock = levels["currentStock"]
         min_stock = state.get("safety_stock") if state.get("safety_stock") is not None else levels["minimumStock"]
-        max_stock = levels.get("maximumStock", 1000.0)
-        req_qty = state.get("required_quantity") or inv_input.get("requiredQuantity") or max(0.0, float(max_stock - curr_stock))
+        max_stock = levels.get("maximumStock")
+        req_qty = first_present(state.get("required_quantity"), inv_input.get("requiredQuantity"), state.get("net_deficit"))
 
         # Query real material name from PostgreSQL RawMaterials table
         item_name = levels.get("itemName") or "Industrial Raw Material"
@@ -159,6 +159,7 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
 
         return {
             "current_agent": "Data Extraction",
+            "material_name": item_name,
             "inventory_data": inventory_data,
             "tool_results": tool_results,
             "completed_steps": completed,

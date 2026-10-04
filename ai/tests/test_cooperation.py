@@ -48,8 +48,10 @@ def test_agent_cooperation_and_data_passing():
     supplier = purchasing_data.get("supplier", {})
     draft_po = purchasing_data.get("draft_po", {})
     assert draft_po.get("materialId") == "RM-ALUM-002"
-    # Drafted quantity should cover the requested 1500.0 or production shortfall
-    assert draft_po.get("quantity") >= 1500.0
+    # Material demand is 1500 and observed available stock is 350. Finished-product
+    # throughput is a different unit and must not overwrite the 1150 material deficit.
+    assert draft_po.get("quantity") >= 1150.0
+    assert result["required_quantity"] == 1500.0
     assert draft_po.get("totalAmount") > 0
     # Supplier must be one of the real active suppliers
     assert supplier.get("supplierId") in ["SUP-001", "SUP-002", "SUP-003"]

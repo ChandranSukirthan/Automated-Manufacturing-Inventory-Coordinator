@@ -247,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text('Please select your role to complete Google Sign-In.', style: TextStyle(color: Color(0xFF9BAABC))),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
-                value: selectedRole,
+                initialValue: selectedRole,
                 dropdownColor: const Color(0xFF111D2D),
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(

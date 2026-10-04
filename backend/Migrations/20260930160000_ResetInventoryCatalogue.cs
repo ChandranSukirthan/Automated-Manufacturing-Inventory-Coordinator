@@ -8,9 +8,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 namespace ManufacturingCoordinator.Api.Migrations
 {
     /// <summary>
-    /// Replaces the old free-text inventory catalogue with a packaging type /
-    /// raw material / sequential SKU catalogue. This is deliberately a
-    /// one-time data reset requested for the development database.
+    /// Adds the catalogue hierarchy while retaining historical inventory and orders.
+    /// Unmapped materials remain explicitly unassigned for manual reconciliation.
     /// </summary>
     [Migration("20260930160000_ResetInventoryCatalogue")]
     [DbContext(typeof(ApplicationDbContext))]
@@ -80,20 +79,12 @@ namespace ManufacturingCoordinator.Api.Migrations
                 ALTER TABLE "RawMaterials" ADD COLUMN IF NOT EXISTS "PackagingTypeId" integer NULL;
                 """);
 
-            // Existing rows use arbitrary user-entered category/SKU text. They
-            // cannot be reliably mapped to the new hierarchy, so clear the old
-            // development catalogue and its dependent order/stock records.
+            // An inactive unassigned category is a reconciliation marker, not
+            // an inferred packaging identity. Never delete historical records.
             migrationBuilder.Sql("""
-                DO $$
-                BEGIN
-                    IF to_regclass('public."InventoryRolls"') IS NOT NULL THEN DELETE FROM "InventoryRolls"; END IF;
-                    IF to_regclass('public."StockLevels"') IS NOT NULL THEN DELETE FROM "StockLevels"; END IF;
-                    IF to_regclass('public."StockAlerts"') IS NOT NULL THEN DELETE FROM "StockAlerts"; END IF;
-                    IF to_regclass('public."OrderLines"') IS NOT NULL THEN DELETE FROM "OrderLines"; END IF;
-                    IF to_regclass('public."PurchaseOrders"') IS NOT NULL THEN DELETE FROM "PurchaseOrders"; END IF;
-                    IF to_regclass('public."InventoryItems"') IS NOT NULL THEN DELETE FROM "InventoryItems"; END IF;
-                    IF to_regclass('public."RawMaterials"') IS NOT NULL THEN DELETE FROM "RawMaterials"; END IF;
-                END $$;
+                INSERT INTO "PackagingTypes" ("Id", "Name", "ShortCode", "IsActive")
+                VALUES (-1, 'Unassigned historical catalogue', 'UNASSIGNED', false);
+                UPDATE "RawMaterials" SET "PackagingTypeId" = -1 WHERE "PackagingTypeId" IS NULL;
                 """);
 
             migrationBuilder.Sql("""

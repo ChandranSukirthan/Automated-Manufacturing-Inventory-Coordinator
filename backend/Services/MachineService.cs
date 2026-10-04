@@ -80,6 +80,9 @@ namespace ManufacturingCoordinator.Api.Services
             if (machine == null)
                 throw new AuthException("Machine not found.", HttpStatusCode.NotFound);
 
+            if (await _db.MaintenanceLogs.AnyAsync(log => log.MachineId == id))
+                throw new AuthException("Machines with maintenance history cannot be deleted.", HttpStatusCode.Conflict);
+
             _db.Machines.Remove(machine);
             await _db.SaveChangesAsync();
         }

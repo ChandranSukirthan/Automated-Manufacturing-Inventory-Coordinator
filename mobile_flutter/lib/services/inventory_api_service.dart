@@ -237,9 +237,9 @@ class InventoryApiService {
       if (sku != null && sku.trim().isNotEmpty) 'sku': sku,
       if (packagingType != null && packagingType.trim().isNotEmpty)
         'packagingType': packagingType,
-      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
-      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
-      if (skuNumber != null) 'skuNumber': skuNumber,
+      'packagingTypeId': ?packagingTypeId,
+      'rawMaterialId': ?rawMaterialId,
+      'skuNumber': ?skuNumber,
     });
   }
 
@@ -275,9 +275,9 @@ class InventoryApiService {
     required int reorderThreshold,
   }) async {
     await _api.post('/inventory', {
-      if (packagingTypeId != null) 'packagingTypeId': packagingTypeId,
-      if (rawMaterialId != null) 'rawMaterialId': rawMaterialId,
-      if (skuNumber != null) 'skuNumber': skuNumber,
+      'packagingTypeId': ?packagingTypeId,
+      'rawMaterialId': ?rawMaterialId,
+      'skuNumber': ?skuNumber,
       if (sku != null && sku.isNotEmpty) 'sku': sku,
       if (name != null && name.isNotEmpty) 'name': name,
       if (category != null && category.isNotEmpty) 'category': category,
@@ -304,11 +304,13 @@ class InventoryApiService {
 
   Future<InventoryRollModel> createRoll({
     required String rollIdentifier,
+    required String batchId,
     required double quantity,
     required int rawMaterialId,
   }) async {
     final created = await _api.post('/inventory/rolls', {
       'rollIdentifier': rollIdentifier,
+      'batchId': batchId,
       'initialQuantity': quantity,
       'rawMaterialId': rawMaterialId,
     }) as Map<String, dynamic>;

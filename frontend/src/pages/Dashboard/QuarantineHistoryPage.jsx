@@ -19,7 +19,6 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import quarantineService from '../../services/quarantineService';
-import defectService from '../../services/defectService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import PageHeader from '../../components/QA/PageHeader';
 import StatusBadge from '../../components/QA/StatusBadge';
@@ -37,7 +36,6 @@ const isRecordReleased = (r) => {
 export default function QuarantineHistoryPage() {
   const navigate = useNavigate();
   const [allRecords, setAllRecords] = useState([]);
-  const [defects, setDefects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -49,12 +47,8 @@ export default function QuarantineHistoryPage() {
     setLoading(true);
     setError('');
     try {
-      const [quarantineData, defectData] = await Promise.all([
-        quarantineService.getAll().catch(() => []),
-        defectService.getAll().catch(() => [])
-      ]);
+      const quarantineData = await quarantineService.getAll();
       setAllRecords(Array.isArray(quarantineData) ? quarantineData : []);
-      setDefects(Array.isArray(defectData) ? defectData : []);
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to load quarantine history.'));
     } finally {
@@ -63,7 +57,8 @@ export default function QuarantineHistoryPage() {
   };
 
   useEffect(() => {
-    loadHistory();
+    const initialLoad = setTimeout(loadHistory, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const toggleRow = (id) => {

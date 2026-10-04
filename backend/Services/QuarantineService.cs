@@ -56,21 +56,28 @@ namespace ManufacturingCoordinator.Api.Services
             }
 
             var affectedInventory = DeserializeInventory(defect.AffectedInventoryJson)
-                .Select(id => id.Trim())
+                .Select(id => id.Trim().ToUpperInvariant())
                 .Where(id => id.Length > 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var physical = await _db.StockRolls.Include(r => r.RawMaterial)
-                .Where(r => affectedInventory.Count > 0 ? affectedInventory.Contains(r.RollIdentifier) :
-                    (!string.IsNullOrEmpty(defect.SkuCode) ? r.RawMaterial!.SkuCode == defect.SkuCode : r.BatchId == defect.BatchId))
+                .Where(r => affectedInventory.Count > 0 ? affectedInventory.Contains(r.RollIdentifier.ToUpper()) :
+                    (r.BatchId == defect.BatchId && (string.IsNullOrEmpty(defect.SkuCode) || r.RawMaterial!.SkuCode == defect.SkuCode)))
                 .ToListAsync();
             var legacy = await _db.InventoryRolls.Where(r => affectedInventory.Count > 0
-                ? affectedInventory.Contains(r.Id) : r.BatchId == defect.BatchId).ToListAsync();
+                ? affectedInventory.Contains(r.Id.ToUpper()) : r.BatchId == defect.BatchId).ToListAsync();
+            // Legacy rolls do not carry a SKU. Never infer their material from a shared batch.
+            if (!string.IsNullOrEmpty(defect.SkuCode))
+            {
+                var mappedIds = physical.Select(r => r.RollIdentifier).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (affectedInventory.Count > 0 && legacy.Any(r => !mappedIds.Contains(r.Id)))
+                    throw new AuthException("Reconcile the selected historical roll with its physical SKU before quarantine.", HttpStatusCode.Conflict);
+                legacy = legacy.Where(r => mappedIds.Contains(r.Id)).ToList();
+            }
             var targetRollIds = physical.Select(r => r.RollIdentifier).Concat(legacy.Select(r => r.Id)).Distinct().ToList();
-            if (targetRollIds.Count == 0 || (affectedInventory.Count > 0 && affectedInventory.Any(id => !targetRollIds.Contains(id))))
+            if (targetRollIds.Count == 0 || (affectedInventory.Count > 0 && affectedInventory.Any(id => !targetRollIds.Contains(id, StringComparer.OrdinalIgnoreCase))))
                 throw new AuthException("The selected physical inventory was not found.", HttpStatusCode.NotFound);
-            if (physical.Any(r => !string.IsNullOrEmpty(defect.SkuCode)
-                ? r.RawMaterial!.SkuCode != defect.SkuCode : r.BatchId != defect.BatchId) ||
+            if (physical.Any(r => r.BatchId != defect.BatchId || (!string.IsNullOrEmpty(defect.SkuCode) && r.RawMaterial!.SkuCode != defect.SkuCode)) ||
                 legacy.Any(r => r.BatchId != defect.BatchId))
                 throw new AuthException("Inventory roll does not belong to the defect material or batch.");
             if (physical.Any(r => r.Status != "In Stock" && r.Status != "In Production") ||
@@ -146,6 +153,8 @@ namespace ManufacturingCoordinator.Api.Services
                 var defectIdStr = quarantine.DefectReportId.ToString();
                 var quarantineIdStr = quarantine.Id.ToString();
                 var batchId = quarantine.DefectReport?.BatchId?.Trim();
+                var remainingHolds = await _db.Quarantines.Include(q => q.DefectReport)
+                    .Where(q => q.Id != id && q.Status == QuarantineStatus.Active).ToListAsync();
 
                 var allWorkflows = await _db.AgentWorkflows.ToListAsync();
                 var matchingWorkflows = allWorkflows.Where(wf =>
@@ -180,7 +189,10 @@ namespace ManufacturingCoordinator.Api.Services
                         ))
                     );
 
-                    return matchRoll || matchDefect || matchQuarantine || matchBatch;
+                    return matchQuarantine ||
+                        (matchRoll && !remainingHolds.Any(q => q.InventoryRollId == rollId)) ||
+                        (matchDefect && !remainingHolds.Any(q => q.DefectReportId == quarantine.DefectReportId)) ||
+                        (matchBatch && !remainingHolds.Any(q => q.DefectReport.BatchId == batchId));
                 }).ToList();
 
                 foreach (var wf in matchingWorkflows)

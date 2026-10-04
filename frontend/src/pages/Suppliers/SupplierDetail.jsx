@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -43,7 +43,7 @@ export default function SupplierDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const loadSupplierData = async () => {
+  const loadSupplierData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -70,11 +70,12 @@ export default function SupplierDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    loadSupplierData();
-  }, [id]);
+    const initialLoad = setTimeout(loadSupplierData, 0);
+    return () => clearTimeout(initialLoad);
+  }, [loadSupplierData]);
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -189,7 +190,7 @@ export default function SupplierDetail() {
               </div>
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Partner Since {new Date(supplier.createdAt || Date.now()).toLocaleDateString()}</span>
+                <span>Partner Since {supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : 'Not recorded'}</span>
               </p>
             </div>
           </div>

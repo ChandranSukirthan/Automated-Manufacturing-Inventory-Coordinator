@@ -28,7 +28,7 @@ import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
 import ConfirmModal from '../../components/Common/ConfirmModal';
 import purchaseOrderService from '../../services/purchaseOrderService';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function AiApprovals() {
@@ -37,7 +37,7 @@ export default function AiApprovals() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
-  const [actionProgressText, setActionProgressText] = useState('');
+  const [actionProgressText] = useState('');
 
   // Selected order for detailed modal approval action
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -45,8 +45,10 @@ export default function AiApprovals() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [reviseModalOpen, setReviseModalOpen] = useState(false);
 
-  // Check if current user is Supply Chain Manager
-  const isManager = user && (user.role === 1 || user.role === 'SupplyChainManager' || user.role === '1');
+  const isApprover = user && (
+    user.role === 1 || user.role === '1' || user.role === 'SupplyChainManager'
+    || user.role === 3 || user.role === '3' || user.role === 'ITAdmin'
+  );
 
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'awaiting_payment'
   const [approvedOrders, setApprovedOrders] = useState([]);
@@ -90,7 +92,8 @@ export default function AiApprovals() {
   };
 
   useEffect(() => {
-    fetchPendingOrders();
+    const initialLoad = setTimeout(fetchPendingOrders, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   // Approval animation steps & QA failure state
@@ -172,33 +175,24 @@ export default function AiApprovals() {
 
       // Determine the checks status and diagnostic breakdown
       let checks = {
-        supplier: 'PASSED',
-        budget: 'PASSED',
-        poMath: 'PASSED',
-        material: 'PASSED'
+        supplier: selectedOrder.supplierValidation || 'UNKNOWN',
+        budget: selectedOrder.budgetCheck || 'UNKNOWN',
+        poMath: selectedOrder.poMathematicalCheck || 'UNKNOWN',
+        material: selectedOrder.materialValidation || 'UNKNOWN'
       };
 
-      let diagnostic = null;
+      let diagnostic;
       const lowerErr = errMsg.toLowerCase();
 
       const firstLine = selectedOrder.orderLines?.[0] || selectedOrder.items?.[0];
-      const matName = firstLine?.rawMaterial?.name || firstLine?.materialName || selectedOrder.materialName || 'Iron';
-      const isIron = matName.toLowerCase().includes('iron');
+      const matName = firstLine?.rawMaterial?.name || firstLine?.materialName || selectedOrder.materialName || 'Unspecified material';
 
       const histRisk = selectedOrder.historicalRisk;
-      const relatedRoll = histRisk?.relatedRoll || (isIron ? 'IRON-ROLL-001' : 'HISTORICAL-ROLL-001');
+      const relatedRoll = histRisk?.relatedRoll || 'No physical roll linked';
       const histMat = histRisk?.material || matName;
       const inspectorNote = selectedOrder.manualResolutionNote || selectedOrder.rejectionReason;
 
       if (lowerErr.includes('manual review') || lowerErr.includes('historical') || lowerErr.includes('quarantine') || lowerErr.includes('hold') || lowerErr.includes('rejected') || lowerErr.includes('quality inspector')) {
-        // All 4 automated checks PASSED, but historical quality risk requires manual review
-        checks = {
-          supplier: 'PASSED',
-          budget: 'PASSED',
-          poMath: 'PASSED',
-          material: 'PASSED'
-        };
-
         const isRejected = lowerErr.includes('rejected') || selectedOrder.manualResolutionStatus === 'REJECTED';
         const isOnHold = lowerErr.includes('hold') || selectedOrder.manualResolutionStatus === 'ON_HOLD';
 
@@ -208,10 +202,10 @@ export default function AiApprovals() {
             ? (selectedOrder.rejectionReason || 'QA validation was rejected by Quality Inspector.') 
             : isOnHold 
             ? (selectedOrder.rejectionReason || 'QA validation is on hold pending physical inspection.') 
-            : (histRisk?.issue || 'Previous quality defect detected on historical inventory roll.'),
+            : (histRisk?.issue || errMsg),
           material: histMat,
           relatedRoll: relatedRoll,
-          severity: histRisk?.severity || 'Medium',
+          severity: histRisk?.severity || 'Unspecified',
           inspectorNote: inspectorNote,
           qaStatus: isRejected 
             ? `Rejected by ${selectedOrder.resolvedBy || 'QA Inspector'}` 
@@ -230,8 +224,8 @@ export default function AiApprovals() {
         diagnostic = {
           issue: 'Budget exceeded.',
           poTotal,
-          budgetLimit: budgetLimit > 0 ? budgetLimit : (selectedOrder.approvalThreshold || 15000),
-          exceededBy: exceededBy > 0 ? exceededBy : (poTotal - (selectedOrder.approvalThreshold || 15000)),
+          budgetLimit,
+          exceededBy,
           action: 'Please correct the PO or authorized budget and submit for approval again.'
         };
       } else if (lowerErr.includes('supplier') || lowerErr.includes('inactive')) {
@@ -353,11 +347,11 @@ export default function AiApprovals() {
           </div>
         </div>
 
-        {!isManager && (
+        {!isApprover && (
           <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              <strong>Read-Only Notice:</strong> Only users with the <code>SupplyChainManager</code> role can execute approval, rejection, or revision actions.
+              <strong>Read-Only Notice:</strong> Supply Chain Manager or IT Admin authorization is required for approval, rejection, revision, and payment actions.
             </span>
           </div>
         )}
@@ -438,8 +432,6 @@ export default function AiApprovals() {
 
             <div className="grid grid-cols-1 gap-6">
               {approvedOrders.map((po) => {
-                const firstLine = po.orderLines?.[0] || {};
-                const materialName = firstLine.rawMaterialName || 'Industrial Raw Material';
                 const totalAmount = po.totalCost || 0;
 
                 return (
@@ -478,15 +470,41 @@ export default function AiApprovals() {
                       </div>
                     </div>
 
-                    <div className="p-5 flex flex-wrap items-center justify-between gap-4 bg-slate-950/40">
-                      <div className="text-xs text-slate-300">
-                        <p>Material: <strong className="text-white">{materialName}</strong></p>
-                        <p className="text-slate-400 text-[11px] mt-0.5">
-                          Order is authorized. Use the payment gateway to finalize Stripe card charge or upload a bank deposit slip.
-                        </p>
+                    <div className="p-5 space-y-5 bg-slate-950/40">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-cyan-400 mb-3">Stock being purchased</p>
+                          <div className="space-y-3">
+                            {(po.orderLines || []).map((line) => (
+                              <div key={line.id || line.rawMaterialId} className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs border-b border-slate-800 last:border-0 pb-3 last:pb-0">
+                                <div className="col-span-2 sm:col-span-1"><span className="text-slate-500 block">Material</span><strong className="text-white">{line.rawMaterialName}</strong><span className="block text-[10px] text-slate-500">{line.rawMaterialSku}</span></div>
+                                <div><span className="text-slate-500 block">In stock</span><strong className="text-white">{Number(line.currentStock || 0).toLocaleString()}</strong></div>
+                                <div><span className="text-slate-500 block">Buying</span><strong className="text-amber-300">{Number(line.quantity || 0).toLocaleString()}</strong></div>
+                                <div><span className="text-slate-500 block">Unit price</span><strong className="text-white">${Number(line.unitPrice || 0).toFixed(2)}</strong></div>
+                                <div><span className="text-slate-500 block">Line total</span><strong className="text-emerald-400">${Number(line.totalPrice || line.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-xs">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-cyan-400 mb-3">Selected supplier and approval checks</p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                            <span className="text-slate-500">Supplier</span><strong className="text-white">{po.supplierName}</strong>
+                            <span className="text-slate-500">Supplier code</span><span className="text-slate-200">{po.supplierCode || `#${po.supplierId}`}</span>
+                            <span className="text-slate-500">Email</span><span className="text-slate-200 break-all">{po.supplierContactEmail || 'Not recorded'}</span>
+                            <span className="text-slate-500">Phone</span><span className="text-slate-200">{po.supplierContactPhone || 'Not recorded'}</span>
+                            <span className="text-slate-500">Terms / lead time</span><span className="text-slate-200">{po.supplierPaymentTerms || 'Not recorded'} / {po.supplierLeadTimeDays || 0} days</span>
+                            <span className="text-slate-500">Budget limit</span><span className="text-slate-200">${Number(po.budgetLimit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-500">Agent validation</span><strong className="text-emerald-400">{po.qualitySafetyStatus || 'APPROVED'}</strong>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-slate-400 text-[11px]">
+                          Review the stock, supplier, and cost details above before confirming payment.
+                        </p>
                         <Link
                           to={`/purchase-orders/${po.id}`}
                           className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 hover:from-blue-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-cyan-600/20"
@@ -527,18 +545,17 @@ export default function AiApprovals() {
           <div className="grid grid-cols-1 gap-6">
             {orders.map((po) => {
               const firstLine = po.orderLines?.[0] || {};
-              const materialName = firstLine.rawMaterialName || po.rawMaterialName || 'Industrial Grade Raw Material';
-              const materialSku = firstLine.rawMaterialSku || po.rawMaterialSku || `RM-${firstLine.rawMaterialId || '01'}`;
+              const materialName = firstLine.rawMaterialName || po.rawMaterialName || 'Not recorded';
+              const materialSku = firstLine.rawMaterialSku || po.rawMaterialSku || 'Not recorded';
               const qty = Number(firstLine.quantity !== undefined ? firstLine.quantity : po.quantity) || 0;
               const unitPrice = Number(firstLine.unitPrice !== undefined ? firstLine.unitPrice : po.unitPrice) || 0;
               const totalAmount = Number(po.totalCost !== undefined ? po.totalCost : (qty * unitPrice)) || 0;
-              const budgetLimit = Number(po.budgetLimit !== undefined ? po.budgetLimit : 15000) || 15000;
-              const isBudgetPassed = budgetLimit > 0 ? totalAmount <= budgetLimit : true;
-              const budgetPercentage = budgetLimit > 0 ? Math.round((totalAmount / budgetLimit) * 100) : 100;
+              const budgetLimit = Number(po.budgetLimit) || 0;
+              const isBudgetPassed = budgetLimit > 0 && totalAmount <= budgetLimit;
+              const budgetPercentage = budgetLimit > 0 ? Math.round((totalAmount / budgetLimit) * 100) : 0;
               const exceededAmount = Math.max(0, totalAmount - budgetLimit);
 
-              const wfMatch = po.notes?.match(/(WF-[A-Za-z0-9_-]+)/);
-              const workflowId = wfMatch ? wfMatch[1] : (po.poNumber.startsWith('PO-DRAFT-') ? `WF-${po.poNumber.replace('PO-DRAFT-', '')}` : `WF-${po.poNumber}`);
+              const workflowId = po.workflowId || 'Not linked';
 
               const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
               const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
@@ -548,8 +565,8 @@ export default function AiApprovals() {
               const isBlocked = (isRejected || isOnHold || isPendingReview);
 
               let riskBadge = {
-                text: totalAmount > 10000 ? 'Risk Level: Moderate' : 'Risk Level: Low Risk',
-                classes: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                text: po.validationResults?.overallStatus || 'Validation not recorded',
+                classes: 'bg-slate-500/10 text-slate-300 border-slate-500/30'
               };
 
               if (isRejected) {
@@ -818,8 +835,8 @@ export default function AiApprovals() {
                         <span>Tool Execution &amp; Gate Summary</span>
                       </span>
                       <div className="text-[11px] text-slate-400 space-y-1">
-                        <p>• calculate_burn_rate(SKU) → 180.5 kg/day</p>
-                        <p>• validate_budget(${totalAmount.toFixed(2)}, ${budgetLimit.toFixed(2)}) → <span className={isBudgetPassed ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{isBudgetPassed ? 'APPROVED' : 'BUDGET_EXCEEDED'}</span></p>
+                        <p>• recorded total → ${totalAmount.toFixed(2)}</p>
+                        <p>• budget check → <span className={isBudgetPassed ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{budgetLimit > 0 ? (isBudgetPassed ? 'PASSED' : 'BUDGET_EXCEEDED') : 'BUDGET_NOT_RECORDED'}</span></p>
                         <p>• check_qa_safety_status() → <span className={isResolved ? 'text-emerald-400 font-bold' : isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400'}>{
                           isResolved 
                             ? 'RESOLVED (CLEARED BY QA)' 
@@ -831,7 +848,7 @@ export default function AiApprovals() {
                             ? 'MANUAL_REVIEW_REQUIRED' 
                             : 'CLEAR / VERIFIED'
                         }</span></p>
-                        <p>• enforce_backend_gate() → AUTHORITATIVE POSTGRESQL VERIFIED</p>
+                        <p>• backend gate → {po.validationResults?.overallStatus || 'NOT_RECORDED'}</p>
                       </div>
                     </div>
                   </div>
@@ -846,7 +863,7 @@ export default function AiApprovals() {
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Link>
 
-                    {isManager ? (
+                    {isApprover ? (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => {

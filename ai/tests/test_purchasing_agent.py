@@ -318,7 +318,7 @@ class TestPurchasingAgent(unittest.TestCase):
             "tool_call_log": []
         }
         result = purchasing_node(state)
-        self.assertEqual(result["current_agent"], "Purchasing")
+        self.assertEqual(result["current_agent"], "Student 2 Supplier Selection")
         self.assertEqual(result["final_decision"], "RECOMMENDATION_READY")
         self.assertIn("draft_po", result["purchasing_data"])
         self.assertEqual(result["purchasing_data"]["draft_po"]["paymentStatus"], "UNPAID")
@@ -468,10 +468,11 @@ class TestPurchasingAgent(unittest.TestCase):
             "errors": []
         }
         result = validation_node(state)
-        # Any procurement expenditure must trigger approval requirement and pause
-        self.assertTrue(result["requires_approval"])
-        self.assertEqual(result["status"], WorkflowStatus.WaitingForApproval)
-        self.assertIn("Waiting for Supply Chain Manager human approval", result["completed_steps"][-1])
+        # Incomplete or invalid data is rejected before a human payment action
+        # can appear, and the supervisor asks Student 2 to select again.
+        self.assertFalse(result["requires_approval"])
+        self.assertEqual(result["status"], WorkflowStatus.Running)
+        self.assertTrue(result["automatic_retry_required"])
 
 
 if __name__ == "__main__":

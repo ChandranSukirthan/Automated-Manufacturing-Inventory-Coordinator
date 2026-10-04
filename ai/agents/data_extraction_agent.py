@@ -19,6 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, ValidationError
+from ai.core.config import settings
 
 
 SupportedProduct = Literal["BoxPouch", "TeaBag", "Can", "Bottle"]
@@ -129,6 +130,9 @@ def query_production_db(product_type: str, batch_id: str) -> dict[str, Any]:
     query = ProductionDatabaseQuery.model_validate(
         {"product_type": product_type, "batch_id": batch_id}
     )
+    if not settings.demo_mode:
+        return {"status": "UNAVAILABLE", "product_type": query.product_type, "batch_id": query.batch_id,
+                "error": "Use the authenticated production workflow for operational data.", "queried_at": _utc_now()}
     mock = _PRODUCT_MOCKS[query.product_type]
     sku = mock["sku"]
     return {
@@ -162,6 +166,9 @@ def get_inventory_levels(material_sku: str) -> dict[str, Any]:
     """Read current, reserved, and reorder quantities for one material."""
 
     query = InventoryLevelsQuery.model_validate({"material_sku": material_sku})
+    if not settings.demo_mode:
+        return {"status": "UNAVAILABLE", "material_sku": query.material_sku,
+                "error": "Use the authenticated inventory workflow for operational data.", "queried_at": _utc_now()}
     matching = next(
         (mock for mock in _PRODUCT_MOCKS.values() if mock["sku"] == query.material_sku),
         None,

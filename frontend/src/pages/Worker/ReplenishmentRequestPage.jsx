@@ -59,7 +59,8 @@ export default function ReplenishmentRequestPage() {
   };
 
   useEffect(() => {
-    loadWorkspace();
+    const initialLoad = setTimeout(loadWorkspace, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const visibleLevels = useMemo(() => {

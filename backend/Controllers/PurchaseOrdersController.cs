@@ -287,7 +287,7 @@ namespace ManufacturingCoordinator.Controllers
         /// Only SupplyChainManager can approve. Executes payment and sends PO PDF document to supplier.
         /// </summary>
         [HttpPost("{id:int}/approve")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -332,7 +332,7 @@ namespace ManufacturingCoordinator.Controllers
         /// Used to settle payment or retry for orders in Approved or Payment status.
         /// </summary>
         [HttpPost("{id:int}/process-payment")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -351,7 +351,7 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         [HttpPost("{id:int}/create-checkout-session")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         public async Task<ActionResult> CreateCheckoutSession(int id)
         {
             try
@@ -439,11 +439,11 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         [HttpPost("{id:int}/verify-bank-slip")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> VerifyBankSlip(int id) => Ok(await _poService.VerifyBankSlipAsync(id, GetCurrentUserId()));
 
         [HttpPost("{id:int}/confirm-checkout")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> ConfirmCheckout(int id, [FromQuery] string sessionId)
         {
             var key = _configuration["StripeSettings:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
@@ -462,7 +462,7 @@ namespace ManufacturingCoordinator.Controllers
         /// POST /api/purchase-orders/{id}/bank-slip — upload bank transfer slip image/PDF and verify payment
         /// </summary>
         [HttpPost("{id:int}/bank-slip")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -491,7 +491,7 @@ namespace ManufacturingCoordinator.Controllers
         /// POST /api/purchase-orders/{id}/bank-slip-json — settle bank slip payment via JSON payload
         /// </summary>
         [HttpPost("{id:int}/bank-slip-json")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -537,7 +537,7 @@ namespace ManufacturingCoordinator.Controllers
 
         /// <summary>POST /api/purchase-orders/{id}/reject — transition PendingApproval → Rejected</summary>
         [HttpPost("{id:int}/reject")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -563,7 +563,7 @@ namespace ManufacturingCoordinator.Controllers
         /// Returns purchase order back to Draft for requester adjustment.
         /// </summary>
         [HttpPost("{id:int}/revise")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -598,7 +598,7 @@ namespace ManufacturingCoordinator.Controllers
         /// Allows the React Supply Chain Manager UI to use RESTful naming.
         /// </summary>
         [HttpPost("{id:int}/request-revision")]
-        [Authorize(Roles = "SupplyChainManager")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

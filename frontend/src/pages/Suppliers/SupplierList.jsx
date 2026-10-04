@@ -31,7 +31,7 @@ export default function SupplierList() {
   // Search, Filter, Sort & Pagination
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'inactive'
-  const [sortBy, setSortBy] = useState('name'); // 'name' | 'date'
+  const [sortBy] = useState('name'); // 'name' | 'date'
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -71,7 +71,8 @@ export default function SupplierList() {
   };
 
   useEffect(() => {
-    fetchSuppliers();
+    const initialLoad = setTimeout(fetchSuppliers, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   // Filtered & Sorted Suppliers

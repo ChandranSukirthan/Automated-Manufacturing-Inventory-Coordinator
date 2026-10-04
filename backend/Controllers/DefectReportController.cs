@@ -135,7 +135,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/quarantine")]
-        [Authorize(Roles = "QualityInspector,ITAdmin")]
+        [Authorize(Roles = "QualityInspector")]
         public async Task<IActionResult> Quarantine(
             Guid id,
             [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreateQuarantineDto? dto)

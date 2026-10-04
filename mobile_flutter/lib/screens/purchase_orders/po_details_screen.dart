@@ -111,7 +111,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,9 +140,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(_po!.status).withOpacity(0.15),
+                                        color: _getStatusColor(_po!.status).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: _getStatusColor(_po!.status).withOpacity(0.3)),
+                                        border: Border.all(color: _getStatusColor(_po!.status).withValues(alpha: 0.3)),
                                       ),
                                       child: Text(
                                         _po!.status,
@@ -182,7 +182,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +233,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                               decoration: BoxDecoration(
                                 color: cardBg,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.35)),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,7 +258,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF10B981).withOpacity(0.15),
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -329,7 +329,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,7 +375,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                                             width: 36,
                                             height: 36,
                                             decoration: BoxDecoration(
-                                              color: cyanAccent.withOpacity(0.1),
+                                              color: cyanAccent.withValues(alpha: 0.1),
                                               borderRadius: BorderRadius.circular(8),
                                             ),
                                             child: const Icon(Icons.inventory_2_outlined, color: cyanAccent, size: 18),
@@ -438,7 +438,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,7 +513,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF1E1E38),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.4)),
+          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -784,31 +784,11 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     }
   }
 
-  Future<void> _handleDirectPayment(int poId) async {
-    try {
-      await widget.service.processPayment(poId, forceDispatch: false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Payment request processed. Check payment and dispatch status.'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-        _fetchDetails();
-      }
-    } catch (err) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment processing failed: $err'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
   Future<void> _showBankSlipDialog(PurchaseOrderDetail po) async {
-    final bankNameController = TextEditingController(text: 'Commercial Bank of Ceylon');
-    final refController = TextEditingController(text: 'TXN-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}');
-    final notesController = TextEditingController(text: 'Bank Wire Transfer completed via corporate online portal.');
+    final messenger = ScaffoldMessenger.of(context);
+    final bankNameController = TextEditingController();
+    final refController = TextEditingController();
+    final notesController = TextEditingController();
     bool submitting = false;
 
     await showDialog<void>(
@@ -825,7 +805,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withOpacity(0.2),
+                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.account_balance, color: Color(0xFF10B981), size: 20),
@@ -847,7 +827,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
+                        color: Colors.white.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.white10),
                       ),
@@ -880,7 +860,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.05),
+                        fillColor: Colors.white.withValues(alpha: 0.05),
                         hintText: 'e.g. Chase Bank, HSBC, Commercial Bank',
                         hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
@@ -895,7 +875,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.05),
+                        fillColor: Colors.white.withValues(alpha: 0.05),
                         hintText: 'e.g. TXN-9988231',
                         hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
@@ -911,7 +891,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.05),
+                        fillColor: Colors.white.withValues(alpha: 0.05),
                         hintText: 'Notes regarding wire transfer or branch deposit...',
                         hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
@@ -932,7 +912,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       : () async {
                           final ref = refController.text.trim();
                           if (ref.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               const SnackBar(content: Text('Please enter a Transaction Reference Number.'), backgroundColor: Colors.orange),
                             );
                             return;
@@ -949,9 +929,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                               Navigator.pop(ctx);
                             }
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 const SnackBar(
-                                  content: Text('Bank Slip verified & Order Dispatched to Supplier!'),
+                                  content: Text('Bank slip submitted for manager verification.'),
                                   backgroundColor: Color(0xFF10B981),
                                 ),
                               );
@@ -962,7 +942,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                               setDialogState(() => submitting = false);
                             }
                             if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              messenger.showSnackBar(
                                 SnackBar(content: Text('Bank slip submission failed: $err'), backgroundColor: Colors.red),
                               );
                             }
@@ -975,7 +955,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                   icon: submitting
                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.check_circle_outline, size: 16),
-                  label: Text(submitting ? 'Verifying...' : 'Verify & Settle'),
+                  label: Text(submitting ? 'Submitting...' : 'Submit bank slip'),
                 ),
               ],
             );

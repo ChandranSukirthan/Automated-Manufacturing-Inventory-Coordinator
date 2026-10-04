@@ -366,6 +366,8 @@ class PurchaseOrderDetail {
 class AgentWorkflowItem {
   const AgentWorkflowItem({
     required this.workflowId,
+    this.workflowType = 'Procurement',
+    this.errors = const [],
     required this.objective,
     required this.currentAgent,
     required this.currentStep,
@@ -383,6 +385,10 @@ class AgentWorkflowItem {
   });
 
   final String workflowId;
+  final String workflowType;
+  final List<String> errors;
+  bool get canRetry => workflowType == 'Procurement' && purchaseOrderId == 0 &&
+      (status == 'Failed' || currentAgent == 'Supplier Review');
   final String objective;
   final String currentAgent;
   final String currentStep;
@@ -399,22 +405,25 @@ class AgentWorkflowItem {
   final double totalCost;
 
   factory AgentWorkflowItem.fromJson(Map<String, dynamic> json) {
-    final rawSteps = json['steps'] as List<dynamic>? ?? [];
+    final details = json['details'] is Map ? json['details'] as Map : const {};
+    final rawSteps = json['steps'] as List<dynamic>? ?? details['completed_steps'] as List<dynamic>? ?? [];
     return AgentWorkflowItem(
       workflowId: json['workflowId'] as String? ?? 'WF-${json['purchaseOrderId']}',
+      workflowType: json['workflowType'] as String? ?? 'Procurement',
+      errors: (details['errors'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
       objective: json['objective'] as String? ?? 'Inventory replenishment',
       currentAgent: json['currentAgent'] as String? ?? 'Agent',
-      currentStep: json['currentStep'] as String? ?? 'Processing',
+      currentStep: json['currentStep'] as String? ?? json['currentAgent'] as String? ?? 'Queued',
       status: json['status'] as String? ?? 'Active',
       startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? '') ?? DateTime.now(),
       completedAt: json['completedAt'] != null ? DateTime.tryParse(json['completedAt'].toString()) : null,
       approvalStatus: json['approvalStatus'] as String? ?? 'Draft',
       finalOutcome: json['finalOutcome'] as String? ?? '',
       steps: rawSteps.map((s) => s.toString()).toList(),
-      currentStepIndex: json['currentStepIndex'] as int? ?? 0,
+      currentStepIndex: json['currentStepIndex'] as int? ?? rawSteps.length,
       purchaseOrderId: json['purchaseOrderId'] as int? ?? 0,
-      poNumber: json['poNumber'] as String? ?? 'PO-${json['purchaseOrderId']}',
-      supplierName: json['supplierName'] as String? ?? 'Supplier',
+      poNumber: json['poNumber'] as String? ?? '',
+      supplierName: json['supplierName'] as String? ?? '',
       totalCost: (json['totalCost'] as num? ?? 0).toDouble(),
     );
   }

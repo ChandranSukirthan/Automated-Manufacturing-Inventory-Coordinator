@@ -30,7 +30,6 @@ export default function AdminDashboard() {
     systemHealth: null
   });
   const [floorAlerts, setFloorAlerts] = useState([]);
-  const [recentWorkflows, setRecentWorkflows] = useState([]);
   const [deployingAlertId, setDeployingAlertId] = useState(null);
   const [actionFeedback, setActionFeedback] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +54,6 @@ export default function AdminDashboard() {
           systemHealth: health
         });
         setFloorAlerts(Array.isArray(alerts) ? alerts : []);
-        setRecentWorkflows(Array.isArray(workflows) ? workflows.slice(0, 5) : []);
       } catch (err) {
         console.error(err);
         setError('Failed to aggregate administrative telemetry.');
@@ -89,12 +87,8 @@ export default function AdminDashboard() {
         message: `Multi-Agent Pipeline launched! ${res.workflowId ? `Workflow ID: ${res.workflowId}. ` : ''}Draft Purchase Order generated and routed to Supply Chain Manager for approval.`
       });
 
-      const [updatedAlerts, updatedWorkflows] = await Promise.all([
-        inventoryService.getAlerts().catch(() => []),
-        adminService.getAgentWorkflows().catch(() => [])
-      ]);
+      const updatedAlerts = await inventoryService.getAlerts().catch(() => []);
       setFloorAlerts(Array.isArray(updatedAlerts) ? updatedAlerts : []);
-      setRecentWorkflows(Array.isArray(updatedWorkflows) ? updatedWorkflows.slice(0, 5) : []);
     } catch (err) {
       console.error(err);
       setActionFeedback({

@@ -178,9 +178,9 @@ namespace backend.Services
                                 Currency = GetString(s, "currency") ?? "USD",
                                 MinimumOrderQuantity = GetDecimal(s, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
                                 PackSize = GetDecimal(s, 1m, "packSize", "pack_size"),
-                                LeadTimeDays = GetInt(s, 7, "leadTimeDays", "lead_time_days"),
+                                LeadTimeDays = GetInt(s, 0, "leadTimeDays", "lead_time_days"),
                                 QualityEvidence = GetString(s, "qualityEvidence", "quality_evidence", "certification") ?? string.Empty,
-                                Availability = GetString(s, "availabilityStatus", "availability", "stock_status") ?? "In Stock",
+                                Availability = GetString(s, "availabilityStatus", "availability", "stock_status") ?? "Unknown",
                                 SupplierStatus = GetString(s, "supplierStatus", "verificationStatus") ?? "UNVERIFIED",
                                 ConfidenceScore = GetDecimal(s, 0m, "confidenceScore", "confidence_score"),
                                 SourceUrl = GetString(s, "sourceUrl", "source_url", "url")
@@ -198,11 +198,11 @@ namespace backend.Services
                             Currency = GetString(recEl, "currency") ?? "USD",
                             MinimumOrderQuantity = GetDecimal(recEl, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
                             PackSize = GetDecimal(recEl, 1m, "packSize", "pack_size"),
-                            LeadTimeDays = GetInt(recEl, 7, "leadTimeDays", "lead_time_days"),
+                            LeadTimeDays = GetInt(recEl, 0, "leadTimeDays", "lead_time_days"),
                             QualityEvidence = GetString(recEl, "qualityEvidence", "quality_evidence") ?? string.Empty,
-                            Availability = GetString(recEl, "availabilityStatus", "availability") ?? "In Stock",
-                            SupplierStatus = GetString(recEl, "supplierStatus", "verificationStatus") ?? "APPROVED",
-                            ConfidenceScore = 0.95m,
+                            Availability = GetString(recEl, "availabilityStatus", "availability") ?? "Unknown",
+                            SupplierStatus = GetString(recEl, "supplierStatus", "verificationStatus") ?? "UNVERIFIED",
+                            ConfidenceScore = GetDecimal(recEl, 0m, "confidenceScore", "confidence_score"),
                             SourceUrl = GetString(recEl, "sourceUrl", "source_url")
                         });
                     }

@@ -67,14 +67,12 @@ export default function QuarantineManagementPage() {
   };
 
   useEffect(() => {
-    loadQuarantines();
+    const initialLoad = setTimeout(loadQuarantines, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const severityFor = (record) =>
     defects.find((defect) => defect.id === record.defectReportId)?.severity || 'Unknown';
-
-  const defectFor = (record) =>
-    defects.find((defect) => defect.id === record.defectReportId);
 
   // Metrics
   const activeRecords = records.filter((r) => r.status === 'Active');

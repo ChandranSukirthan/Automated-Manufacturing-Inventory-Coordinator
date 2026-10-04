@@ -115,11 +115,11 @@ class _POListScreenState extends State<POListScreen> {
                 fillColor: cardBg,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -153,7 +153,7 @@ class _POListScreenState extends State<POListScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: BorderSide(
-                        color: isSelected ? cyanAccent : Colors.white.withOpacity(0.08),
+                        color: isSelected ? cyanAccent : Colors.white.withValues(alpha: 0.08),
                       ),
                     ),
                     showCheckmark: false,
@@ -181,7 +181,7 @@ class _POListScreenState extends State<POListScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.receipt_long_outlined, size: 48, color: Colors.white.withOpacity(0.2)),
+                                Icon(Icons.receipt_long_outlined, size: 48, color: Colors.white.withValues(alpha: 0.2)),
                                 const SizedBox(height: 12),
                                 const Text(
                                   'No purchase orders match your criteria.',
@@ -214,7 +214,7 @@ class _POListScreenState extends State<POListScreen> {
                                     decoration: BoxDecoration(
                                       color: cardBg,
                                       borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.white.withOpacity(0.06)),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                                     ),
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,9 +233,9 @@ class _POListScreenState extends State<POListScreen> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                               decoration: BoxDecoration(
-                                                color: po.statusColor.withOpacity(0.15),
+                                                color: po.statusColor.withValues(alpha: 0.15),
                                                 borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: po.statusColor.withOpacity(0.3)),
+                                                border: Border.all(color: po.statusColor.withValues(alpha: 0.3)),
                                               ),
                                               child: Text(
                                                 po.status,

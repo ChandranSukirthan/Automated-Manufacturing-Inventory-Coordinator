@@ -26,13 +26,92 @@ from ai.core.config import settings
 from ai.session_store import SessionStore
 import threading
 import re
+import hashlib
+import os
+import time
+from pathlib import Path
+from functools import wraps
 
 _LOCKS_GUARD = threading.Lock()
 _WORKFLOW_LOCKS = {}
 
-def _workflow_lock(workflow_id):
+class _WorkflowLock:
+    """Re-entrant in-process lock backed by an OS lock for other workers."""
+    def __init__(self, path: Path, blocking: bool = True):
+        self.path = path
+        self.blocking = blocking
+        self.thread_lock = threading.RLock()
+        self.local = threading.local()
+
+    def __enter__(self):
+        self.thread_lock.acquire()
+        depth = getattr(self.local, "depth", 0)
+        if depth:
+            self.local.depth = depth + 1
+            return self
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = open(self.path, "a+b")
+        if self.handle.tell() == 0:
+            self.handle.write(b"0")
+            self.handle.flush()
+        self.handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                while True:
+                    try:
+                        msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if not self.blocking:
+                            raise BlockingIOError
+                        time.sleep(0.05)
+            else:
+                import fcntl
+                flags = fcntl.LOCK_EX | (0 if self.blocking else fcntl.LOCK_NB)
+                fcntl.flock(self.handle.fileno(), flags)
+        except Exception:
+            self.handle.close()
+            self.thread_lock.release()
+            raise
+        self.local.depth = 1
+        return self
+
+    def __exit__(self, *_):
+        depth = self.local.depth
+        if depth > 1:
+            self.local.depth = depth - 1
+            self.thread_lock.release()
+            return
+        self.handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        self.handle.close()
+        self.local.depth = 0
+        self.thread_lock.release()
+
+
+def _workflow_lock(workflow_id, blocking=True):
+    store_path = Path(WORKFLOW_SESSIONS.path)
+    digest = hashlib.sha256(str(workflow_id).encode()).hexdigest()
+    key = (str(store_path.resolve()), digest)
     with _LOCKS_GUARD:
-        return _WORKFLOW_LOCKS.setdefault(workflow_id, threading.RLock())
+        lock = _WORKFLOW_LOCKS.get(key)
+        if lock is None or lock.blocking != blocking:
+            lock = _WorkflowLock(store_path.parent / ".workflow_locks" / digest, blocking)
+            _WORKFLOW_LOCKS[key] = lock
+        return lock
+
+def _serialized_action(action):
+    @wraps(action)
+    def execute(workflow_id, *args, **kwargs):
+        with _workflow_lock(workflow_id):
+            return action(workflow_id, *args, **kwargs)
+    return execute
 from ai.agents.planner import planner_node
 from ai.agents.data_extraction import data_extraction_node
 from ai.agents.production_analysis import production_analysis_node
@@ -73,12 +152,12 @@ def sync_to_database(state: AgentState) -> None:
     val_res = state.get("validation_results")
     if isinstance(val_res, dict) and val_res:
         validation_results_json = json.dumps({
-            "isValid": bool(val_res.get("isValid", True)),
-            "qualitySafetyStatus": val_res.get("qualitySafetyStatus", "CLEAR"),
-            "supplierValidation": val_res.get("supplierValidation", "PASSED"),
-            "budgetCheck": val_res.get("budgetCheck", "PASSED"),
-            "poMathematicalCheck": val_res.get("poMathematicalCheck", "PASSED"),
-            "materialValidation": val_res.get("materialValidation", "PASSED"),
+            "isValid": bool(val_res.get("isValid", False)),
+            "qualitySafetyStatus": val_res.get("qualitySafetyStatus", "UNKNOWN"),
+            "supplierValidation": val_res.get("supplierValidation", "UNKNOWN"),
+            "budgetCheck": val_res.get("budgetCheck", "UNKNOWN"),
+            "poMathematicalCheck": val_res.get("poMathematicalCheck", "UNKNOWN"),
+            "materialValidation": val_res.get("materialValidation", "UNKNOWN"),
             "quarantinedRollsCount": int(val_res.get("quarantinedRollsCount", 0) or 0),
             "impactReason": val_res.get("impactReason") or "",
             "rejectionReason": val_res.get("rejectionReason") or "",
@@ -87,6 +166,12 @@ def sync_to_database(state: AgentState) -> None:
             "resolvedBy": val_res.get("resolvedBy") or "",
             "resolvedAt": val_res.get("resolvedAt") or None,
             "historicalRisk": val_res.get("historicalRisk") or None,
+            "bestChoiceCheck": val_res.get("bestChoiceCheck", "UNKNOWN"),
+            "candidateComparisonCount": int(val_res.get("candidateComparisonCount", 0) or 0),
+            "attemptNumber": int(val_res.get("attemptNumber", 0) or 0),
+            "maxAttempts": int(val_res.get("maxAttempts", 3) or 3),
+            "checkedSupplier": val_res.get("checkedSupplier") or None,
+            "validationHistory": state.get("validation_history") or [],
         })
 
     try:
@@ -169,18 +254,18 @@ def save_procurement_outcome(state: AgentState) -> None:
                         state.get("material_name") or "Unknown",
                         state.get("net_deficit") or 0,
                         state.get("recommended_quantity") or 0,
-                        state.get("recommended_quantity") or 0,
+                        0,  # No confirmed order quantity at recommendation approval.
                         rec_supplier.get("supplierName") or "Unknown",
                         rec_supplier.get("supplierName") or "Unknown",
                         state.get("estimated_unit_price") or 0,
-                        state.get("estimated_unit_price") or 0,
+                        0,  # Final price is recorded by the backend order lifecycle.
                         int(str(rec_supplier.get("leadTime") or "0").split()[0]) if rec_supplier.get("leadTime") else 0,
                         0,  # actualLeadTime — updated after delivery
                         rec_supplier.get("qualityEvidence") or "UNKNOWN",
                         state.get("supplier_verification") or "UNVERIFIED",
                         state.get("manager_decision") or "Pending",
                         state.get("revision_request"),
-                        state.get("manager_decision") == "APPROVE",
+                        False,  # Approval is not procurement completion.
                         False,   # paymentSuccess — updated by ASP.NET after Stripe
                         False,   # deliverySuccess — updated after delivery
                         datetime.now(timezone.utc),
@@ -208,6 +293,8 @@ def _after_purchasing(state: AgentState) -> str:
 def _after_validation(state: AgentState) -> str:
     if state.get("status") == WorkflowStatus.Failed:
         return END
+    if state.get("automatic_retry_required"):
+        return "purchasing"
     if state.get("requires_approval") or state.get("status") == WorkflowStatus.WaitingForApproval:
         return END  # Pause for human approval gate
     if state.get("approval_status") == ApprovalStatus.RevisionRequested:
@@ -242,6 +329,12 @@ def _record_stage(node):
         except Exception as error:
             difference = {"status": WorkflowStatus.Failed, "errors": state.get("errors", []) + [str(error)],
                           "current_agent": node.__name__, "final_outcome": "This workflow failed; correct the reported issue and retry."}
+        difference["agent_handoffs"] = state.get("agent_handoffs", []) + [{
+            "agent": node.__name__, "receivedFields": sorted(state.keys()),
+            "receivedToolResults": sorted((state.get("tool_results") or {}).keys()),
+            "producedFields": sorted(difference.keys()),
+            "status": str(difference.get("status", state.get("status"))),
+        }]
         updated = {**state, **difference}
         WORKFLOW_SESSIONS[updated["workflow_id"]] = updated
         sync_to_database(updated)
@@ -250,6 +343,8 @@ def _record_stage(node):
 
 
 def _after_planner(state):
+    if state.get("status") == WorkflowStatus.Failed:
+        return END
     return "maintenance" if state.get("workflow_type") == "Maintenance" else "data_extraction"
 
 
@@ -272,14 +367,16 @@ def build_workflow_graph():
 
     workflow.add_edge(START, "planner")
     workflow.add_node("maintenance", _record_stage(_maintenance_node))
-    workflow.add_conditional_edges("planner", _after_planner, {"maintenance": "maintenance", "data_extraction": "data_extraction"})
+    workflow.add_conditional_edges("planner", _after_planner, {"maintenance": "maintenance", "data_extraction": "data_extraction", END: END})
     workflow.add_edge("maintenance", END)
     workflow.add_conditional_edges(
         "data_extraction",
         _after_data_extraction,
         {"production_analysis": "production_analysis", END: END},
     )
-    workflow.add_edge("production_analysis", "purchasing")
+    workflow.add_conditional_edges("production_analysis",
+        lambda state: END if state.get("status") == WorkflowStatus.Failed else "purchasing",
+        {"purchasing": "purchasing", END: END})
     workflow.add_conditional_edges(
         "purchasing",
         _after_purchasing,
@@ -338,7 +435,12 @@ def _run_workflow_unlocked(
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
     existing = WORKFLOW_SESSIONS.get(wf_id)
     if existing and existing.get("current_agent") != "Queued":
-        if existing.get("objective") != objective or existing.get("material_id") != material_id:
+        identity = dict(objective=objective, material_id=material_id, workflow_type=workflow_type,
+                        machine_id=machine_id, required_quantity=required_quantity, budget_limit=budget_limit,
+                        net_deficit=net_deficit, procurement_request_id=procurement_request_id,
+                        specification=specification, quality_requirement=quality_requirement,
+                        preferred_region=preferred_region, required_by_date=required_by_date)
+        if any(existing.get(key) != value for key, value in identity.items()):
             raise ValueError("Workflow ID is already assigned to a different request")
         return existing
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -363,6 +465,7 @@ def _run_workflow_unlocked(
         "plan": [],
         "completed_steps": [],
         "tool_results": {},
+        "agent_handoffs": [],
         "tool_call_log": [],
         "procurement_requirement": procurement_requirement or {},
         # Authoritative ASP.NET Core fields
@@ -389,6 +492,10 @@ def _run_workflow_unlocked(
         "supplier_candidates": [],
         "recommended_supplier": None,
         "alternative_suppliers": [],
+        "supplier_selection_attempt": 0,
+        "max_supplier_selection_attempts": 3,
+        "excluded_supplier_ids": [],
+        "automatic_retry_required": False,
         "recommended_quantity": None,
         "estimated_unit_price": None,
         "estimated_total_cost": None,
@@ -399,6 +506,7 @@ def _run_workflow_unlocked(
         "sources": [],
         "draft_po": None,
         "validation_results": {},
+        "validation_history": [],
         "requires_approval": False,
         "manager_decision": None,
         "revision_request": None,
@@ -410,14 +518,21 @@ def _run_workflow_unlocked(
 
     WORKFLOW_SESSIONS[wf_id] = initial_state
     sync_to_database(initial_state)
-    with _workflow_lock(wf_id):
-        result_state = COMPILED_APP.invoke(initial_state)
+    try:
+        with _workflow_lock(wf_id):
+            result_state = COMPILED_APP.invoke(initial_state)
+    except Exception as error:
+        result_state = WORKFLOW_SESSIONS.get(wf_id, initial_state)
+        result_state.update(status=WorkflowStatus.Failed, current_agent="Interrupted",
+                            errors=result_state.get("errors", []) + [str(error)],
+                            final_outcome="Workflow execution failed. Correct the reported issue and retry.")
     WORKFLOW_SESSIONS[wf_id] = result_state
     sync_to_database(result_state)
 
     return result_state
 
 
+@_serialized_action
 def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> Optional[AgentState]:
     """
     Handles Supply Chain Manager APPROVE action.
@@ -451,6 +566,7 @@ def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> O
     return state
 
 
+@_serialized_action
 def reject_workflow(
     workflow_id: str,
     reason: str = "Rejected by Supply Chain Manager",
@@ -465,6 +581,8 @@ def reject_workflow(
         return None
     if state.get("approval_status") == ApprovalStatus.Approved:
         raise ValueError("An approved workflow cannot be rejected")
+    if state.get("workflow_type") == "Maintenance":
+        raise ValueError("Maintenance decisions belong to the backend IT Admin service")
 
     state["approval_status"] = ApprovalStatus.Rejected
     state["status"] = WorkflowStatus.Failed
@@ -483,6 +601,7 @@ def reject_workflow(
     return state
 
 
+@_serialized_action
 def request_revision(
     workflow_id: str,
     revision_notes: str,
@@ -497,6 +616,8 @@ def request_revision(
         return None
     if state.get("approval_status") == ApprovalStatus.Approved:
         raise ValueError("An approved workflow cannot be revised")
+    if state.get("workflow_type") == "Maintenance":
+        raise ValueError("Maintenance decisions belong to the backend IT Admin service")
 
     state["approval_status"] = ApprovalStatus.RevisionRequested
     state["manager_decision"] = "REQUEST_REVISION"
@@ -512,9 +633,12 @@ def request_revision(
     # Re-run from purchasing node with revision context
     state["approval_status"] = ApprovalStatus.Pending
     state["errors"] = []
+    state["draft_po"] = None
+    state["purchasing_data"] = {key: value for key, value in state.get("purchasing_data", {}).items() if key != "draft_po"}
+    state["validation_results"] = {}
     with _workflow_lock(workflow_id):
         result_state = {**state, **_record_stage(purchasing_node)(state)}
-        if result_state.get("draft_po"):
+        if result_state.get("draft_po") and result_state.get("status") != WorkflowStatus.Failed:
             result_state.update(_record_stage(validation_node)(result_state))
     WORKFLOW_SESSIONS[workflow_id] = result_state
     sync_to_database(result_state)
@@ -547,6 +671,7 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
 
     return {
         "workflowType": state.get("workflow_type", "Procurement"),
+        "agentHandoffs": state.get("agent_handoffs", []),
         "machineId": state.get("machine_id"),
         "workflowId": state.get("workflow_id"),
         "workflow_id": state.get("workflow_id"),
@@ -562,8 +687,8 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
         "material_id": state.get("material_id"),
         "netDeficit": state.get("net_deficit"),
         "net_deficit": state.get("net_deficit"),
-        "requiredQuantity": state.get("net_deficit"),
-        "required_quantity": state.get("net_deficit"),
+        "requiredQuantity": state.get("required_quantity"),
+        "required_quantity": state.get("required_quantity"),
         "recommendedQuantity": state.get("recommended_quantity"),
         "recommended_quantity": state.get("recommended_quantity"),
         "recommendedSupplier": state.get("recommended_supplier"),
@@ -585,6 +710,10 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
         "supplier_verification": state.get("supplier_verification"),
         "validationResults": validation,
         "validation_results": validation,
+        "validationHistory": state.get("validation_history") or [],
+        "validation_history": state.get("validation_history") or [],
+        "supplierSelectionAttempt": state.get("supplier_selection_attempt") or 0,
+        "maxSupplierSelectionAttempts": state.get("max_supplier_selection_attempts") or 3,
         "approvalStatus": approval_val.value if isinstance(approval_val, ApprovalStatus) else str(approval_val or "Pending"),
         "approval_status": approval_val.value if isinstance(approval_val, ApprovalStatus) else str(approval_val or "Pending"),
         "managerDecision": state.get("manager_decision"),

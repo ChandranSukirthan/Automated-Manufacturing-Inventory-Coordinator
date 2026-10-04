@@ -19,6 +19,19 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
   bool _loading = true;
   String? _error;
   List<AgentWorkflowItem> _workflows = [];
+  String? _retrying;
+
+  Future<void> _retryWorkflow(AgentWorkflowItem workflow) async {
+    setState(() { _retrying = workflow.workflowId; _error = null; });
+    try {
+      await widget.service.retryWorkflow(workflow.workflowId);
+      await _fetchWorkflows();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _retrying = null);
+    }
+  }
 
   @override
   void initState() {
@@ -86,7 +99,7 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.psychology_outlined, size: 54, color: Colors.white.withOpacity(0.2)),
+                          Icon(Icons.psychology_outlined, size: 54, color: Colors.white.withValues(alpha: 0.2)),
                           const SizedBox(height: 16),
                           const Text(
                             'No active multi-agent workflows found.',
@@ -110,7 +123,7 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,13 +143,13 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
                                         color: isComplete
-                                            ? const Color(0xFF10B981).withOpacity(0.15)
-                                            : const Color(0xFF5CC8F8).withOpacity(0.15),
+                                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                            : const Color(0xFF5CC8F8).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
                                           color: isComplete
-                                              ? const Color(0xFF10B981).withOpacity(0.3)
-                                              : const Color(0xFF5CC8F8).withOpacity(0.3),
+                                              ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                                              : const Color(0xFF5CC8F8).withValues(alpha: 0.3),
                                         ),
                                       ),
                                       child: Text(
@@ -189,6 +202,11 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
 
                                 const SizedBox(height: 12),
 
+                                ...wf.errors.map((error) => Text(error, style: const TextStyle(color: Colors.redAccent))),
+                                if (wf.finalOutcome.isNotEmpty) Text(wf.finalOutcome, style: const TextStyle(color: Colors.white70)),
+                                if (wf.canRetry) ElevatedButton(
+                                  onPressed: _retrying == wf.workflowId ? null : () => _retryWorkflow(wf),
+                                  child: Text(_retrying == wf.workflowId ? 'Queuing…' : 'Retry analysis')),
                                 // Steps chip timeline
                                 if (wf.steps.isNotEmpty)
                                   SingleChildScrollView(
@@ -204,12 +222,12 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
                                             color: isPassed
-                                                ? const Color(0xFF10B981).withOpacity(0.15)
-                                                : Colors.white.withOpacity(0.04),
+                                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                                : Colors.white.withValues(alpha: 0.04),
                                             borderRadius: BorderRadius.circular(6),
                                             border: Border.all(
                                               color: isPassed
-                                                  ? const Color(0xFF10B981).withOpacity(0.3)
+                                                  ? const Color(0xFF10B981).withValues(alpha: 0.3)
                                                   : Colors.white10,
                                             ),
                                           ),

@@ -70,10 +70,10 @@ class _DefectsScreenState extends State<DefectsScreen> {
 
   String _inventoryLabel(DefectReport defect) {
     final ids = _inventoryFor(defect);
-    final roll = _rolls.where((item) => ids.contains(item.id)).firstOrNull;
+    final roll = _rolls.where((item) => ids.contains(item.rollIdentifier)).firstOrNull;
     return roll?.rollIdentifier.isNotEmpty == true
         ? roll!.rollIdentifier
-        : ids.firstOrNull ?? defect.skuCode ?? 'Unavailable';
+        : ids.firstOrNull ?? (defect.skuCode.isEmpty ? 'Unavailable' : defect.skuCode);
   }
 
   List<String> _inventoryFor(DefectReport defect) =>
@@ -89,7 +89,7 @@ class _DefectsScreenState extends State<DefectsScreen> {
     final values = (_defects ?? []).where((defect) {
       final text = [
         _inventoryLabel(defect),
-        defect.skuCode ?? '',
+        defect.skuCode,
         defect.severity,
         defect.status,
         defect.description,

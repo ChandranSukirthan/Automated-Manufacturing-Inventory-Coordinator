@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 import psycopg
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
+from ai.core.contracts import first_present
 from ai.core.config import settings
 from ai.agents.quality_agent import run_quality_validation
 
@@ -50,7 +52,7 @@ def _check_historical_material_quality_risk(mat_id: Any, mat_name: str = "") -> 
         with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
             with connection.cursor() as cursor:
                 cursor.execute('''
-                    SELECT m."Name", d."Description", d."Severity", d."AffectedInventoryJson"
+                    SELECT d."Id", m."Name", d."Description", d."Severity", d."AffectedInventoryJson"
                     FROM "DefectReports" d JOIN "RawMaterials" m ON m."SkuCode" = d."SkuCode"
                     WHERE (m."Id"::text = %s OR m."SkuCode" = %s)
                       AND d."Status" NOT IN ('Resolved', 'Closed') AND d."Severity" IN ('HIGH', 'High', 'Critical')
@@ -59,8 +61,9 @@ def _check_historical_material_quality_risk(mat_id: Any, mat_name: str = "") -> 
                 row = cursor.fetchone()
         if row:
             import json
-            rolls = json.loads(row[3] or "[]")
-            return {"material": row[0], "issue": row[1], "severity": row[2], "relatedRoll": rolls[0] if rolls else None}
+            rolls = json.loads(row[4] or "[]")
+            return {"defectId": str(row[0]), "material": row[1], "issue": row[2],
+                    "severity": row[3], "relatedRoll": rolls[0] if rolls else None}
     except Exception:
         if not settings.demo_mode:
             raise ValueError("Live defect verification is unavailable")
@@ -75,6 +78,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     """
     completed = list(state.get("completed_steps") or [])
     errors = list(state.get("errors") or [])
+    tool_results = dict(state.get("tool_results") or {})
 
     # ── Read purchasing & production outputs ────────────────────────────────────
     recommended_supplier = state.get("recommended_supplier") or {}
@@ -82,9 +86,11 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     net_deficit = float(state.get("net_deficit") or 0.0)
     recommended_qty = float(state.get("recommended_quantity") or state.get("required_quantity") or draft_po.get("quantity") or 0.0)
     estimated_total = float(state.get("estimated_total_cost") or state.get("total_cost") or draft_po.get("totalAmount") or draft_po.get("estimatedCostUsd") or 0.0)
-    budget_limit = float(state.get("budget_limit") or draft_po.get("budgetLimit") or 20000.0)
+    budget_limit = float(first_present(state.get("budget_limit"), draft_po.get("budgetLimit"), 20000.0 if settings.demo_mode else 0))
     budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
-    supplier_verification = state.get("supplier_verification") or recommended_supplier.get("verificationStatus") or "VERIFIED"
+    supplier_verification = state.get("supplier_verification") or recommended_supplier.get("verificationStatus") or "UNVERIFIED"
+    attempt = int(state.get("supplier_selection_attempt") or 1)
+    max_attempts = int(state.get("max_supplier_selection_attempts") or 3)
 
     prod_data = state.get("production_data", {})
     impact = prod_data.get("impact", {})
@@ -97,7 +103,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     purchasing_data = state.get("purchasing_data", {})
 
     # ── 1. Budget & Mathematical validation check ──────────────────────────────
-    budget_check_passed = (budget_limit <= 0 or estimated_total <= budget_limit)
+    budget_check_passed = budget_limit > 0 and estimated_total <= budget_limit
     budget_val = "PASSED" if budget_check_passed else "BUDGET_EXCEEDED"
     budget_check = "PASS" if budget_check_passed else "FAIL"
     rejection_reasons = []
@@ -212,7 +218,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     moq = float(recommended_supplier.get("moq") or recommended_supplier.get("minimumOrderQuantity") or 0.0)
     moq_check = "PASS" if recommended_qty >= moq else "FAIL"
     pack_size = float(recommended_supplier.get("packSize") or 1.0)
-    pack_size_check = "PASS" if pack_size <= 0 or (recommended_qty % pack_size == 0) else "WARNING"
+    pack_size_check = "PASS" if pack_size > 0 and abs(recommended_qty / pack_size - round(recommended_qty / pack_size)) < 1e-8 else "FAIL"
 
     # ── 4. Supplier verification check ────────────────────────────────────────
     if supplier_verification in ("VERIFIED", "APPROVED") and supplier_val == "PASSED":
@@ -240,6 +246,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                 "quality_data": quality_data,
             })
             quality_data = quality_state.get("quality_data", quality_data)
+            tool_results.update(quality_state.get("tool_results", {}))
             q_val = quality_data.get("validation", {})
             if q_val.get("valid") is False:
                 reason = q_val.get("reason", "Associated inventory is quarantined")
@@ -295,6 +302,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         existing_vr = {}
 
     manual_res_status = existing_vr.get("manualResolutionStatus")
+    previous_risk = existing_vr.get("historicalRisk") or {}
+    if quality_safety_status in ("QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"):
+        manual_res_status = "PENDING_REVIEW"
+        is_valid = False
+    elif (manual_res_status == "RESOLVED" and historical_risk and
+          previous_risk.get("defectId") != historical_risk.get("defectId")):
+        manual_res_status = "PENDING_REVIEW"
+        is_valid = False
     if not manual_res_status:
         if quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"] or not is_valid:
             manual_res_status = "PENDING_REVIEW"
@@ -305,6 +320,46 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         is_valid = False
         rejection_reasons.append(f"Manual QA Review Required: Historical quality risk detected on material '{historical_risk['material']}' (Related roll: {historical_risk['relatedRoll']} - {historical_risk['issue']}). Waiting for QA Inspector review.")
 
+    available = recommended_supplier.get("availableQuantity")
+    availability_check = "PASS" if available is not None and float(available) >= recommended_qty else "UNKNOWN"
+    if not settings.demo_mode and availability_check != "PASS":
+        is_valid = False
+        rejection_reasons.append("Supplier availability is missing or insufficient for the recommended quantity.")
+
+    # Independently confirm that Student 2 selected the best eligible quote from
+    # the complete comparison set it handed to the validation agent.
+    candidate_comparisons = [
+        candidate for candidate in (state.get("supplier_candidates") or [])
+        if isinstance(candidate, dict) and candidate.get("isValid") is True
+    ]
+    best_choice_check = "PASSED"
+    best_candidate = None
+    if candidate_comparisons:
+        best_candidate = min(
+            candidate_comparisons,
+            key=lambda candidate: (
+                float(candidate.get("totalCost") or float("inf")),
+                int(candidate.get("leadTimeDays") or 999),
+            ),
+        )
+        selected_identity = str(
+            recommended_supplier.get("supplierId") or recommended_supplier.get("supplierName") or ""
+        )
+        best_identity = str(best_candidate.get("supplierId") or best_candidate.get("supplierName") or "")
+        if not selected_identity or selected_identity != best_identity:
+            best_choice_check = "FAILED"
+            is_valid = False
+            rejection_reasons.append(
+                f"Selected supplier is not the best eligible database quote; {best_candidate.get('supplierName')} ranks first."
+            )
+    else:
+        best_choice_check = "NO_ELIGIBLE_COMPARISON"
+        is_valid = False
+        rejection_reasons.append("No eligible supplier remained in the complete quote comparison set.")
+
+    if quantity_check != "PASS" or moq_check != "PASS" or pack_size_check != "PASS" or supplier_check != "PASS":
+        is_valid = False
+        rejection_reasons.append("Quantity, MOQ, pack size and supplier verification must all pass before approval.")
     if budget_check == "FAIL" or quantity_check == "FAIL" or supplier_check == "FAIL" or not is_valid:
         overall_status = "FAILED"
     elif supplier_check == "WARNING" or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"]):
@@ -335,9 +390,42 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "packSizeCheck": pack_size_check,
         "supplierVerification": supplier_check,
         "qualityCheck": "PASS" if quality_safety_status in ("CLEAR", "PASSED") else "WARNING",
-        "availabilityCheck": "PASS",
+        "availabilityCheck": availability_check,
+        "bestChoiceCheck": best_choice_check,
+        "candidateComparisonCount": len(state.get("supplier_candidates") or []),
+        "attemptNumber": attempt,
+        "maxAttempts": max_attempts,
+        "checkedSupplier": {
+            "supplierId": recommended_supplier.get("supplierId"),
+            "supplierName": recommended_supplier.get("supplierName"),
+            "unitPrice": recommended_supplier.get("unitPrice"),
+            "availableQuantity": recommended_supplier.get("availableQuantity"),
+            "leadTimeDays": recommended_supplier.get("leadTimeDays"),
+            "totalCost": estimated_total,
+        },
         "overallStatus": overall_status,
     }
+
+    validation_passed = bool(validation_results["isValid"] and overall_status == "APPROVED")
+    validation_history = list(state.get("validation_history") or [])
+    validation_history.append({
+        "attemptNumber": attempt,
+        "maxAttempts": max_attempts,
+        "checkedAt": datetime.now(timezone.utc).isoformat(),
+        "decision": "APPROVED" if validation_passed else "REJECTED",
+        "supplier": validation_results["checkedSupplier"],
+        "checks": {
+            "supplierValidation": supplier_val,
+            "budgetCheck": budget_val,
+            "poMathematicalCheck": po_math_check,
+            "materialValidation": material_val,
+            "quantityCheck": quantity_check,
+            "availabilityCheck": availability_check,
+            "bestChoiceCheck": best_choice_check,
+            "qualitySafetyStatus": quality_safety_status,
+        },
+        "reason": validation_results["rejectionReason"] or validation_results["impactReason"],
+    })
 
     completed.append("Validation/Safety: Completed multi-point risk, financial, and quality safety assessment")
 
@@ -347,10 +435,69 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "current_agent": "Validation/Safety",
             "status": WorkflowStatus.Running,
             "validation_results": validation_results,
+            "validation_history": validation_history,
             "requires_approval": False,
             "completed_steps": completed,
             "errors": errors,
             "quality_data": quality_data,
+            "tool_results": tool_results,
+        }
+
+    # Failed automated validation returns control to the Supervisor, which asks
+    # Student 2 for another supplier. A fourth selection is never attempted.
+    if not validation_passed:
+        selected_id = recommended_supplier.get("supplierId")
+        excluded_supplier_ids = [
+            str(value) for value in (state.get("excluded_supplier_ids") or []) if value is not None
+        ]
+        if selected_id is not None and str(selected_id) not in excluded_supplier_ids:
+            excluded_supplier_ids.append(str(selected_id))
+
+        if attempt < max_attempts:
+            completed.append(
+                f"Supervisor: Validation rejected supplier attempt {attempt}/{max_attempts}; requesting a new Student 2 comparison"
+            )
+            return {
+                "current_agent": "Supervisor Agent",
+                "status": WorkflowStatus.Running,
+                "approval_status": ApprovalStatus.Pending,
+                "validation_results": validation_results,
+                "validation_history": validation_history,
+                "requires_approval": False,
+                "automatic_retry_required": True,
+                "excluded_supplier_ids": excluded_supplier_ids,
+                "draft_po": None,
+                "recommended_supplier": None,
+                "purchasing_data": {},
+                "completed_steps": completed,
+                "errors": errors,
+                "quality_data": quality_data,
+                "tool_results": tool_results,
+                "final_outcome": None,
+            }
+
+        completed.append(
+            f"Supervisor: Stopped after {max_attempts} rejected supplier validation attempts"
+        )
+        return {
+            "current_agent": "Supervisor Agent",
+            "status": WorkflowStatus.Failed,
+            "approval_status": ApprovalStatus.Pending,
+            "validation_results": validation_results,
+            "validation_history": validation_history,
+            "requires_approval": False,
+            "automatic_retry_required": False,
+            "excluded_supplier_ids": excluded_supplier_ids,
+            "completed_steps": completed,
+            "errors": errors + [
+                f"Quality validation rejected all {max_attempts} supplier selections."
+            ],
+            "quality_data": quality_data,
+            "tool_results": tool_results,
+            "final_outcome": (
+                f"Procurement workflow failed after {max_attempts} supplier validation attempts. "
+                "No payment approval was created. Review the validation ledger and supplier quote data."
+            ),
         }
 
     # ── Revision requested: re-enter purchasing with revision context ──────────
@@ -362,22 +509,27 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             "status": WorkflowStatus.WaitingForApproval,
             "approval_status": ApprovalStatus.Pending,
             "validation_results": validation_results,
+            "validation_history": validation_history,
             "requires_approval": True,
             "completed_steps": completed,
             "errors": errors,
             "quality_data": quality_data,
+            "tool_results": tool_results,
         }
 
     # ── Route to human approval (all procurement requires manager sign-off) ────
     return {
-        "current_agent": "Validation/Safety",
+        "current_agent": "Student 3 Quality Validation",
         "status": WorkflowStatus.WaitingForApproval,
         "approval_status": ApprovalStatus.Pending,
         "validation_results": validation_results,
+        "validation_history": validation_history,
         "requires_approval": True,
-        "completed_steps": completed + ["Waiting for Supply Chain Manager human approval"],
+        "automatic_retry_required": False,
+        "completed_steps": completed + ["Supervisor: Quality validation passed; waiting for Manager or IT Admin human approval"],
         "errors": errors,
         "quality_data": quality_data,
+        "tool_results": tool_results,
     }
 
 

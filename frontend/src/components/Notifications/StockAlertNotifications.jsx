@@ -1,3 +1,4 @@
+import useCurrentTime from '../../hooks/useCurrentTime';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -26,9 +27,9 @@ export default function StockAlertNotifications() {
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
+  const now = useCurrentTime();
   const [isOpen, setIsOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // Material Details Modal State
@@ -47,15 +48,15 @@ export default function StockAlertNotifications() {
         const unread = data.filter((a) => !a.isRead).length;
         setUnreadCount(unread > 0 ? unread : data.length > 0 ? data.length : 0);
       }
-    } catch (err) {
+    } catch {
       // Fallback if backend empty or errored
     }
   };
 
   useEffect(() => {
-    fetchAlerts();
+    const initialLoad = setTimeout(fetchAlerts, 0);
     const interval = setInterval(fetchAlerts, 15000);
-    return () => clearInterval(interval);
+    return () => { clearTimeout(initialLoad); clearInterval(interval); };
   }, []);
 
   // Close dropdown on outside click
@@ -116,7 +117,7 @@ export default function StockAlertNotifications() {
         );
         setUnreadCount((c) => Math.max(0, c - 1));
       }
-    } catch (err) {
+    } catch {
       // silent
     } finally {
       setModalDetailsLoading(false);
@@ -129,8 +130,9 @@ export default function StockAlertNotifications() {
     setIsOpen(false);
     setSelectedAlert(null);
 
-    const matId = alert.materialId || (materialInfo ? materialInfo.id : 1);
-    const matName = alert.materialName || alert.sku || 'Raw Material';
+    const matId = alert.materialId || materialInfo?.id;
+    const matName = alert.materialName || alert.sku;
+    if (!matId || !matName) return;
     const deficit = alert.netDeficit || alert.shortage || alert.quantityRequested || 50;
 
     navigate(
@@ -168,8 +170,8 @@ export default function StockAlertNotifications() {
   };
 
   const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
-    const diffMs = Date.now() - new Date(timestamp).getTime();
+    if (!timestamp) return 'Time not recorded';
+    const diffMs = now - new Date(timestamp).getTime();
     const diffMins = Math.floor(diffMs / 60000);
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
@@ -223,10 +225,10 @@ export default function StockAlertNotifications() {
             ) : (
               alerts.map((alert) => {
                 const priority = alert.priority || alert.severity || 'HIGH';
-                const materialName = alert.materialName || alert.sku || 'Arduino UNO R3';
-                const shortage = alert.netDeficit || alert.shortage || alert.quantityRequested || 32;
-                const currentStock = alert.currentStock !== undefined ? alert.currentStock : 18;
-                const requiredStock = alert.requiredQuantity !== undefined ? alert.requiredQuantity : 50;
+                const materialName = alert.materialName || alert.sku || 'Unknown material';
+                const shortage = alert.netDeficit ?? alert.shortage ?? alert.quantityRequested;
+                const currentStock = alert.currentStock;
+                const requiredStock = alert.requiredQuantity;
 
                 return (
                   <div
@@ -410,7 +412,7 @@ export default function StockAlertNotifications() {
                       Deterministic Net Deficit
                     </span>
                     <div className="text-lg font-black text-rose-300 font-mono mt-0.5">
-                      Shortage: -{selectedAlert.netDeficit || selectedAlert.shortage || selectedAlert.quantityRequested || 32} units
+                      Shortage: {selectedAlert.netDeficit ?? selectedAlert.shortage ?? selectedAlert.quantityRequested ?? 'Not recorded'} units
                     </div>
                     <span className="text-[10px] text-slate-400 block mt-1">
                       Formula: (Required + Safety) - (Current + Open POs)

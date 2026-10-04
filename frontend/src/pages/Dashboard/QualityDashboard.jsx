@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   AlertCircle,
@@ -29,7 +29,6 @@ import StatusBadge from '../../components/QA/StatusBadge';
 import SeverityBadge from '../../components/QA/SeverityBadge';
 
 export default function QualityDashboard() {
-  const navigate = useNavigate();
   const [summary, setSummary] = useState({
     totalDefects: 0,
     highSeverityDefects: 0,
@@ -74,8 +73,8 @@ export default function QualityDashboard() {
   };
 
   useEffect(() => {
-    setLoading(true);
-    loadAllTelemetry();
+    const initialLoad = setTimeout(loadAllTelemetry, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const handleRefresh = () => {

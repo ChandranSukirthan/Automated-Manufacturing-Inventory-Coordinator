@@ -95,6 +95,19 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var dto = MapToDto(po);
 
+            var materialIds = dto.OrderLines.Select(line => line.RawMaterialId).Distinct().ToList();
+            var currentStockByMaterial = await _context.InventoryItems
+                .AsNoTracking()
+                .Where(item => item.RawMaterialId.HasValue && materialIds.Contains(item.RawMaterialId.Value))
+                .GroupBy(item => item.RawMaterialId!.Value)
+                .Select(group => new { RawMaterialId = group.Key, CurrentStock = group.Sum(item => item.StockLevel) })
+                .ToDictionaryAsync(row => row.RawMaterialId, row => (decimal)row.CurrentStock);
+
+            foreach (var line in dto.OrderLines)
+            {
+                line.CurrentStock = currentStockByMaterial.GetValueOrDefault(line.RawMaterialId, 0m);
+            }
+
             // Enrich with QA Validation / AgentWorkflow data
             try
             {
@@ -1065,7 +1078,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             }
             else
             {
-                var materialIds = po.OrderLines.Select(l => l.RawMaterialId).Distinct().ToList();
+                var materialIds = (po.OrderLines ?? new List<OrderLine>()).Select(l => l.RawMaterialId).Distinct().ToList();
                 var materials = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id)).ToListAsync();
                 var skus = materials.Select(m => m.SkuCode).ToList();
                 var report = await _context.DefectReports.Where(d => skus.Contains(d.SkuCode) &&
@@ -1074,6 +1087,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 if (report != null)
                 {
                     historicalRisk = new Dictionary<string, object?> {
+                        ["defectId"] = report.Id,
                         ["material"] = materials.First(m => m.SkuCode == report.SkuCode).Name,
                         ["relatedRoll"] = JsonSerializer.Deserialize<List<string>>(report.AffectedInventoryJson)?.FirstOrDefault(),
                         ["issue"] = report.Description, ["severity"] = report.Severity.ToString() };
@@ -1124,6 +1138,16 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                             qualitySafetyStatus = "QUARANTINE_ACTIVE";
                             isValid = false;
                             rejectionReason ??= $"{quarantinedRollsCount} inventory roll(s) currently held in quarantine. Quality inspection required.";
+                        }
+                        else if (historicalRisk != null &&
+                            (!root.TryGetProperty("historicalRisk", out var previousRisk) ||
+                             previousRisk.ValueKind != JsonValueKind.Object ||
+                             !previousRisk.TryGetProperty("defectId", out var previousDefect) ||
+                             previousDefect.GetString() != historicalRisk["defectId"]?.ToString()))
+                        {
+                            manualResolutionStatus = "PENDING_REVIEW";
+                            qualitySafetyStatus = "MANUAL_REVIEW_REQUIRED";
+                            isValid = false;
                         }
                         else
                         {
@@ -1200,12 +1224,20 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             {
                 existingWf.ValidationResults = json;
                 existingWf.CurrentAgent = "Validation/Safety";
-                if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
+                if (po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed)
                 {
                     existingWf.Status = WorkflowStatus.Completed;
                     existingWf.ApprovalStatus = ApprovalStatus.Approved;
                     existingWf.CompletedAt = DateTime.UtcNow;
                     existingWf.FinalOutcome = $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})";
+                }
+                else if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.InTransit)
+                {
+                    existingWf.Status = WorkflowStatus.Running;
+                    existingWf.ApprovalStatus = ApprovalStatus.Approved;
+                    existingWf.CompletedAt = null;
+                    existingWf.CurrentAgent = "Goods Receipt";
+                    existingWf.FinalOutcome = $"PO {po.PoNumber} dispatched; awaiting recorded goods receipts.";
                 }
                 else if (po.Status == PurchaseOrderStatus.Rejected)
                 {
@@ -1238,6 +1270,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 var newWf = new AgentWorkflow
                 {
                     Id = Guid.NewGuid(),
+                    PurchaseOrderId = po.Id,
+                    WorkflowType = "Procurement",
                     WorkflowId = workflowId,
                     Objective = $"Autonomous validation & procurement safety assessment for PO {po.PoNumber}",
                     CurrentAgent = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? "Execution" : "Validation/Safety",
@@ -1248,6 +1282,14 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     FinalOutcome = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
                     ValidationResults = json
                 };
+                if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.InTransit)
+                {
+                    newWf.Status = WorkflowStatus.Running;
+                    newWf.ApprovalStatus = ApprovalStatus.Approved;
+                    newWf.CompletedAt = null;
+                    newWf.CurrentAgent = "Goods Receipt";
+                    newWf.FinalOutcome = $"PO {po.PoNumber} dispatched; awaiting recorded goods receipts.";
+                }
                 _context.AgentWorkflows.Add(newWf);
                 try
                 {
@@ -1718,6 +1760,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             PoNumber = po.PoNumber,
             SupplierId = po.SupplierId,
             SupplierName = po.Supplier?.Name ?? string.Empty,
+            SupplierCode = po.Supplier?.SupplierCode ?? string.Empty,
+            SupplierContactEmail = po.Supplier?.ContactEmail ?? string.Empty,
+            SupplierContactPhone = po.Supplier?.ContactPhone ?? string.Empty,
+            SupplierAddress = po.Supplier?.Address ?? string.Empty,
+            SupplierPaymentTerms = po.Supplier?.PaymentTerms ?? string.Empty,
+            SupplierLeadTimeDays = po.Supplier?.LeadTimeDays ?? 0,
             Status = po.Status.ToString(),
             Currency = po.Currency,
             TotalCost = po.TotalCost,

@@ -148,7 +148,7 @@ def _query_has_quarantined_inventory(
     with connection.cursor() as cursor:
         cursor.execute(
             'SELECT 1 FROM "InventoryRolls" '
-            'WHERE "Id" = ANY(%s) AND UPPER("Status") = %s LIMIT 1',
+            'WHERE "RollIdentifier" = ANY(%s) AND UPPER("Status") = %s LIMIT 1',
             (inventory_ids, "QUARANTINED"),
         )
         return cursor.fetchone() is not None

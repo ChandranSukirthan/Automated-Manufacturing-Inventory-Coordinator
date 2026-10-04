@@ -63,7 +63,8 @@ export default function DefectReportsPage() {
   };
 
   useEffect(() => {
-    loadDefects();
+    const initialLoad = setTimeout(loadDefects, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const inventoryFor = (defect) => {
@@ -75,8 +76,8 @@ export default function DefectReportsPage() {
 
   const inventoryRollFor = (defect) => {
     const rollId = inventoryFor(defect)[0];
-    const roll = inventoryRolls.find((item) => item.id === rollId);
-    return roll?.rollIdentifier || roll?.id || defect.skuCode || 'Unavailable';
+    const roll = inventoryRolls.find((item) => item.rollIdentifier === rollId);
+    return roll?.rollIdentifier || rollId || 'Unavailable';
   };
 
   // Metrics

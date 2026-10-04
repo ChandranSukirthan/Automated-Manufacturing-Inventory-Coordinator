@@ -44,6 +44,10 @@ def _select_plan(objective: str, state: AgentState) -> List[str]:
     Procurement plan is used when a net_deficit or procurement_requirement is present,
     or when the objective contains procurement-related keywords.
     """
+    if state.get("workflow_type") == "Maintenance":
+        return MAINTENANCE_PLAN
+    if state.get("workflow_type") == "Procurement":
+        return PROCUREMENT_PLAN
     # Authoritative: if ASP.NET sent a net_deficit, this is a procurement workflow
     if state.get("net_deficit") is not None or state.get("procurement_requirement"):
         return PROCUREMENT_PLAN
@@ -93,19 +97,6 @@ def planner_node(state: AgentState) -> Dict[str, Any]:
     _promote("preferred_region", "preferredRegion", "preferred_region")
     _promote("required_by_date", "requiredByDate", "required_by_date")
     _promote("specification", "requiredSpecification", "specification")
-
-    # If material_name was not provided, infer from objective
-    if not updates.get("material_name") and not state.get("material_name"):
-        obj_lower = objective.lower()
-        if "boxpouch" in obj_lower or "film" in obj_lower:
-            updates["material_name"] = "BoxPouch Film"
-            updates["specification"] = "BP-FILM-001"
-        elif "copper" in obj_lower:
-            updates["material_name"] = "Copper Wire"
-            updates["specification"] = "CW-100"
-        elif "arduino" in obj_lower:
-            updates["material_name"] = "Arduino UNO R3"
-            updates["specification"] = "MCU-UNO-R3"
 
     completed = list(state.get("completed_steps") or [])
     completed.append("Planner: Generated structured execution plan")

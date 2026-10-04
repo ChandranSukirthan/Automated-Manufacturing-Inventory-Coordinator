@@ -16,7 +16,8 @@ import {
   X, 
   ChevronRight,
   User as UserIcon,
-  Factory
+  Factory,
+  CreditCard
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import adminService from '../../services/adminService';
@@ -77,6 +78,7 @@ export default function AdminLayout({ children, title, subtitle }) {
         { label: 'Role Management', path: '/admin/roles', icon: ShieldCheck },
         { label: 'Audit Logs', path: '/admin/audit-logs', icon: FileText },
         { label: 'AI Workflows', path: '/admin/agent-workflows', icon: Bot },
+        { label: 'Payment Approvals', path: '/ai-approvals', icon: CreditCard },
         { label: 'System Health', path: '/admin/system-health', icon: Activity },
       ]
     }
@@ -99,12 +101,6 @@ export default function AdminLayout({ children, title, subtitle }) {
       default:
         return role || 'User';
     }
-    const s = String(role ?? '').toLowerCase().trim();
-    if (s === '0' || s === 'floorworker') return '';
-    if (s === '1' || s === 'supplychainmanager') return 'Supply Chain Mgr';
-    if (s === '2' || s === 'qualityinspector') return 'Quality Inspector';
-    if (s === '3' || s === 'itadmin') return 'IT Admin';
-    return '';
   };
 
   return (

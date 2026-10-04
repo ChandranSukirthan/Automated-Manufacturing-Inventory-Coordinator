@@ -69,7 +69,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("ai-validation/{workflowId}/resolve")]
-        [Authorize(Roles = "QualityInspector,ITAdmin")]
+        [Authorize(Roles = "QualityInspector")]
         public async Task<IActionResult> ResolveWorkflow(string workflowId, [FromBody] ResolveValidationRequestDto dto, CancellationToken cancellationToken)
         {
             var wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == workflowId, cancellationToken);
@@ -175,8 +175,10 @@ namespace ManufacturingCoordinator.Api.Controllers
 
             // Sync with PurchaseOrder entity if found
             PurchaseOrder? linkedPo = null;
+            if (wf.PurchaseOrderId.HasValue)
+                linkedPo = await _context.PurchaseOrders.FirstOrDefaultAsync(p => p.Id == wf.PurchaseOrderId, cancellationToken);
             var poNumMatch = Regex.Match(wf.WorkflowId, @"(PO-\d{4}-\d+)");
-            if (poNumMatch.Success)
+            if (linkedPo == null && poNumMatch.Success)
             {
                 linkedPo = await _context.PurchaseOrders.FirstOrDefaultAsync(p => p.PoNumber == poNumMatch.Value, cancellationToken);
             }
@@ -203,13 +205,8 @@ namespace ManufacturingCoordinator.Api.Controllers
             // Release active quarantines ONLY if explicitly requested and decision was Clear
             if (dto.ReleaseQuarantine && resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")
             {
-                // Only an explicitly linked order or structured roll ID can select holds.
-                var materialIds = linkedPo == null ? new List<int>() : await _context.OrderLines
-                    .Where(l => l.PurchaseOrderId == linkedPo.Id).Select(l => l.RawMaterialId).ToListAsync(cancellationToken);
-                var skus = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id))
-                    .Select(m => m.SkuCode).ToListAsync(cancellationToken);
-                var rollIds = await _context.StockRolls.Where(r => materialIds.Contains(r.RawMaterialId))
-                    .Select(r => r.RollIdentifier).ToListAsync(cancellationToken);
+                // A material link permits safety checks, never a bulk release of every roll.
+                var rollIds = new List<string>();
                 if (resultsDict.TryGetValue("historicalRisk", out var history) && history != null)
                 {
                     using var historyDoc = JsonDocument.Parse(history.ToString()!);
@@ -218,14 +215,36 @@ namespace ManufacturingCoordinator.Api.Controllers
                 }
                 var holds = await _context.Quarantines.Include(q => q.DefectReport)
                     .Where(q => q.Status == QuarantineStatus.Active).ToListAsync(cancellationToken);
-                var relevant = holds.Where(q => rollIds.Contains(q.InventoryRollId) ||
-                    (q.DefectReport != null && skus.Contains(q.DefectReport.SkuCode))).ToList();
+                var relevant = holds.Where(q => rollIds.Contains(q.InventoryRollId)).ToList();
                 if (relevant.Count == 0)
                     return Conflict(new { message = "No explicitly linked active quarantine was found. Release the specific quarantine from its details page." });
                 var quarantineService = new ManufacturingCoordinator.Api.Services.QuarantineService(_context);
                 foreach (var hold in relevant)
                     await quarantineService.ReleaseAsync(hold.Id, dto.Note, userName);
             }
+
+            if (resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED")
+            {
+                var materialIds = linkedPo == null ? new List<int>() : await _context.OrderLines
+                    .Where(l => l.PurchaseOrderId == linkedPo.Id).Select(l => l.RawMaterialId).ToListAsync(cancellationToken);
+                var rollIds = await _context.StockRolls.Where(r => materialIds.Contains(r.RawMaterialId))
+                    .Select(r => r.RollIdentifier).ToListAsync(cancellationToken);
+                var skus = await _context.RawMaterials.Where(m => materialIds.Contains(m.Id))
+                    .Select(m => m.SkuCode).ToListAsync(cancellationToken);
+                if (resultsDict.TryGetValue("historicalRisk", out var risk) && risk != null)
+                {
+                    using var historyDoc = JsonDocument.Parse(risk.ToString()!);
+                    if (historyDoc.RootElement.TryGetProperty("relatedRoll", out var roll) && roll.ValueKind == JsonValueKind.String)
+                        rollIds.Add(roll.GetString()!);
+                }
+                var remaining = await _context.Quarantines.CountAsync(q => q.Status == QuarantineStatus.Active &&
+                    (rollIds.Contains(q.InventoryRollId) || skus.Contains(q.DefectReport.SkuCode)), cancellationToken);
+                resultsDict["quarantinedRollsCount"] = remaining;
+                resultsDict["qualitySafetyStatus"] = remaining > 0 ? "QUARANTINE_ACTIVE" : "CLEAR";
+                resultsDict["isValid"] = allFourChecksPassed && remaining == 0;
+                if (remaining > 0) resultsDict["rejectionReason"] = "Active quarantine remains. Release the specific held rolls after inspection.";
+            }
+            wf.ValidationResults = JsonSerializer.Serialize(resultsDict);
 
             await _context.SaveChangesAsync(cancellationToken);
 
@@ -248,6 +267,11 @@ namespace ManufacturingCoordinator.Api.Controllers
             string? resolvedAt = null;
             bool? isValid = null;
             object? historicalRisk = null;
+            object? checkedSupplier = null;
+            object? validationHistory = null;
+            string? bestChoiceCheck = null;
+            int? attemptNumber = null;
+            int? maxAttempts = null;
 
             if (!string.IsNullOrWhiteSpace(wf.ValidationResults))
             {
@@ -268,10 +292,21 @@ namespace ManufacturingCoordinator.Api.Controllers
                     manualResolutionNote   = GetString(root, "manualResolutionNote");
                     resolvedBy             = GetString(root, "resolvedBy");
                     resolvedAt             = GetString(root, "resolvedAt");
+                    bestChoiceCheck        = GetString(root, "bestChoiceCheck");
+                    attemptNumber          = GetInt32(root, "attemptNumber");
+                    maxAttempts            = GetInt32(root, "maxAttempts");
 
                     if (root.TryGetProperty("historicalRisk", out var hrElem) && hrElem.ValueKind == JsonValueKind.Object)
                     {
                         historicalRisk = JsonSerializer.Deserialize<object>(hrElem.GetRawText());
+                    }
+                    if (root.TryGetProperty("checkedSupplier", out var supplierElem) && supplierElem.ValueKind == JsonValueKind.Object)
+                    {
+                        checkedSupplier = JsonSerializer.Deserialize<object>(supplierElem.GetRawText());
+                    }
+                    if (root.TryGetProperty("validationHistory", out var historyElem) && historyElem.ValueKind == JsonValueKind.Array)
+                    {
+                        validationHistory = JsonSerializer.Deserialize<object>(historyElem.GetRawText());
                     }
                 }
                 catch
@@ -330,6 +365,11 @@ namespace ManufacturingCoordinator.Api.Controllers
                 resolvedBy             = resolvedBy,
                 resolvedAt             = resolvedAt,
                 historicalRisk         = historicalRisk,
+                checkedSupplier        = checkedSupplier,
+                validationHistory      = validationHistory,
+                bestChoiceCheck        = bestChoiceCheck,
+                attemptNumber          = attemptNumber,
+                maxAttempts            = maxAttempts,
                 startedAt              = wf.StartedAt.ToString("o"),
                 completedAt            = wf.CompletedAt?.ToString("o"),
                 assessedAt             = assessedTime

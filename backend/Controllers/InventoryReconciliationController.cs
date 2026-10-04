@@ -19,6 +19,8 @@ public sealed class InventoryReconciliationController(ApplicationDbContext db) :
         var holds = await db.Quarantines.AsNoTracking().Where(q => q.Status == ManufacturingCoordinator.Enums.QuarantineStatus.Active).ToListAsync();
         var identifiers = physical.Select(r => r.RollIdentifier).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return Ok(new {
+            unmappedCatalogueMaterials = materials.Where(m => m.PackagingTypeId == -1 || string.IsNullOrWhiteSpace(m.MaterialCode))
+                .Select(m => new { m.Id, m.SkuCode, m.Name, m.PackagingTypeId }),
             unmatchedQualityRolls = qa.Where(r => !identifiers.Contains(r.Id)).Select(r => new { r.Id, r.BatchId }),
             unmatchedActiveQuarantines = holds.Where(q => !identifiers.Contains(q.InventoryRollId)).Select(q => new { q.Id, q.InventoryRollId, q.DefectReportId }),
             missingBatchIdentity = physical.Where(r => string.IsNullOrWhiteSpace(r.BatchId)).Select(r => new { r.Id, r.RollIdentifier, r.RawMaterialId }),

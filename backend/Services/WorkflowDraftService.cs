@@ -16,6 +16,13 @@ public sealed class WorkflowDraftService(ApplicationDbContext db)
         if (workflow.Status != WorkflowStatus.WaitingForApproval || string.IsNullOrWhiteSpace(workflow.StateJson)) return null;
         using var document = JsonDocument.Parse(workflow.StateJson);
         var state = document.RootElement;
+        var requestId = state.TryGetProperty("procurement_request_id", out var requestValue) && requestValue.ValueKind == JsonValueKind.Number && requestValue.TryGetInt32(out var parsedRequestId)
+            ? (int?)parsedRequestId : null;
+        if (requestId.HasValue)
+        {
+            var prior = await db.PurchaseOrders.SingleOrDefaultAsync(p => p.ProcurementRequestId == requestId);
+            if (prior != null) { workflow.PurchaseOrderId = prior.Id; await db.SaveChangesAsync(); return prior.Id; }
+        }
         if (!state.TryGetProperty("draft_po", out var draft) || draft.ValueKind != JsonValueKind.Object) return null;
         if (!state.TryGetProperty("validation_results", out var validation) ||
             !validation.TryGetProperty("isValid", out var valid) || valid.ValueKind != JsonValueKind.True) return null;
@@ -31,10 +38,11 @@ public sealed class WorkflowDraftService(ApplicationDbContext db)
         if (quantity <= 0 || price <= 0 || budget <= 0 || quantity * price > budget)
             throw new InvalidOperationException("A positive quantity, price and authorized budget are required.");
         // This PO number is deterministic per durable workflow, so retries cannot create another order.
-        var number = $"PO-{DateTime.UtcNow:yyyy}-{workflow.Id:N}";
+        var number = $"PO-{workflow.StartedAt:yyyy}-{workflow.Id:N}";
         var existing = await db.PurchaseOrders.SingleOrDefaultAsync(p => p.PoNumber == number);
         if (existing != null) { workflow.PurchaseOrderId = existing.Id; await db.SaveChangesAsync(); return existing.Id; }
         var po = new PurchaseOrder { PoNumber = number, SupplierId = supplier.Id, BudgetLimit = budget,
+            ProcurementRequestId = requestId,
             Currency = draft.TryGetProperty("currency", out var currency) ? currency.GetString() ?? "USD" : "USD",
             Status = PurchaseOrderStatus.PendingApproval, RequiresApproval = true,
             TotalCost = Math.Round(quantity * price, 2), Notes = $"[AI workflow] {workflow.WorkflowId}" };

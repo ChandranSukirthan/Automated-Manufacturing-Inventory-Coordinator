@@ -928,6 +928,9 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.HasIndex("SupplierId");
 
                     b.ToTable("PurchaseOrders");
+                    b.HasIndex("ProcurementRequestId").IsUnique()
+                        .HasFilter("\"ProcurementRequestId\" IS NOT NULL")
+                        .HasDatabaseName("UX_PurchaseOrders_ProcurementRequestId");
                 });
 
             modelBuilder.Entity("ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrderApproval", b =>

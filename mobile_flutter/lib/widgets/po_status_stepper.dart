@@ -19,7 +19,7 @@ class POStatusStepper extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1B2B),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,9 +38,9 @@ class POStatusStepper extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF5CC8F8).withOpacity(0.15),
+                  color: const Color(0xFF5CC8F8).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF5CC8F8).withOpacity(0.3)),
+                  border: Border.all(color: const Color(0xFF5CC8F8).withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   'Step ${currentIdx + 1} of ${steps.length}',
@@ -93,7 +93,7 @@ class POStatusStepper extends StatelessWidget {
                           width: 2,
                           height: 28,
                           color: isCompleted
-                              ? const Color(0xFF10B981).withOpacity(0.6)
+                              ? const Color(0xFF10B981).withValues(alpha: 0.6)
                               : Colors.white12,
                         ),
                     ],
@@ -125,7 +125,7 @@ class POStatusStepper extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF5CC8F8).withOpacity(0.2),
+                                    color: const Color(0xFF5CC8F8).withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: const Text(
