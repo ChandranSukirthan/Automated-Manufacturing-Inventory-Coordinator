@@ -162,22 +162,16 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll", policy =>
     {
         policy
-            .SetIsOriginAllowed(origin =>
-                (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:8081" }).Contains(origin) ||
-                (builder.Environment.IsDevelopment() && Uri.TryCreate(origin, UriKind.Absolute, out var parsedOrigin) && (parsedOrigin.Host == "localhost" || parsedOrigin.Host == "127.0.0.1")))
+            .AllowAnyOrigin()
             .AllowAnyHeader()
-            .AllowAnyMethod()
-            ;
+            .AllowAnyMethod();
     });
     options.AddPolicy("ReactFrontend", policy =>
     {
         policy
-            .SetIsOriginAllowed(origin =>
-                (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:8081" }).Contains(origin) ||
-                (builder.Environment.IsDevelopment() && Uri.TryCreate(origin, UriKind.Absolute, out var parsedOrigin) && (parsedOrigin.Host == "localhost" || parsedOrigin.Host == "127.0.0.1")))
+            .AllowAnyOrigin()
             .AllowAnyHeader()
-            .AllowAnyMethod()
-            ;
+            .AllowAnyMethod();
     });
 });
 
