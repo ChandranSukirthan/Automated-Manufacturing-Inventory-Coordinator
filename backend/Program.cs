@@ -184,14 +184,12 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Swagger UI
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Automated Manufacturing Inventory API v1");
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Automated Manufacturing Inventory API v1");
+    c.RoutePrefix = "swagger";
+});
 
 // Schema updates and demo seeding are explicit deployment choices.
 if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
@@ -237,6 +235,14 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/", () => Results.Ok(new
+{
+    status = "online",
+    service = "Automated Manufacturing Inventory Coordinator API",
+    version = "v1",
+    docs = "/swagger"
+}));
 
 app.MapControllers();
 

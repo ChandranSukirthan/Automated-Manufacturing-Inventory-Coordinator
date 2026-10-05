@@ -272,6 +272,16 @@ app.add_middleware(
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
+@app.get("/")
+def read_root():
+    return {
+        "status": "online",
+        "service": "AMIC AI Multi-Agent Service",
+        "message": "AI Multi-Agent Service is running successfully",
+        "version": "2.0.0",
+        "docs": "/docs"
+    }
+
 app.include_router(quality_router)   # POST /quality/recommendation   (Student 3)
 app.include_router(workflow_router)  # /api/workflows/*                (Student 4)
 app.include_router(tools_router)     # /api/tools/*                    (Student 4)
