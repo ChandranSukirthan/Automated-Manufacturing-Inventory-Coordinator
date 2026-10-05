@@ -1,10 +1,14 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/auth_models.dart';
 
 class SessionStorage {
+  SessionStorage({FlutterSecureStorage? secureStorage})
+      : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage;
   static const _sessionKey = 'auth_session';
   static const _ownedRollsKey = 'owned_rolls_by_user';
   static const _ownedItemsKey = 'owned_items_by_user';
@@ -12,9 +16,9 @@ class SessionStorage {
 
   Future<void> save(AuthSession session) async {
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(
-      _sessionKey,
-      jsonEncode({
+    await _secureStorage.write(
+      key: _sessionKey,
+      value: jsonEncode({
         'accessToken': session.accessToken,
         'refreshToken': session.refreshToken,
         'user': {
@@ -26,11 +30,25 @@ class SessionStorage {
         },
       }),
     );
+    await preferences.remove(_sessionKey);
   }
 
   Future<AuthSession?> read() async {
     final preferences = await SharedPreferences.getInstance();
-    final value = preferences.getString(_sessionKey);
+    var value = await _secureStorage.read(key: _sessionKey);
+    final legacy = preferences.getString(_sessionKey);
+    if (value == null && legacy != null) {
+      // Validate before migration; retain legacy only if secure write fails.
+      try {
+        AuthSession.fromJson(jsonDecode(legacy) as Map<String, dynamic>);
+      } catch (_) {
+        await preferences.remove(_sessionKey);
+        return null;
+      }
+      await _secureStorage.write(key: _sessionKey, value: legacy);
+      value = legacy;
+    }
+    if (legacy != null) await preferences.remove(_sessionKey);
     if (value == null) return null;
     try {
       return AuthSession.fromJson(jsonDecode(value) as Map<String, dynamic>);
@@ -41,6 +59,7 @@ class SessionStorage {
   }
 
   Future<void> clear() async {
+    await _secureStorage.delete(key: _sessionKey);
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove(_sessionKey);
   }

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ai.schemas.tool_contracts import QuarantineRecommendation, checked_output
 
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Protocol
@@ -69,23 +70,29 @@ def check_related_inventory(
         from ai.core.config import settings
         from psycopg import connect
 
-        with connect(settings.database_url) as owned_connection:
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
             return _check_related_inventory(normalized_batch_id, owned_connection)
     return _check_related_inventory(normalized_batch_id, connection)
 
 
+@checked_output(QuarantineRecommendation)
 def recommend_quarantine(
     defect: Mapping[str, Any],
     connection: Connection[Any] | None = None,
     related_inventory: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine defect and inventory facts into a read-only recommendation."""
+    if connection is None and related_inventory is None:
+        from ai.core.config import settings
+        from psycopg import connect
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
+            return recommend_quarantine(defect, owned_connection)
     context = analyze_defect_context(defect, connection)
     inventory = related_inventory or _inventory_for_defect(defect, context, connection)
     if not context["batchId"]:
         context["batchId"] = inventory["batchId"]
         if connection is not None and context["severity"].upper() == "MEDIUM":
-            context["quarantineRequired"] = _has_previous_severe_defect(connection, context["batchId"]) or _contains_serious_term(str(defect.get("description", "")))
+            context["quarantineRequired"] = any(_has_previous_severe_defect(connection, batch) for batch in (inventory.get("batchIds") or [context["batchId"]])) or _contains_serious_term(str(defect.get("description", "")))
     result = {
         "batchId": context["batchId"],
         "quarantineRequired": context["quarantineRequired"],
@@ -123,7 +130,7 @@ def _inventory_by_sku(
         from ai.core.config import settings
         from psycopg import connect
 
-        with connect(settings.database_url) as owned_connection:
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
             return _query_inventory_by_sku(sku_code, selected_inventory, owned_connection)
     return _query_inventory_by_sku(sku_code, selected_inventory, connection)
 

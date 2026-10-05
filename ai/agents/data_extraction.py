@@ -120,7 +120,7 @@ def data_extraction_node(state: AgentState) -> Dict[str, Any]:
                 dbname=settings.DB_NAME,
                 user=settings.DB_USER,
                 password=settings.DB_PASSWORD,
-                connect_timeout=2
+                connect_timeout=2, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
             ) as conn:
                 with conn.cursor() as cur:
                     cur.execute('SELECT "Name" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s', (material_id.upper(),))

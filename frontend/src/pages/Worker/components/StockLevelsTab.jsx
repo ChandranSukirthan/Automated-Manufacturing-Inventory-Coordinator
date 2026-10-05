@@ -127,7 +127,7 @@ export default function StockLevelsTab({
 
   return (
     <div className="space-y-4 tab-slide-in">
-      <div className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
+      <div className="worker-table-scroll border border-slate-800 rounded-2xl bg-slate-900/60 overflow-x-auto">
         <div className="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <h3 className="text-base font-bold text-white">Stock Levels & Daily Burn Rate</h3>

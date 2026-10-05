@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -569,7 +570,7 @@ export default function PurchaseOrderList() {
 
       {/* Create Purchase Order Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl p-6 space-y-4 my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
@@ -789,7 +790,7 @@ export default function PurchaseOrderList() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

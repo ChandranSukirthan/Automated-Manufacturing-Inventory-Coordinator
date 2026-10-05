@@ -1,27 +1,27 @@
 import React from 'react';
 import { Package, RefreshCw, LogOut } from 'lucide-react';
 
-export default function WorkerHeader({ user, loading, onRefresh, onLogout }) {
+export default function WorkerHeader({ user, loading, onRefresh, onLogout, title = 'Floor Worker Console', subtitle = 'Inventory Tracking • Barcode Scanning • Stock Logistics' }) {
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
       {/* Gradient accent bar */}
       <div className="h-0.5 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500" />
 
-      <div className="px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold shadow-lg shadow-cyan-500/5">
+      <div className="worker-header-inner mx-auto max-w-7xl px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 shrink-0 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold shadow-lg shadow-cyan-500/5">
             <Package className="w-5 h-5" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white">Floor Worker Console</h1>
-            <p className="text-xs text-slate-400">
-              Inventory Tracking • Barcode Scanning • Stock Logistics
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold tracking-tight text-white break-words">{title}</h1>
+            <p className="hidden sm:block text-xs text-slate-400">
+              {subtitle}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <button
+        <div className="worker-header-actions flex items-center gap-3">
+          {onRefresh && <button
             onClick={onRefresh}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition group"
@@ -29,13 +29,12 @@ export default function WorkerHeader({ user, loading, onRefresh, onLogout }) {
           >
             <RefreshCw className={`w-3.5 h-3.5 transition-transform ${loading ? 'animate-spin text-cyan-400' : 'group-hover:rotate-45'}`} />
             Refresh
-          </button>
+          </button>}
 
           <div className="flex items-center gap-2 pl-3 border-l border-slate-800">
             <div className="text-right">
               <div className="text-xs font-semibold text-slate-200">{user?.fullName || 'Floor Worker'}</div>
               <div className="text-[10px] text-cyan-400 font-mono uppercase tracking-wider">Floor Worker</div>
-              <div className="text-xs font-semibold text-slate-200">{user?.fullName || 'User'}</div>
             </div>
             <button
               onClick={onLogout}

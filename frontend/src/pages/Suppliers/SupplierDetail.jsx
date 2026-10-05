@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
@@ -345,7 +346,7 @@ export default function SupplierDetail() {
 
       {/* Edit Supplier Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="text-lg font-bold text-white">Edit Supplier — {supplier.name}</h3>
 
@@ -440,7 +441,7 @@ export default function SupplierDetail() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

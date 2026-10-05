@@ -43,6 +43,22 @@ class FakePurchaseOrderService extends PurchaseOrderService {
 }
 
 void main() {
+  testWidgets('embedded procurement keeps one shell app bar and a refresh control', (tester) async {
+    final service = FakePurchaseOrderService();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('AI Sourcing Hub')),
+        body: ProcurementDetailsScreen(service: service, showAppBar: false),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byTooltip('Refresh'), findsOneWidget);
+    await tester.tap(find.byTooltip('Refresh'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   group('ProcurementDetailsScreen Widget & Safety Gate Tests', () {
     testWidgets('renders 11-step pipeline, AI recommendation summary, and safety gate banner',
         (tester) async {

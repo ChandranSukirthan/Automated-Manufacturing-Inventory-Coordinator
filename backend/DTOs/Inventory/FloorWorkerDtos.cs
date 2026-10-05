@@ -60,6 +60,8 @@ namespace backend.Dtos
 
     public class TriggerReplenishmentDto
     {
+        public string TriggerType { get; set; } = "Manual";
+        public string? WorkflowId { get; set; }
         public string Objective { get; set; } = string.Empty;
         public string MaterialId { get; set; } = string.Empty;
         public decimal RequiredQuantity { get; set; } = 2000m;

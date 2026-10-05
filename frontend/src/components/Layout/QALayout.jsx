@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import useMobileNavigation from './useMobileNavigation';
+import React from 'react';
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -19,7 +20,7 @@ export default function QALayout({ children, title, subtitle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { mobileMenuOpen, setMobileMenuOpen, sidebarRef } = useMobileNavigation();
 
   const handleLogout = () => {
     logout();
@@ -66,7 +67,7 @@ export default function QALayout({ children, title, subtitle }) {
   ];
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex font-sans selection:bg-blue-500 selection:text-white">
+    <div className="role-shell role-quality min-h-screen bg-[#070b14] text-slate-100 flex font-sans selection:bg-blue-500 selection:text-white">
       {/* Ambient background glows */}
       <div className="fixed top-0 left-64 w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
       <div className="fixed bottom-0 right-10 w-96 h-96 bg-cyan-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
@@ -81,9 +82,9 @@ export default function QALayout({ children, title, subtitle }) {
       )}
 
       {/* Sidebar */}
-      <aside
+      <aside ref={sidebarRef}
         className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-950/95 backdrop-blur-2xl border-r border-slate-800/80 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
-          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full invisible lg:visible'
         }`}
         aria-label="Quality Control Sidebar"
       >
@@ -137,7 +138,7 @@ export default function QALayout({ children, title, subtitle }) {
                           : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900/80'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Icon
                           className={`w-4 h-4 transition-colors ${
                             isActive ? 'text-white stroke-[2.5]' : 'text-slate-400 group-hover:text-blue-400'
@@ -195,8 +196,8 @@ export default function QALayout({ children, title, subtitle }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         {/* Sticky Topbar */}
-        <header className="sticky top-0 z-30 h-16 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 px-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <header className="role-topbar sticky top-0 z-30 min-h-16 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <button
               onClick={() => setMobileMenuOpen(true)}
               className="lg:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800 transition-colors"
@@ -204,16 +205,16 @@ export default function QALayout({ children, title, subtitle }) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-white tracking-tight break-words">
                 {title || 'Quality Control'}
               </h1>
               {subtitle && <p className="text-xs text-slate-400 hidden sm:block">{subtitle}</p>}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-mono text-emerald-400 font-medium">System Online</span>
             </div>
@@ -241,7 +242,7 @@ export default function QALayout({ children, title, subtitle }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 min-w-0">
+        <main className="role-content flex-1 min-w-0">
           {children || <Outlet />}
         </main>
       </div>

@@ -26,6 +26,9 @@ public sealed class WorkflowDraftService(ApplicationDbContext db)
         if (!state.TryGetProperty("draft_po", out var draft) || draft.ValueKind != JsonValueKind.Object) return null;
         if (!state.TryGetProperty("validation_results", out var validation) ||
             !validation.TryGetProperty("isValid", out var valid) || valid.ValueKind != JsonValueKind.True) return null;
+        if (!ManufacturingCoordinator.Api.Helpers.QualityValidationPolicy.NonQualityChecksPassed(
+                JsonSerializer.Deserialize<Dictionary<string, object?>>(validation.GetRawText()) ?? new())) return null;
+        if (validation.TryGetProperty("qualitySafetyStatus", out var quality) && quality.GetString() is not ("CLEAR" or "PASSED")) return null;
         var sku = state.GetProperty("material_id").GetString();
         var material = await db.RawMaterials.SingleOrDefaultAsync(m => m.SkuCode == sku || m.Id.ToString() == sku)
             ?? throw new InvalidOperationException("The workflow material is not in the catalogue.");

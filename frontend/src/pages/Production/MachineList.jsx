@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -14,7 +15,7 @@ import {
   Sparkles,
   Check
 } from 'lucide-react';
-import AdminLayout from '../../components/Layout/AdminLayout';
+import AdminLayout from '../../components/Layout/RoleLayout';
 import machineService from '../../services/machineService';
 import adminService from '../../services/adminService';
 
@@ -439,7 +440,7 @@ export default function MachineList() {
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative overflow-hidden">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -467,7 +468,7 @@ export default function MachineList() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Operational Status</label>
                   <select
@@ -493,7 +494,7 @@ export default function MachineList() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Current Uptime (Hours)</label>
                   <input
@@ -538,7 +539,7 @@ export default function MachineList() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

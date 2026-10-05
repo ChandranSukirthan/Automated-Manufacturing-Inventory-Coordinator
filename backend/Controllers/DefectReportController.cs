@@ -156,6 +156,8 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", Request.Headers.Authorization.ToString());
+            client.Timeout = TimeSpan.FromSeconds(30);
             var baseUrl = _configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000";
             var payload = new
             {

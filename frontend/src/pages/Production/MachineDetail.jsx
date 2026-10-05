@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
@@ -13,7 +14,7 @@ import {
   Sparkles,
   Check,
 } from 'lucide-react';
-import AdminLayout from '../../components/Layout/AdminLayout';
+import AdminLayout from '../../components/Layout/RoleLayout';
 import machineService from '../../services/machineService';
 import maintenanceService from '../../services/maintenanceService';
 import adminService from '../../services/adminService';
@@ -386,7 +387,7 @@ export default function MachineDetail() {
 
       {/* Log Maintenance Modal */}
       {isLogModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
               <Wrench className="w-5 h-5 text-brand-400" />
@@ -450,7 +451,7 @@ export default function MachineDetail() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

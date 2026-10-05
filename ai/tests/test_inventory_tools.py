@@ -68,7 +68,8 @@ class TestInventoryToolsGoldenCases(unittest.TestCase):
                 "materialId": "RM001"
             })
             self.assertIsNotNone(result)
-            self.assertEqual(result["daysRemaining"], 999.0)
+            self.assertIsNone(result["daysRemaining"])
+            self.assertTrue(result["zeroConsumption"])
             # Since stock 350 > min 200 and burn rate 0, lowStock is false
             self.assertFalse(result["lowStock"])
         except ZeroDivisionError:

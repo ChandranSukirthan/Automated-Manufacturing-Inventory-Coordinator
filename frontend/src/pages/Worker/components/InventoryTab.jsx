@@ -49,8 +49,8 @@ export default function InventoryTab({
   return (
     <div className="space-y-4 tab-slide-in">
       {/* Search + Add button bar */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 focus-within:border-cyan-500/50 transition">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="min-w-0 flex-1 flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 focus-within:border-cyan-500/50 transition">
           <Search className="w-4 h-4 text-slate-500" />
           <input
             type="text"
@@ -102,7 +102,7 @@ export default function InventoryTab({
           </p>
 
           {/* Table */}
-          <div className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
+          <div className="worker-table-scroll border border-slate-800 rounded-2xl bg-slate-900/60 overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-300">
               <thead className="bg-slate-950/80 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 <tr>
@@ -176,7 +176,8 @@ export default function InventoryTab({
                             ))}
                           <button
                             onClick={() => onDeleteItem(item.id)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                            aria-label={`Delete ${item.sku}`}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Delete Item"
                           >
                             <Trash2 className="w-4 h-4" />

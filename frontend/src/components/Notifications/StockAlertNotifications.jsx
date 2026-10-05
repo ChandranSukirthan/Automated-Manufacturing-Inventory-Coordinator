@@ -1,3 +1,4 @@
+import ModalOverlay from '../Common/ModalOverlay';
 import useCurrentTime from '../../hooks/useCurrentTime';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -200,7 +201,7 @@ export default function StockAlertNotifications() {
 
       {/* Notification Dropdown Panel */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-96 sm:w-[420px] bg-slate-950/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden animate-fade-in">
+        <div className="absolute right-0 mt-2 w-[min(420px,calc(100vw-2rem))] bg-slate-950/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl z-50 overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/60">
             <div className="flex items-center gap-2">
@@ -317,7 +318,7 @@ export default function StockAlertNotifications() {
 
       {/* MATERIAL DETAILS MODAL */}
       {selectedAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -530,7 +531,7 @@ export default function StockAlertNotifications() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

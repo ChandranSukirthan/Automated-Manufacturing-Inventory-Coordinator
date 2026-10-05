@@ -15,6 +15,8 @@ Features:
 """
 
 from __future__ import annotations
+from ai.schemas.tool_contracts import DraftPO, checked_output
+from ai.core.supplier_ranking import supplier_rank_key
 
 import re
 import json
@@ -113,7 +115,7 @@ def get_db_connection() -> Optional[psycopg.Connection[Any]]:
             dbname=settings.DB_NAME,
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
-            connect_timeout=3
+            connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
         )
         return conn
     except Exception:
@@ -202,7 +204,7 @@ Return ONLY a valid JSON array of up to 5 supplier candidate objects with the fo
     _ctx = _ssl.create_default_context()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "tools": [{"google_search": {}}]}
 
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
     with urllib.request.urlopen(req, timeout=12, context=_ctx) as resp:
@@ -212,8 +214,22 @@ Return ONLY a valid JSON array of up to 5 supplier candidate objects with the fo
             raw_text = re.sub(r"^```[a-z]*\n?", "", raw_text)
             raw_text = re.sub(r"\n?```$", "", raw_text)
         ranked_list = json.loads(raw_text)
+        candidate = data["candidates"][0]
+        sources = [chunk["web"] for chunk in candidate.get("groundingMetadata", {}).get("groundingChunks", []) if "web" in chunk]
+        if not sources:
+            logger.warning("External research returned no grounded sources; ignoring recommendations")
+            return []
+        from urllib.parse import urlparse
+        grounded_urls = {source.get("uri") for source in sources if urlparse(source.get("uri", "")).scheme == "https"}
         if isinstance(ranked_list, list):
-            return ranked_list
+            for item in ranked_list:
+                if not isinstance(item, dict):
+                    continue
+                item["supplierStatus"] = "UNVERIFIED"
+                item["verificationStatus"] = "UNVERIFIED"
+                item["groundingSources"] = sources
+                item["grounded"] = item.get("sourceUrl") in grounded_urls
+            return [item for item in ranked_list if isinstance(item, dict) and item.get("grounded")]
     return []
 
 
@@ -442,7 +458,7 @@ def _live_material_quotes(material):
         with connection.cursor() as cursor:
             cursor.execute('''
                 SELECT s."Id", s."SupplierCode", s."Name", q."UnitPrice", q."MinimumOrderQuantity",
-                       q."PackSize", q."AvailableQuantity", q."LeadTimeDays", q."QualityEvidence", q."Currency"
+                       q."PackSize", q."AvailableQuantity", q."LeadTimeDays", q."QualityEvidence", q."Currency", m."UnitOfMeasure"
                 FROM "SupplierMaterialQuotes" q JOIN "Suppliers" s ON s."Id" = q."SupplierId"
                 JOIN "RawMaterials" m ON m."Id" = q."RawMaterialId"
                 WHERE q."IsActive" = true AND s."IsActive" = true
@@ -455,7 +471,7 @@ def _live_material_quotes(material):
              "name": row[2], "unitPrice": float(row[3]), "pricePerUnit": float(row[3]),
              "minimumOrderQuantity": float(row[4]), "minOrderQuantity": float(row[4]),
              "packSize": float(row[5]), "availableQuantity": float(row[6]),
-             "leadTimeDays": row[7], "qualityEvidence": row[8], "currency": row[9],
+             "leadTimeDays": row[7], "qualityEvidence": row[8], "currency": row[9], "unit": row[10],
              "isActive": True, "verificationStatus": "VERIFIED", "supplierStatus": "APPROVED"} for row in rows]
 
 
@@ -467,6 +483,8 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
         live_quotes = _live_material_quotes(material_name)
         if live_quotes:
             return live_quotes
+        if not settings.demo_mode:
+            return []
     except Exception:
         if not settings.demo_mode:
             raise
@@ -650,16 +668,7 @@ def select_supplier(*args, **kwargs) -> Dict[str, Any]:
             "selectionReasons": [],
         }
 
-    # Sort valid candidates: 1. Approved suppliers, 2. Internal preference, 3. Price ascending, 4. Lead time ascending
-    def sort_key(pair):
-        c, r = pair
-        is_approved = 0 if (c.get("supplierStatus") == "APPROVED" or r.get("supplierStatus") == "APPROVED") else 1
-        is_internal = 0 if c.get("origin") in ("Internal", "Internal ERP Database") else 1
-        price = float(c.get("unitPrice") or (r.get("totalCost", 9999.0)))
-        lead = int(c.get("leadTimeDays", 999))
-        return (is_approved, is_internal, price, lead)
-
-    sorted_valid = sorted(valid_candidates, key=sort_key)
+    sorted_valid = sorted(valid_candidates, key=lambda pair: supplier_rank_key(*pair))
     top_cand, top_report = sorted_valid[0]
     alternatives = [c.get("supplierName") for c, _ in sorted_valid[1:3]]
     selection_reasons = [
@@ -682,6 +691,7 @@ def select_supplier(*args, **kwargs) -> Dict[str, Any]:
 # Tool 7: create_draft_po (Polymorphic: supports both styles)
 # =====================================================================
 
+@checked_output(DraftPO)
 def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
     """
     TOOL 4 / 7: Creates ONLY a draft PO.
@@ -828,7 +838,7 @@ def query_supplier_rates(
                 dbname=settings.DB_NAME,
                 user=settings.DB_USER,
                 password=settings.DB_PASSWORD,
-                connect_timeout=3
+                connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
             ) as conn:
                 with conn.cursor() as cur:
                     cur.execute('SELECT "SupplierCode", "Name", "LeadTimeDays", "IsActive" FROM "Suppliers" WHERE "IsActive" = true ORDER BY "Id" ASC')

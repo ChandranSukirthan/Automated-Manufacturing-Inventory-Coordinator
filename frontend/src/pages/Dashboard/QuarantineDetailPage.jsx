@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
@@ -187,7 +188,7 @@ export default function QuarantineDetailPage() {
 
       {/* Release Confirmation Modal */}
       {releaseModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <ModalOverlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl animate-in fade-in">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-3">
@@ -241,7 +242,7 @@ export default function QuarantineDetailPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

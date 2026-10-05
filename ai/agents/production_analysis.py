@@ -19,7 +19,8 @@ def production_analysis_node(state: AgentState) -> Dict[str, Any]:
     tool_results = dict(state.get("tool_results", {}))
 
     # 1. Query production schedule
-    schedule = query_production_schedule()
+    context = (state.get("procurement_requirement") or {}).get("productionContext") or {}
+    schedule = query_production_schedule(shift_id=context.get("shiftId"), material_id=state.get("material_id"))
     tool_results["query_production_schedule"] = schedule
     if schedule.get("available") is False:
         return {"current_agent": "Production Analysis", "production_data": schedule,
@@ -40,7 +41,11 @@ def production_analysis_node(state: AgentState) -> Dict[str, Any]:
     available_mat = inv_data.get("availableQuantity", 0)
 
     # 4. Calculate production impact
-    impact = calculate_production_impact(target=target, available_material=int(available_mat))
+    conversion = schedule.get("materialPerUnit")
+    from ai.core.config import settings
+    impact = (calculate_production_impact(target=target, available_material=available_mat, material_per_unit=conversion or 1.0)
+              if conversion is not None or settings.demo_mode else
+              {"available": False, "reason": "Material-per-output conversion is missing; output impact cannot be estimated"})
     tool_results["calculate_production_impact"] = impact
 
     completed.append("Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput")

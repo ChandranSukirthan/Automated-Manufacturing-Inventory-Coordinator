@@ -108,7 +108,7 @@ public class InventoryIntegrationTests
         db.AgentWorkflows.Add(new AgentWorkflow { WorkflowId = "WF-DRAFT", Status = WorkflowStatus.WaitingForApproval,
             StateJson = JsonSerializer.Serialize(new { material_id = "BP-FILM-001", budget_limit = 1000,
                 draft_po = new { supplierId = "SUP-001", quantity = 30, unitPrice = 2, currency = "USD" },
-                validation_results = new { isValid = true } }) });
+                validation_results = new { isValid = true, qualitySafetyStatus = "CLEAR", supplierValidation = "PASSED", budgetCheck = "PASSED", poMathematicalCheck = "PASSED", materialValidation = "PASSED" } }) });
         await db.SaveChangesAsync(); var service = new WorkflowDraftService(db);
         var first = await service.FinalizeAsync("WF-DRAFT"); var second = await service.FinalizeAsync("WF-DRAFT");
         Assert.Equal(first, second); Assert.Equal(2, await db.PurchaseOrders.CountAsync());

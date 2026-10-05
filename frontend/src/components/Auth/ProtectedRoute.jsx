@@ -1,26 +1,8 @@
+import { normalizeRole, roleHome } from '../../utils/roles';
 import React from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import { ShieldAlert } from 'lucide-react';
-
-const ROLE_MAP = {
-  '0': 'FloorWorker',
-  '1': 'SupplyChainManager',
-  '2': 'QualityInspector',
-  '3': 'ITAdmin',
-  'floorworker': 'FloorWorker',
-  'supplychainmanager': 'SupplyChainManager',
-  'qualityinspector': 'QualityInspector',
-  'itadmin': 'ITAdmin',
-  'system admin': 'ITAdmin',
-};
-
-const normalizeRole = (r) => {
-  if (r === null || r === undefined) return '';
-  if (typeof r === 'object') r = r.name || r.id || '';
-  const key = String(r).trim().toLowerCase();
-  return ROLE_MAP[key] || ROLE_MAP[r] || String(r);
-};
 
 export default function ProtectedRoute({ children, allowedRoles, requiredRole = null }) {
   const { user, loading } = useAuth();
@@ -54,6 +36,7 @@ export default function ProtectedRoute({ children, allowedRoles, requiredRole = 
           </div>
           <h2 className="text-xl font-bold">Restricted Access (403)</h2>
           <p className="text-sm">Your account does not have permission to view this page.</p>
+          <Link to={roleHome(user.role)} className="inline-block rounded-lg bg-brand-600 px-4 py-2 text-white">Return to my dashboard</Link>
         </div>
       </div>
     );

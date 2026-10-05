@@ -151,9 +151,9 @@ def test_api_health_endpoint():
     assert data["status"] == "ONLINE"
 
 
-def test_api_tool_production_impact():
+def test_api_tool_production_impact(auth_headers):
     payload = {"target": 10000, "availableMaterial": 6000}
-    response = client.post("/api/tools/production-impact", json=payload)
+    response = client.post("/api/tools/production-impact", json=payload, headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["adjustedOutput"] == 6000
@@ -182,64 +182,33 @@ def test_api_trigger_and_approve_workflow(auth_headers):
 # =======================================================
 # 6. Cross-Agent Quality & Coordinator Validation Test
 # =======================================================
-def test_cross_agent_quality_and_planner_coordination():
-    """
-    Cross-Agent Collaboration Test:
-    Verifies that Agent 4 (Validation/Safety) integrates Nithushan's Quality Agent.
-    When a defect is attached to the state, the Validation Agent runs
-    the Quality Agent validation and requires quarantine approval.
-    """
-    from agents.validation import validation_node
-
-    state = {
-        "purchasing_data": {
-            "draft_po": {
-                "poNumber": "PO-DRAFT-2026-004",
-                "supplier": "Apex Polymer Solutions Ltd",
-                "quantity": 4000,
-                "estimatedCostUsd": 5800.0,
-            }
-        },
-        "production_data": {"impact": {"adjustedOutput": 6000, "plannedOutput": 10000}},
-        "quality_data": {
-            "defect": {
-                "batchId": "BATCH-QA-01",
-                "productType": "BoxPouch",
-                "severity": "High",
-                "description": "Contaminated seal defect",
-            }
-        },
-        "completed_steps": [],
-        "errors": []
-    }
-
-    result = validation_node(state)
-
-    # A failed quality check must never expose a payment approval. The
-    # supervisor sends the work back to Student 2 for another supplier.
+def test_cross_agent_quality_and_planner_coordination(monkeypatch):
+    from ai.agents.validation import validation_node
+    from ai.agents.supervisor import supervisor_node
+    import ai.agents.validation as validation
+    monkeypatch.setattr(validation, "run_quality_validation", lambda state: {**state,
+        "quality_data": {**state["quality_data"], "validation": {"valid": False, "quarantineRequired": True, "affectedInventory": ["R1"]}}})
+    state = {"purchasing_data": {"draft_po": {"quantity": 4000, "unitPrice": 1.45, "estimatedCostUsd": 5800}},
+        "material_id": "RM001", "quality_data": {"defect": {"severity": "High", "description": "Contamination"}},
+        "completed_steps": [], "errors": []}
+    evidence = validation_node(state)
+    assert "status" not in evidence and "requires_approval" not in evidence
+    result = supervisor_node({**state, **evidence})
     assert result["requires_approval"] is False
-    assert result["status"] == WorkflowStatus.Running
-    assert result["automatic_retry_required"] is True
-    assert "quality_data" in result
-    assert result["validation_results"]["qualitySafetyStatus"] == "QUARANTINE_REQUIRED"
-    assert any("Quality Agent: Quarantine required" in step for step in result["completed_steps"])
+    assert result["status"] == WorkflowStatus.Failed
+    assert not result["automatic_retry_required"]
+    assert result["required_action"] == "QA_REVIEW"
+    assert evidence["validation_results"]["quarantinedRollsCount"] == 0
+    assert evidence["validation_results"]["recommendedQuarantineRollsCount"] == 1
 
 
 def test_validation_stops_after_third_rejected_supplier():
-    from agents.validation import validation_node
-
-    result = validation_node({
-        "supplier_selection_attempt": 3,
-        "max_supplier_selection_attempts": 3,
-        "purchasing_data": {"draft_po": {"quantity": 10, "estimatedCostUsd": 100}},
-        "completed_steps": [],
-        "errors": [],
-    })
-
+    from ai.agents.supervisor import supervisor_node
+    from ai.core.validation_contract import NON_QUALITY_CHECKS
+    result = supervisor_node({"supplier_selection_attempt": 3,
+        "validation_results": {**{key: "PASSED" for key in NON_QUALITY_CHECKS}, "qualitySafetyStatus": "CLEAR", "isValid": False, "failedChecks": ["budgetCheck"], "budgetCheck": "BUDGET_EXCEEDED"}})
     assert result["requires_approval"] is False
     assert result["status"] == WorkflowStatus.Failed
     assert result["automatic_retry_required"] is False
-    assert len(result["validation_history"]) == 1
-    assert "No payment approval was created" in result["final_outcome"]
-
-
+    assert result["required_action"] == "REVIEW_SUPPLIER_QUOTES"
+    assert "Payment approval is blocked" in result["final_outcome"]

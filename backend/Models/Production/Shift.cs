@@ -7,6 +7,9 @@ namespace ManufacturingCoordinator.Models.Production
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public string Name { get; set; } = string.Empty;
+        public string? MaterialSku { get; set; }
+        public Guid? MachineId { get; set; }
+        public decimal? MaterialPerUnit { get; set; }
         public int ProductionTarget { get; set; } = 0;
         public int AvailableMaterial { get; set; } = 0;
         public int AdjustedOutput { get; set; } = 0;

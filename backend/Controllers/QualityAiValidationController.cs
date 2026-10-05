@@ -23,10 +23,14 @@ namespace ManufacturingCoordinator.Api.Controllers
     public class QualityAiValidationController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
+        private readonly IHttpClientFactory? _clients;
+        private readonly IConfiguration? _configuration;
 
-        public QualityAiValidationController(ApplicationDbContext context)
+        public QualityAiValidationController(ApplicationDbContext context, IHttpClientFactory? clients = null, IConfiguration? configuration = null)
         {
             _context = context;
+            _clients = clients;
+            _configuration = configuration;
         }
 
         [HttpGet("ai-validation")]
@@ -34,7 +38,7 @@ namespace ManufacturingCoordinator.Api.Controllers
         {
             IQueryable<AgentWorkflow> query = _context.AgentWorkflows
                 .AsNoTracking()
-                .Where(w => w.ValidationResults != null || w.WorkflowId.StartsWith("WF-QA-") || w.WorkflowId.StartsWith("WF-DEFECT-") || w.WorkflowId.StartsWith("WF-"));
+                .Where(w => w.ValidationResults != null);
 
             if (!string.IsNullOrWhiteSpace(workflowId))
             {
@@ -51,7 +55,10 @@ namespace ManufacturingCoordinator.Api.Controllers
 
             if (wf is null) return NoContent();
 
-            return Ok(MapWorkflowToValidationDto(wf));
+            var po = wf.PurchaseOrderId.HasValue ? await _context.PurchaseOrders.AsNoTracking()
+                .Include(p => p.OrderLines).ThenInclude(l => l.RawMaterial)
+                .SingleOrDefaultAsync(p => p.Id == wf.PurchaseOrderId, cancellationToken) : null;
+            return Ok(MapWorkflowToValidationDto(wf, po));
         }
 
         [HttpGet("ai-validation/history")]
@@ -59,11 +66,15 @@ namespace ManufacturingCoordinator.Api.Controllers
         {
             var workflows = await _context.AgentWorkflows
                 .AsNoTracking()
-                .Where(w => w.ValidationResults != null || w.WorkflowId.StartsWith("WF-QA-") || w.WorkflowId.StartsWith("WF-DEFECT-") || w.WorkflowId.StartsWith("WF-"))
+                .Where(w => w.ValidationResults != null)
                 .OrderByDescending(w => w.StartedAt)
                 .ToListAsync(cancellationToken);
 
-            var historyList = workflows.Select(MapWorkflowToValidationDto).ToList();
+            var poIds = workflows.Where(w => w.PurchaseOrderId.HasValue).Select(w => w.PurchaseOrderId!.Value).Distinct().ToList();
+            var orders = await _context.PurchaseOrders.AsNoTracking().Where(p => poIds.Contains(p.Id))
+                .Include(p => p.OrderLines).ThenInclude(l => l.RawMaterial).ToDictionaryAsync(p => p.Id, cancellationToken);
+            var historyList = workflows.Select(w => MapWorkflowToValidationDto(w,
+                w.PurchaseOrderId.HasValue ? orders.GetValueOrDefault(w.PurchaseOrderId.Value) : null)).ToList();
 
             return Ok(historyList);
         }
@@ -118,7 +129,7 @@ namespace ManufacturingCoordinator.Api.Controllers
                                 resultsDict[prop.Name] = null;
                                 break;
                             default:
-                                resultsDict[prop.Name] = prop.Value.GetRawText();
+                                resultsDict[prop.Name] = prop.Value.Clone();
                                 break;
                         }
                     }
@@ -132,11 +143,7 @@ namespace ManufacturingCoordinator.Api.Controllers
             if (decision is not ("Clear" or "QACleared" or "Reject" or "QARejected" or "Keep on Hold" or "OnHold" or "Hold"))
                 return BadRequest(new { message = "Choose Clear, Reject or Hold." });
 
-            var supplierPassed = !resultsDict.TryGetValue("supplierValidation", out var sv) || sv?.ToString() == "PASSED";
-            var budgetPassed = !resultsDict.TryGetValue("budgetCheck", out var bc) || bc?.ToString() == "PASSED";
-            var poMathPassed = !resultsDict.TryGetValue("poMathematicalCheck", out var pm) || pm?.ToString() == "PASSED";
-            var materialPassed = !resultsDict.TryGetValue("materialValidation", out var mv) || mv?.ToString() == "PASSED";
-            var allFourChecksPassed = supplierPassed && budgetPassed && poMathPassed && materialPassed;
+            var allFourChecksPassed = ManufacturingCoordinator.Api.Helpers.QualityValidationPolicy.NonQualityChecksPassed(resultsDict);
 
             if (string.Equals(decision, "Reject", StringComparison.OrdinalIgnoreCase) || 
                 string.Equals(decision, "QARejected", StringComparison.OrdinalIgnoreCase))
@@ -248,10 +255,36 @@ namespace ManufacturingCoordinator.Api.Controllers
 
             await _context.SaveChangesAsync(cancellationToken);
 
+            // Persist QA evidence first. Python revalidates finance and live holds before routing.
+            if (_clients != null && resultsDict["manualResolutionStatus"]?.ToString() == "RESOLVED" &&
+                wf.PurchaseOrderId == null && !string.IsNullOrWhiteSpace(wf.StateJson))
+            {
+                var baseUrl = (_configuration?["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                try
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Post,
+                        $"{baseUrl}/api/workflows/{Uri.EscapeDataString(workflowId)}/revalidate");
+                    request.Headers.TryAddWithoutValidation("Authorization", Request.Headers.Authorization.ToString());
+                    using var response = await _clients.CreateClient().SendAsync(request, cancellationToken);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        await _context.Entry(wf).ReloadAsync(cancellationToken);
+                        await new ManufacturingCoordinator.Services.PurchaseOrders.WorkflowDraftService(_context).FinalizeAsync(workflowId);
+                    }
+                    else
+                        return Ok(new { review = MapWorkflowToValidationDto(wf), revalidationPending = true,
+                            message = "QA decision saved. Retry the workflow to complete fresh validation." });
+                }
+                catch (Exception error) when (error is HttpRequestException or TaskCanceledException)
+                {
+                    return Ok(new { review = MapWorkflowToValidationDto(wf), revalidationPending = true,
+                        message = "QA decision saved. AI revalidation is unavailable; retry the workflow when the service returns." });
+                }
+            }
             return Ok(MapWorkflowToValidationDto(wf));
         }
 
-        private static object MapWorkflowToValidationDto(AgentWorkflow wf)
+        private static object MapWorkflowToValidationDto(AgentWorkflow wf, PurchaseOrder? purchaseOrder = null)
         {
             string? qualitySafetyStatus = null;
             string? supplierValidation = null;
@@ -316,7 +349,7 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             string workflowStatus;
-            if (manualResolutionStatus == "RESOLVED")
+            if (manualResolutionStatus == "RESOLVED" && isValid == true && (quarantinedRollsCount ?? 0) == 0)
             {
                 workflowStatus = "Resolved";
             }
@@ -346,10 +379,56 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             var assessedTime = resolvedAt ?? wf.CompletedAt?.ToString("o") ?? wf.StartedAt.ToString("o");
+            string? materialId = null, materialName = null, unit = null;
+            decimal? quantity = null;
+            var validationExecuted = supplierValidation != null || materialValidation != null;
+            if (!string.IsNullOrWhiteSpace(wf.StateJson))
+            {
+                try
+                {
+                    using var stateDocument = JsonDocument.Parse(wf.StateJson);
+                    var state = stateDocument.RootElement;
+                    materialId = GetString(state, "material_id");
+                    materialName = GetString(state, "material_name");
+                    unit = GetString(state, "unit");
+                    if (state.TryGetProperty("required_quantity", out var requested) && requested.ValueKind == JsonValueKind.Number)
+                        quantity = requested.GetDecimal();
+                    if (state.TryGetProperty("draft_po", out var draft) && draft.ValueKind == JsonValueKind.Object &&
+                        draft.TryGetProperty("quantity", out var purchased) && purchased.ValueKind == JsonValueKind.Number)
+                        quantity = purchased.GetDecimal();
+                    if (state.TryGetProperty("completed_steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+                        validationExecuted |= steps.EnumerateArray().Any(s => s.ValueKind == JsonValueKind.String &&
+                            s.GetString()!.StartsWith("Validation/Safety:", StringComparison.Ordinal));
+                }
+                catch (JsonException) { }
+            }
+
+            if (purchaseOrder?.OrderLines.Count == 1)
+            {
+                var line = purchaseOrder.OrderLines.Single();
+                materialId ??= line.RawMaterial?.SkuCode;
+                materialName ??= line.RawMaterial?.Name ?? line.Description;
+                quantity ??= line.Quantity;
+                unit ??= line.RawMaterial?.UnitOfMeasure;
+            }
 
             return new
             {
                 workflowId             = wf.WorkflowId,
+                workflowType           = wf.WorkflowType,
+                workflowStatus         = wf.Status.ToString(),
+                objective              = wf.Objective,
+                purchaseOrderId        = wf.PurchaseOrderId,
+                materialId,
+                materialName,
+                quantity,
+                unit,
+                validationExecuted,
+                purchaseOrderNumber    = purchaseOrder?.PoNumber,
+                items                  = purchaseOrder?.OrderLines.Select(l => new {
+                    materialId = l.RawMaterial?.SkuCode, materialName = l.RawMaterial?.Name ?? l.Description,
+                    quantity = l.Quantity, unit = l.RawMaterial?.UnitOfMeasure
+                }).ToArray(),
                 status                 = workflowStatus,
                 isValid                = isValid,
                 qualitySafetyStatus    = qualitySafetyStatus,

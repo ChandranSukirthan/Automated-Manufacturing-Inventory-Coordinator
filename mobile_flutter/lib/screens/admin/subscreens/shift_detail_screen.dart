@@ -99,9 +99,7 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
                 const SizedBox(height: 16),
                 MetricGauge(
                   label: 'Shift Target Quota',
-                  value: _currentShift.adjustedOutput > 0
-                      ? _currentShift.adjustedOutput
-                      : _currentShift.targetOutput,
+                  value: _currentShift.adjustedOutput,
                   maxValue: _currentShift.targetOutput > 0 ? _currentShift.targetOutput : 100,
                   unit: ' units',
                 ),

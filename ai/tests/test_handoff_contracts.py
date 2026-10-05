@@ -18,6 +18,7 @@ def pipeline(monkeypatch):
         def cursor(self): return self
         def execute(self, sql, *args): self.sql = sql
         def fetchone(self):
+            if '"AgentWorkflows"' in self.sql: return (None,)
             if '"Suppliers"' in self.sql: return (True, "Supplier A")
             if 'SELECT "Name"' in self.sql: return ("Material A",)
             if '"RawMaterials"' in self.sql: return (1, "SKU-A", "Material A")
@@ -65,11 +66,12 @@ def test_real_nodes_receive_upstream_results_and_preserve_constraints(pipeline):
                     "quality_requirement", "required_by_date", "procurement_request_id"):
             assert state[key] == request[key]
     assert received["production_analysis_node"]["inventory_data"]["availableQuantity"] == 350
-    assert received["purchasing_node"]["production_data"]["impact"]["availableMaterial"] == 350
+    assert received["purchasing_node"]["production_data"]["impact"]["available"] is False
+    assert "conversion" in received["purchasing_node"]["production_data"]["impact"]["reason"]
     assert received["validation_node"]["draft_po"]["quantity"] == 20
     assert received["validation_node"]["tool_results"]["get_inventory_levels"]["currentStock"] == 350
     assert "calculate_production_impact" in result["tool_results"]
-    assert len(result["agent_handoffs"]) == 5
+    assert len(result["agent_handoffs"]) == 6
     assert workflow.WORKFLOW_SESSIONS[result["workflow_id"]]["required_quantity"] == 367
 
 
@@ -114,3 +116,88 @@ def test_new_quality_risk_invalidates_an_older_manual_resolution(pipeline, monke
     checked = validation.validation_node(result)
     assert checked["validation_results"]["manualResolutionStatus"] == "PENDING_REVIEW"
     assert checked["validation_results"]["isValid"] is False
+
+
+def test_manual_request_above_threshold_still_proposes_purchase(pipeline):
+    request, _, _, _ = pipeline
+    result = workflow.run_workflow(**{**request, "trigger_type": "Manual", "requested_quantity": 30, "net_deficit": 0, "required_quantity": 30})
+    assert result["status"] == WorkflowStatus.WaitingForApproval, result.get("errors")
+    assert result["recommended_quantity"] == 30
+    assert result["net_deficit"] == 0
+    repeated = workflow.run_workflow(**{**request, "workflow_id": result["workflow_id"], "trigger_type": "Manual", "requested_quantity": 30, "net_deficit": 0, "required_quantity": 30})
+    assert repeated["supplier_selection_attempt"] == 1
+    assert result["validation_results"]["isValid"] is True
+
+
+def test_new_quarantine_blocks_approval_without_supplier_retry(pipeline, monkeypatch):
+    from ai.agents import validation
+    request, _, _, _ = pipeline
+    result = workflow.run_workflow(**request)
+    monkeypatch.setattr(validation, "_check_material_quarantine_count", lambda *a, **kw: 2)
+    with pytest.raises(ValueError, match="Fresh validation failed"):
+        workflow.approve_and_resume(result["workflow_id"], "manager")
+    stored = workflow.WORKFLOW_SESSIONS[result["workflow_id"]]
+    assert stored["required_action"] == "QA_REVIEW"
+    assert not stored["requires_approval"]
+    assert stored["supplier_selection_attempt"] == 1
+    assert stored["validation_results"]["quarantinedRollsCount"] == 2
+
+
+def test_quality_clearance_returns_to_approval_and_survives_revision(pipeline, monkeypatch):
+    import json
+    from ai.agents import validation
+    request, _, _, _ = pipeline
+    risk = {"defectId": "D1", "severity": "High", "material": "Material A", "relatedRoll": "R1"}
+    monkeypatch.setattr(validation, "_check_historical_material_quality_risk", lambda *a: risk)
+    result = workflow.run_workflow(**request)
+    assert result["required_action"] == "QA_REVIEW"
+    assert result["supplier_selection_attempt"] == 1
+    decision = {**result["validation_results"], "manualResolutionStatus": "RESOLVED", "resolvedBy": "inspector"}
+    class DecisionConnection:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def cursor(self): return self
+        def execute(self, *_): pass
+        def fetchone(self): return (json.dumps(decision),)
+    import psycopg
+    original_connect = psycopg.connect
+    # The authoritative decision query shares the regular live-check connection factory.
+    class RoutedConnection:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def cursor(self): return self
+        def execute(self, sql, *args):
+            self.selected = DecisionConnection() if '"AgentWorkflows"' in sql else original_connect()
+            self.selected.execute(sql, *args)
+        def fetchone(self): return self.selected.fetchone()
+    monkeypatch.setattr(psycopg, "connect", lambda *a, **kw: RoutedConnection())
+    resumed = workflow.revalidate_workflow(result["workflow_id"])
+    assert resumed["status"] == WorkflowStatus.WaitingForApproval
+    assert resumed["validation_results"]["qualitySafetyStatus"] == "CLEAR"
+    assert resumed["supplier_selection_attempt"] == 1
+    revised = workflow.request_revision(result["workflow_id"], "Recheck quote")
+    assert revised["validation_results"]["manualResolutionStatus"] == "RESOLVED"
+    assert revised["validation_results"]["isValid"] is True
+
+
+def test_supplier_retry_loop_stops_at_three_and_cannot_be_reset(pipeline, monkeypatch):
+    from ai.core.validation_contract import NON_QUALITY_CHECKS
+    request, _, _, _ = pipeline
+    def reject_budget(state):
+        checks = {key: "PASSED" for key in NON_QUALITY_CHECKS}
+        checks.update(isValid=False, qualitySafetyStatus="CLEAR", budgetCheck="BUDGET_EXCEEDED", failedChecks=["budgetCheck"])
+        return {"validation_results": checks}
+    # Keep a proposal available on each supplier attempt to exercise the coordinator's cap.
+    original_purchasing = workflow.purchasing_node
+    def purchasing(state):
+        return original_purchasing({**state, "excluded_supplier_ids": []})
+    monkeypatch.setattr(workflow, "purchasing_node", purchasing)
+    monkeypatch.setattr(workflow, "validation_node", reject_budget)
+    monkeypatch.setattr(workflow, "COMPILED_APP", workflow.build_workflow_graph())
+    result = workflow.run_workflow(**request)
+    assert result["supplier_selection_attempt"] == 3
+    assert result["required_action"] == "REVIEW_SUPPLIER_QUOTES"
+    assert result["status"] == WorkflowStatus.Failed
+    assert not result["requires_approval"]
+    with pytest.raises(ValueError, match="Three supplier attempts"):
+        workflow.request_revision(result["workflow_id"], "Try again")

@@ -143,14 +143,16 @@ const inventoryService = {
   // Multi-agent replenishment via ASP.NET Core
   // (Zero direct calls to FastAPI - ASP.NET Core serves as the public gateway)
   // =========================================================================
-  triggerWorkflow: async (objective, materialId, requiredQty) => {
-    if (!materialId || !(Number(requiredQty) > 0)) {
+  triggerWorkflow: async (objective, materialId, requiredQty, workflowId) => {
+    if (!materialId || !Number.isFinite(Number(requiredQty)) || !(Number(requiredQty) > 0)) {
       throw new Error('An exact material and positive required quantity are required.');
     }
     const response = await api.post('/inventory/trigger-replenishment', {
       objective: objective || `Floor Worker Stock Replenishment: Reorder ${requiredQty} units of ${materialId}`,
       materialId: materialId,
-      requiredQuantity: Number(requiredQty)
+      requiredQuantity: Number(requiredQty),
+      triggerType: 'Manual',
+      ...(workflowId ? { workflowId } : {}),
     });
     return response.data;
   },

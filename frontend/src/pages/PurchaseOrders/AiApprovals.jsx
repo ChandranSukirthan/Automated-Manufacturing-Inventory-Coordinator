@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -30,6 +31,7 @@ import ConfirmModal from '../../components/Common/ConfirmModal';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
+import WorkflowActivity from '../../components/QA/WorkflowActivity';
 
 export default function AiApprovals() {
   const { user } = useAuth();
@@ -53,8 +55,8 @@ export default function AiApprovals() {
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'awaiting_payment'
   const [approvedOrders, setApprovedOrders] = useState([]);
 
-  const fetchPendingOrders = async () => {
-    setLoading(true);
+  const fetchPendingOrders = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError('');
     try {
       const allOrders = await purchaseOrderService.getPurchaseOrders();
@@ -87,13 +89,14 @@ export default function AiApprovals() {
     } catch (err) {
       setError(parseErrorMessage(err, 'Failed to fetch approval queue orders.'));
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   useEffect(() => {
     const initialLoad = setTimeout(fetchPendingOrders, 0);
-    return () => clearTimeout(initialLoad);
+    const refresh = setInterval(() => { if (!document.hidden) void fetchPendingOrders(false); }, 15000);
+    return () => { clearTimeout(initialLoad); clearInterval(refresh); };
   }, []);
 
   // Approval animation steps & QA failure state
@@ -332,6 +335,7 @@ export default function AiApprovals() {
       subtitle="Automated inventory burn-rate validation, budget verification, and manager decision cockpit"
     >
       {/* Top Banner */}
+      <WorkflowActivity />
       <div className="p-6 rounded-2xl bg-gradient-to-r from-brand-950/80 via-slate-900 to-slate-900 border border-brand-800/40 backdrop-blur-sm space-y-2">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30">
@@ -956,7 +960,7 @@ export default function AiApprovals() {
 
       {/* Sequential Step Completion Modal for Approval Animation */}
       {animatingApproval && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
           <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-brand-500/40 shadow-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
               <div className="w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30 flex items-center justify-center">
@@ -1345,7 +1349,7 @@ export default function AiApprovals() {
               </div>
             )}
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

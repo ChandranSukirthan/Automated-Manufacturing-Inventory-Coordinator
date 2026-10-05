@@ -32,15 +32,15 @@ namespace ManufacturingCoordinator.Api.Services
 
         public async Task<ShiftDto> CreateAsync(CreateShiftDto dto)
         {
+            await ValidateContext(dto.MaterialSku, dto.MachineId, dto.MaterialPerUnit, dto.StartTime, dto.EndTime);
             // Enforce production adjustment business rule:
             // If available material < production target, adjusted output = available material
             // Otherwise, adjusted output = production target
-            var adjustedOutput = dto.AvailableMaterial < dto.ProductionTarget
-                ? dto.AvailableMaterial
-                : dto.ProductionTarget;
+            var adjustedOutput = Adjusted(dto.ProductionTarget, dto.AvailableMaterial, dto.MaterialPerUnit);
 
             var shift = new Shift
             {
+                MaterialSku = dto.MaterialSku, MachineId = dto.MachineId, MaterialPerUnit = dto.MaterialPerUnit,
                 Name = dto.Name.Trim(),
                 ProductionTarget = dto.ProductionTarget,
                 AvailableMaterial = dto.AvailableMaterial,
@@ -63,11 +63,11 @@ namespace ManufacturingCoordinator.Api.Services
             if (shift == null)
                 throw new AuthException("Shift not found.", HttpStatusCode.NotFound);
 
+            await ValidateContext(dto.MaterialSku, dto.MachineId, dto.MaterialPerUnit, dto.StartTime, dto.EndTime);
             // Re-enforce production adjustment business rule on update
-            var adjustedOutput = dto.AvailableMaterial < dto.ProductionTarget
-                ? dto.AvailableMaterial
-                : dto.ProductionTarget;
+            var adjustedOutput = Adjusted(dto.ProductionTarget, dto.AvailableMaterial, dto.MaterialPerUnit);
 
+            shift.MaterialSku = dto.MaterialSku; shift.MachineId = dto.MachineId; shift.MaterialPerUnit = dto.MaterialPerUnit;
             shift.Name = dto.Name.Trim();
             shift.ProductionTarget = dto.ProductionTarget;
             shift.AvailableMaterial = dto.AvailableMaterial;
@@ -91,9 +91,7 @@ namespace ManufacturingCoordinator.Api.Services
 
             // Business rule enforcement:
             // Target = 10,000 units, Available = 6,000 → Adjusted = 6,000
-            var adjustedOutput = shift.AvailableMaterial < shift.ProductionTarget
-                ? shift.AvailableMaterial
-                : shift.ProductionTarget;
+            var adjustedOutput = Adjusted(shift.ProductionTarget, shift.AvailableMaterial, shift.MaterialPerUnit);
 
             shift.AdjustedOutput = adjustedOutput;
             shift.UpdatedAt = DateTime.UtcNow;
@@ -113,11 +111,26 @@ namespace ManufacturingCoordinator.Api.Services
             };
         }
 
+        private static int Adjusted(int target, int available, decimal? conversion) =>
+            conversion.HasValue ? (int)Math.Min(target, decimal.Floor(available / conversion.Value)) : Math.Min(target, available);
+
+        private async Task ValidateContext(string? sku, Guid? machineId, decimal? conversion, DateTime start, DateTime end)
+        {
+            if (end <= start) throw new AuthException("Shift end must be after its start.", HttpStatusCode.BadRequest);
+            if (conversion.HasValue && (conversion <= 0 || string.IsNullOrWhiteSpace(sku)))
+                throw new AuthException("A positive material-per-output value requires a catalogue material.", HttpStatusCode.BadRequest);
+            if (!string.IsNullOrWhiteSpace(sku) && (!conversion.HasValue || !await _db.RawMaterials.AnyAsync(m => m.SkuCode == sku)))
+                throw new AuthException("Select an existing material and its material-per-output conversion.", HttpStatusCode.BadRequest);
+            if (machineId.HasValue && !await _db.Machines.AnyAsync(m => m.Id == machineId))
+                throw new AuthException("The selected machine does not exist.", HttpStatusCode.BadRequest);
+        }
+
         private static ShiftDto MapToDto(Shift shift)
         {
             return new ShiftDto
             {
                 Id = shift.Id,
+                MaterialSku = shift.MaterialSku, MachineId = shift.MachineId, MaterialPerUnit = shift.MaterialPerUnit,
                 Name = shift.Name,
                 ProductionTarget = shift.ProductionTarget,
                 AvailableMaterial = shift.AvailableMaterial,

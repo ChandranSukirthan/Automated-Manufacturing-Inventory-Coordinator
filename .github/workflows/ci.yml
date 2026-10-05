@@ -2,9 +2,9 @@ name: AMIC Continuous Integration
 
 on:
   push:
-    branches: [floor_worker-induri]
+    branches: [main, Merge, floor_worker-induri, "feature/student*-*-ai", "feature/student*-ai"]
   pull_request:
-    branches: [floor_worker-induri]
+    branches: [main, Merge, floor_worker-induri, "feature/student*-*-ai", "feature/student*-ai"]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,20 @@ concurrency:
 jobs:
   backend-tests:
     name: ASP.NET Core build and tests
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: amic_test
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: amic_tests
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U amic_test -d amic_tests"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      AMIC_TEST_POSTGRES: Host=localhost;Port=5432;Database=amic_tests;Username=amic_test;Password=disposable_ci_only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -34,7 +47,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-results
-          path: backend/Tests/TestResults/*.trx
+          path: |
+            backend/Tests/TestResults/*.trx
+            backend/Tests/bin/**/TestResults/performance.json
           if-no-files-found: ignore
 
   agent-tests:
@@ -102,7 +117,7 @@ jobs:
   package-mobile-artifact:
     name: Package validated Android artifact
     needs: [backend-tests, agent-tests, flutter-tests, react-tests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/floor_worker-induri'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/Merge' || github.ref == 'refs/heads/floor_worker-induri')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

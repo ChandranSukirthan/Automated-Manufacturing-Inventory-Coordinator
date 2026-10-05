@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./styles/role-refinements.css";
 
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;

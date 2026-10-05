@@ -15,7 +15,7 @@ import {
   Sparkles,
   Check
 } from 'lucide-react';
-import AdminLayout from '../../components/Layout/AdminLayout';
+import AdminLayout from '../../components/Layout/RoleLayout';
 import machineService from '../../services/machineService';
 import shiftService from '../../services/shiftService';
 import adminService from '../../services/adminService';

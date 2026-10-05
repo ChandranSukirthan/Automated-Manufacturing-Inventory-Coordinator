@@ -6,6 +6,18 @@ from collections.abc import MutableMapping
 from pathlib import Path
 
 
+_PRIVATE_FIELDS = {"messages", "prompt", "chain_of_thought", "authorization", "accessToken", "refreshToken", "api_key", "password"}
+
+
+def clean_state(value):
+    """Recursively exclude prompts and credentials at every persistence boundary."""
+    if isinstance(value, dict):
+        return {k: clean_state(v) for k, v in value.items() if k not in _PRIVATE_FIELDS}
+    if isinstance(value, (list, tuple)):
+        return [clean_state(item) for item in value]
+    return value
+
+
 class SessionStore(MutableMapping):
     def __init__(self, path=None):
         self.path = str(path or os.environ.get("AMIC_WORKFLOW_DB", Path(__file__).with_name("workflow_state.sqlite3")))
@@ -24,7 +36,7 @@ class SessionStore(MutableMapping):
 
     def __setitem__(self, key, state):
         # Persist structured application state only; never LangChain messages or prompts.
-        clean = {k: v for k, v in state.items() if k not in ("messages", "prompt", "chain_of_thought")}
+        clean = clean_state(state)
         encoded = json.dumps(clean, default=str)
         with self._connect() as connection:
             connection.execute("INSERT INTO sessions VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state=excluded.state", (key, encoded))

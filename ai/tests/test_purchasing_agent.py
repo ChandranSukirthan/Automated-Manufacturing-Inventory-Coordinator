@@ -295,7 +295,7 @@ class TestPurchasingAgent(unittest.TestCase):
             "leadTimeDays": 3,
             "qualityEvidence": "ISO 9001"
         }
-        po = create_draft_po(candidate, quantity=4000.0, unit_price=1.45, total_cost=5800.0)
+        po = create_draft_po(candidate, quantity=4000.0, unit_price=1.45, total_cost=5800.0, item_code="BP-FILM-001")
         self.assertEqual(po["paymentStatus"], "UNPAID")
         self.assertFalse(po["emailSent"])
         self.assertTrue(po["requiresApproval"])
@@ -304,6 +304,7 @@ class TestPurchasingAgent(unittest.TestCase):
     # 17. Validation Safety Handoff
     def test_validation_safety_handoff(self):
         state = {
+            "material_id": "BP-FILM-001",
             "procurement_requirement": {
                 "materialName": "BoxPouch Film",
                 "requiredSpecification": "BP-FILM-001",
@@ -337,6 +338,7 @@ class TestPurchasingAgent(unittest.TestCase):
         Draft PO created with UNPAID status, emailSent = False, requiresApproval = True.
         """
         state = {
+            "material_id": "BP-FILM-001",
             "procurement_requirement": {
                 "materialName": "BoxPouch Film",
                 "requiredSpecification": "BP-FILM-001",
@@ -413,6 +415,7 @@ class TestPurchasingAgent(unittest.TestCase):
     # 21. Full Purchasing Output Structure
     def test_purchasing_node_full_output_structure(self):
         state = {
+            "material_id": "BP-FILM-001",
             "procurement_requirement": {
                 "materialName": "BoxPouch Film",
                 "requiredSpecification": "BP-FILM-001",
@@ -458,6 +461,7 @@ class TestPurchasingAgent(unittest.TestCase):
                     "supplier": "Apex Polymer Solutions Ltd",
                     "quantity": 900,
                     "estimatedCostUsd": 1305.0,
+                    "unitPrice": 1.45,
                     "paymentStatus": "UNPAID",
                     "emailSent": False,
                     "requiresApproval": True
@@ -470,9 +474,12 @@ class TestPurchasingAgent(unittest.TestCase):
         result = validation_node(state)
         # Incomplete or invalid data is rejected before a human payment action
         # can appear, and the supervisor asks Student 2 to select again.
-        self.assertFalse(result["requires_approval"])
-        self.assertEqual(result["status"], WorkflowStatus.Running)
-        self.assertTrue(result["automatic_retry_required"])
+        from ai.agents.supervisor import supervisor_node
+        self.assertNotIn("requires_approval", result)
+        decision = supervisor_node({**state, **result})
+        self.assertFalse(decision["requires_approval"])
+        self.assertEqual(decision["status"], WorkflowStatus.Failed)
+        self.assertEqual(decision["required_action"], "CORRECT_DATA")
 
 
 if __name__ == "__main__":

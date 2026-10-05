@@ -157,8 +157,8 @@ export default function AlertsTab({
                 alert.status
               )} hover:bg-slate-900/80 transition`}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono font-bold text-amber-400 text-sm">
                       {alert.sku}
@@ -218,7 +218,7 @@ export default function AlertsTab({
                 <span className="text-xs text-slate-500">
                   By: <span className="text-slate-300">{alert.workerId || 'Floor Worker'}</span>
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {onTriggerAi && !['Resolved', 'Dismissed'].includes(alert.status) && (
                     <button
                       onClick={() => onTriggerAi(alert.sku, alert.quantityRequested ?? alert.netDeficit)}
@@ -230,7 +230,7 @@ export default function AlertsTab({
                       Reorder via AI
                     </button>
                   )}
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     {['Acknowledged', 'Resolved', 'Dismissed'].map((status) => (
                       <button
                         key={status}

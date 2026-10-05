@@ -1,5 +1,6 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -247,6 +248,8 @@ const agentSteps = [
 ];
 
 export default function AiValidationPage() {
+  const [searchParams] = useSearchParams();
+  const selectedWorkflowId = searchParams.get('workflowId') || undefined;
   const [aiValidation, setAiValidation] = useState(null);
   const [aiValidationLoading, setAiValidationLoading] = useState(true);
   const [aiValidationError, setAiValidationError] = useState('');
@@ -282,7 +285,7 @@ export default function AiValidationPage() {
     setAiValidationLoading(true);
     setAiValidationError('');
     try {
-      const result = await dashboardService.getAiValidation();
+      const result = await dashboardService.getAiValidation(selectedWorkflowId);
       setAiValidation(result ?? null);
     } catch (err) {
       setAiValidation(null);
@@ -294,7 +297,7 @@ export default function AiValidationPage() {
     } finally {
       setAiValidationLoading(false);
     }
-  }, []);
+  }, [selectedWorkflowId]);
 
   const loadAiValidationHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -380,14 +383,17 @@ export default function AiValidationPage() {
     setResolving(true);
     setResolveError('');
     try {
-      await dashboardService.resolveAiValidation(selectedWorkflow.workflowId, {
+      const resolution = await dashboardService.resolveAiValidation(selectedWorkflow.workflowId, {
         note: resolutionNote.trim(),
         decision: inspectorDecision,
         releaseQuarantine: releaseQuarantineCheck
       });
       setResolveModalOpen(false);
       const actionText = inspectorDecision === 'Clear' ? 'cleared' : inspectorDecision === 'Reject' ? 'rejected' : 'placed on hold';
-      setResolveSuccess(`Workflow ${selectedWorkflow.workflowId} successfully ${actionText} by QA Inspector.`);
+      const reviewed = resolution?.review || resolution;
+      setResolveSuccess(resolution?.revalidationPending ? resolution.message : inspectorDecision === 'Clear' && reviewed?.isValid !== true
+        ? 'QA decision recorded. Approval remains blocked until all checks and active holds pass.'
+        : `Workflow ${selectedWorkflow.workflowId} ${actionText} by QA Inspector.`);
       setTimeout(() => setResolveSuccess(''), 5000);
       refreshAll();
     } catch (err) {
@@ -1619,7 +1625,7 @@ export default function AiValidationPage() {
         );
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <ModalOverlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto custom-scrollbar">
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -1854,7 +1860,7 @@ export default function AiValidationPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         );
       })()}
 
@@ -1868,7 +1874,7 @@ export default function AiValidationPage() {
         const severityText = hr.severity || 'Medium';
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <ModalOverlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-4 sm:p-6 space-y-5 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
               <div className="flex items-center justify-between border-b border-slate-800 pb-4">
@@ -1930,7 +1936,7 @@ export default function AiValidationPage() {
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { id: 'Clear', label: 'Clear', desc: 'Clear for approval', icon: ShieldCheck, color: 'indigo' },
+                      { id: 'Clear', label: 'Clear', desc: 'Record QA clearance; all checks must still pass', icon: ShieldCheck, color: 'indigo' },
                       { id: 'Reject', label: 'Reject', desc: 'Block & reject PO', icon: X, color: 'rose' },
                       { id: 'Keep on Hold', label: 'Keep on Hold', desc: 'Maintain hold', icon: Clock, color: 'blue' }
                     ].map((opt) => {
@@ -2035,7 +2041,7 @@ export default function AiValidationPage() {
                 </div>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         );
       })()}
     </div>

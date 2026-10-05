@@ -403,6 +403,10 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Property<int>("ActualOutput")
                         .HasColumnType("integer");
 
+                    b.Property<string>("MaterialSku").HasColumnType("text");
+                    b.Property<Guid?>("MachineId").HasColumnType("uuid");
+                    b.Property<decimal?>("MaterialPerUnit").HasColumnType("numeric");
+
                     b.Property<int>("AdjustedOutput")
                         .HasColumnType("integer");
 

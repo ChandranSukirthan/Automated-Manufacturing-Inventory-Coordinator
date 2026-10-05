@@ -33,7 +33,7 @@ except ImportError:
 import psycopg
 
 from ai.core.config import settings
-from ai.config import INVENTORY_API_URL, ALERTS_API_URL, CHECK_INTERVAL_SECONDS
+from ai.config import INVENTORY_API_URL, ALERTS_API_URL, CHECK_INTERVAL_SECONDS, BACKEND_HOST
 from ai.routes.quality_routes import router as quality_router
 from ai.routes.workflow_routes import router as workflow_router, tools_router
 from ai.graph.workflow import run_workflow
@@ -116,16 +116,16 @@ async def inventory_monitor_task():
                         sku = item.get("sku", "Unknown")
                         if stock <= threshold:
                             if sku not in _active_alerted_skus:
-                                await _send_alert(client, item, is_predictive=False)
-                                _active_alerted_skus.add(sku)
+                                if await _send_alert(client, item, is_predictive=False):
+                                    _active_alerted_skus.add(sku)
                         else:
                             if sku in _active_alerted_skus:
                                 _active_alerted_skus.discard(sku)
                             rate = 0.0  # Historical burn-rate analysis is performed by authenticated inventory tools.
                             if (stock - rate * 5) <= threshold:
                                 if sku not in _active_alerted_skus:
-                                    await _send_alert(client, item, is_predictive=True)
-                                    _active_alerted_skus.add(sku)
+                                    if await _send_alert(client, item, is_predictive=True):
+                                        _active_alerted_skus.add(sku)
             except Exception:
                 pass
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
@@ -142,9 +142,21 @@ async def _send_alert(client: httpx.AsyncClient, item: dict, is_predictive: bool
         response = await client.post(ALERTS_API_URL, json=payload, timeout=5.0,
             headers={"Authorization": f"Bearer {os.environ.get('AMIC_MONITOR_TOKEN', '')}"})
         response.raise_for_status()
-        logger.info(f"Alert sent for SKU {payload['sku']}")
+        alert = response.json()
+        alert_id = alert.get("id") or alert.get("alertId")
+        if alert_id is None:
+            raise ValueError("Low-stock alert returned no persistent identifier")
+        trigger = await client.post(f"{BACKEND_HOST}/api/inventory/trigger-replenishment", json={
+            "materialId": payload["sku"], "requiredQuantity": payload["quantityRequested"],
+            "triggerType": "AutoLowStock", "workflowId": f"WF-AUTO-STOCK-{alert_id}",
+            "objective": f"Automatic low-stock replenishment for {payload['sku']}"}, timeout=10.0,
+            headers={"Authorization": f"Bearer {os.environ.get('AMIC_MONITOR_TOKEN', '')}"})
+        trigger.raise_for_status()
+        logger.info(f"Low-stock workflow queued for SKU {payload['sku']}")
+        return True
     except Exception as e:
-        logger.debug(f"Alert delivery note: {e}")
+        logger.warning(f"Low-stock workflow delivery failed: {e}")
+        return False
 
 
 def _consumption_rate(sku: str) -> float:
@@ -253,7 +265,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -297,8 +309,8 @@ def health() -> dict:
 
 
 # ── Student 1/2: ML Prediction (used by AgentIntegrationService.cs & UI) ─────
-@app.post("/api/predict", response_model=PredictResponse)
-@app.post("/predict", response_model=PredictResponse)
+@app.post("/api/predict", response_model=PredictResponse, dependencies=[Depends(require_actor)])
+@app.post("/predict", response_model=PredictResponse, dependencies=[Depends(require_actor)])
 def predict_stock_risk(items: Union[List[PredictInventoryItem], PredictInventoryItem]) -> PredictResponse:
     item_list = [items] if isinstance(items, PredictInventoryItem) else items
     predictions = []
@@ -322,11 +334,16 @@ class DataExtractionRequest(BaseModel):
     batchName: str
 
 
-@app.post("/api/agent/extract-data")
-async def extract_data_agent_workflow(request: DataExtractionRequest):
+@app.post("/api/agent/extract-data", dependencies=[Depends(require_actor)])
+async def extract_data_agent_workflow(request: DataExtractionRequest, authorization: Optional[str] = Header(default=None)):
     """Runs LangGraph Planner→DataExtraction→Purchasing→Validation pipeline."""
     try:
-        result_state = run_data_extraction_workflow(request.batchName)
+        from ai.core.request_context import set_authorization_header, reset_authorization_header
+        token = set_authorization_header(authorization)
+        try:
+            result_state = await asyncio.to_thread(run_data_extraction_workflow, request.batchName)
+        finally:
+            reset_authorization_header(token)
         if not result_state:
             raise HTTPException(status_code=500, detail="LangGraph execution failed.")
         saved = workflow_repo.save_workflow(result_state)

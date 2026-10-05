@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -9,12 +10,11 @@ import {
   Bot,
   PlusCircle,
 } from 'lucide-react';
-import { useAuth } from '../../context/useAuth';
 import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 // ── Sub-components ──────────────────────────────────────────────
-import WorkerHeader from '../Worker/components/WorkerHeader';
+import RoleLayout from '../../components/Layout/RoleLayout';
 import KpiCards from '../Worker/components/KpiCards';
 import InventoryTab from '../Worker/components/InventoryTab';
 import RollsTab from '../Worker/components/RollsTab';
@@ -38,7 +38,6 @@ const TABS = [
 ];
 
 export default function WorkerDashboard() {
-  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -162,12 +161,20 @@ export default function WorkerDashboard() {
   };
 
   const handleDeleteItem = async (id) => {
+    const item = items.find((value) => value.id === id);
+    if (item && Number(item.stockLevel) !== 0) {
+      setError(`Cannot delete ${item.sku}: it has ${item.stockLevel} units remaining. Record the actual stock usage or adjustment before deleting it.`);
+      return;
+    }
     if (!window.confirm('Delete this inventory item?')) return;
+    setError('');
     try {
       await inventoryService.deleteItem(id);
       showNotification('Item deleted successfully.');
       loadData();
-    } catch { setError('Failed to delete item.'); }
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to delete item.'));
+    }
   };
 
   const handleUpdateAlertStatus = async (alertId, newStatus) => {
@@ -175,7 +182,7 @@ export default function WorkerDashboard() {
       await inventoryService.updateAlertStatus(alertId, newStatus);
       showNotification(`Alert status updated to "${newStatus}"!`);
       loadData();
-    } catch { setError('Failed to update alert status'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to update alert status')); }
   };
 
   const handleAddAlert = async (e) => {
@@ -199,7 +206,7 @@ export default function WorkerDashboard() {
       setNewAlert({ sku: '', packagingType: 'Standard Roll', quantityRequested: 500, notes: '' });
       showNotification('Stock alert created successfully!');
       loadData();
-    } catch { setError('Failed to create stock alert'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to create stock alert')); }
   };
 
   const handleCreateRoll = async (e) => {
@@ -247,7 +254,7 @@ export default function WorkerDashboard() {
       await inventoryService.deleteRoll(id);
       showNotification('Inventory roll deleted.');
       loadData();
-    } catch { setError('Failed to delete roll.'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to delete roll.')); }
   };
 
   const handleQrSearch = async (e) => {
@@ -268,6 +275,7 @@ export default function WorkerDashboard() {
   };
 
   const handleTriggerAiWorkflow = async (sku, qty) => {
+    setError('');
     setTriggeringAi(true);
     setAiWorkflowResult(null);
     try {
@@ -323,13 +331,17 @@ export default function WorkerDashboard() {
 
   // ── Render ──────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <WorkerHeader user={user} loading={loading} onRefresh={loadData} onLogout={logout} />
+    <RoleLayout title="Floor Worker Console" subtitle="Inventory and stock logistics" loading={loading} onRefresh={loadData}>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
+      <main className="worker-dashboard flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-400">Floor operations</p>
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">Inventory workspace</h2>
+          <p className="text-sm leading-6 text-slate-400">Manage materials, track warehouse stock and review replenishment activity.</p>
+        </div>
         {/* Banner messages */}
         {error && (
-          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm flex items-center justify-between tab-slide-in">
+          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm flex flex-wrap items-center justify-between gap-3 tab-slide-in">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" />
               <span>{error}</span>
@@ -351,7 +363,7 @@ export default function WorkerDashboard() {
         <button
           type="button"
           onClick={() => navigate('/worker/replenishment')}
-          className="w-full rounded-xl border border-cyan-500/25 bg-cyan-500/5 px-4 py-3 text-left text-sm text-cyan-100 transition hover:border-cyan-400/50 hover:bg-cyan-500/10 sm:flex sm:items-center sm:justify-between"
+          className="worker-replenishment-banner w-full rounded-2xl border border-cyan-500/25 bg-cyan-500/5 px-5 py-4 text-left text-sm text-cyan-100 transition hover:border-cyan-400/50 hover:bg-cyan-500/10 sm:flex sm:items-center sm:justify-between sm:gap-4"
         >
           <span className="font-semibold">Need material urgently?</span>
           <span className="mt-1 block text-xs text-cyan-300 sm:mt-0">Open the replenishment request and workflow-status workspace →</span>
@@ -369,7 +381,7 @@ export default function WorkerDashboard() {
         />
 
         {/* Tab navigation */}
-        <div className="border-b border-slate-800 overflow-x-auto">
+        <div className="worker-tabs rounded-2xl border border-slate-800 bg-slate-900/70 overflow-x-auto p-1.5">
           <div className="flex gap-1 min-w-max">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -379,10 +391,10 @@ export default function WorkerDashboard() {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition -mb-px whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border transition whitespace-nowrap ${
                     isActive
-                      ? 'border-cyan-400 text-cyan-400'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 shadow-sm'
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -483,8 +495,8 @@ export default function WorkerDashboard() {
 
         {/* ── Modal: Add Stock Item ────────────────────────── */}
         {showAddItemModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
+          <ModalOverlay className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="worker-dashboard-modal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                   <Package className="w-5 h-5" />
@@ -543,13 +555,13 @@ export default function WorkerDashboard() {
                 </div>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* ── Modal: Log Stock Alert ───────────────────────── */}
         {showAddAlertModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
+          <ModalOverlay className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="worker-dashboard-modal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                   <AlertTriangle className="w-5 h-5" />
@@ -586,9 +598,9 @@ export default function WorkerDashboard() {
                 </div>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </main>
-    </div>
+    </RoleLayout>
   );
 }

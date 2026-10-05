@@ -159,7 +159,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _workflows.where((w) => w.isWaitingForApproval).length;
+    final pendingCount = _workflows.where((w) => w.canAuthorizeMaintenance).length;
 
     final tabs = [
       AdminOverviewTab(

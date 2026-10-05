@@ -117,10 +117,10 @@ class _HomeShellState extends State<HomeShell> {
     } else {
       screens = [
         POStatusDashboardScreen(service: widget.poService),
-        POListScreen(service: widget.poService),
-        ProcurementDetailsScreen(service: widget.poService),
-        SupplierStatusScreen(service: widget.poService),
-        NotificationStatusScreen(service: widget.poService),
+        POListScreen(service: widget.poService, showAppBar: false),
+        ProcurementDetailsScreen(service: widget.poService, showAppBar: false),
+        SupplierStatusScreen(service: widget.poService, showAppBar: false),
+        NotificationStatusScreen(service: widget.poService, showAppBar: false),
       ];
       titles = [
         'Command Center',

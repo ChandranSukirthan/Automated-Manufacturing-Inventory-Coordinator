@@ -1,3 +1,4 @@
+from ai.schemas.tool_contracts import ProductionImpact, MaintenanceAssessment, checked_output
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import psycopg
@@ -63,14 +64,14 @@ def get_db_connection():
             dbname=settings.DB_NAME,
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
-            connect_timeout=3
+            connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
         )
         return conn
     except Exception:
         return None
 
 
-def query_production_schedule(date_str: Optional[str] = None, machine_id: str = "M001") -> Dict[str, Any]:
+def query_production_schedule(date_str: Optional[str] = None, machine_id: str = "M001", shift_id: Optional[str] = None, material_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Tool 1: Query planned production requirements and schedule.
     Returns:
@@ -83,12 +84,15 @@ def query_production_schedule(date_str: Optional[str] = None, machine_id: str = 
     """
     prod_date = date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # Try reading from PostgreSQL Shifts table if available
+    # Existing shifts have no material/BOM association. Require explicit context
+    # rather than silently using another product's newest shift.
+    if not shift_id and not material_id and not settings.demo_mode:
+        return {"available": False, "reason": "Select a shift and provide material-per-output conversion", "requiredMaterials": []}
     conn = get_db_connection()
     if conn:
         try:
             with conn.cursor() as cur:
-                cur.execute('SELECT "ProductionTarget", "AvailableMaterial" FROM "Shifts" ORDER BY "CreatedAt" DESC LIMIT 1')
+                cur.execute('SELECT "ProductionTarget", "AvailableMaterial", "MachineId", "MaterialPerUnit", "MaterialSku", "StartTime" FROM "Shifts" WHERE (%s::text IS NULL OR "Id"::text = %s) AND (%s::text IS NULL OR "MaterialSku" = %s) AND "EndTime" >= NOW() ORDER BY "StartTime", "Id" LIMIT 1', (shift_id, shift_id, material_id, material_id))
                 row = cur.fetchone()
                 if row:
                     planned_output = int(row[0])
@@ -97,7 +101,10 @@ def query_production_schedule(date_str: Optional[str] = None, machine_id: str = 
                         "plannedOutput": planned_output,
                         "requiredMaterial": None,
                         "availableMaterial": int(row[1]),
-                        "machineId": None
+                        "machineId": str(row[2]) if row[2] else None,
+                        "materialPerUnit": float(row[3]) if row[3] is not None else None,
+                        "materialId": row[4],
+                        "productionDate": str(row[5])
                     }
         except Exception:
             pass
@@ -148,6 +155,7 @@ def calculate_machine_uptime(machine_id: str = "M001") -> Dict[str, Any]:
     }
 
 
+@checked_output(MaintenanceAssessment)
 def check_maintenance_requirement(uptime: float, maintenance_interval: float, machine_id: str = "M001") -> Dict[str, Any]:
     """
     Tool 3: Compare uptime against maintenance interval to determine urgency.
@@ -161,6 +169,9 @@ def check_maintenance_requirement(uptime: float, maintenance_interval: float, ma
       "remainingHours": float
     }
     """
+    import math
+    if not math.isfinite(uptime) or not math.isfinite(maintenance_interval) or uptime < 0 or maintenance_interval <= 0:
+        raise ValueError("Uptime must be nonnegative and maintenance interval positive and finite")
     remaining = float(maintenance_interval - uptime)
     maintenance_due = remaining <= 0.0
 
@@ -171,7 +182,8 @@ def check_maintenance_requirement(uptime: float, maintenance_interval: float, ma
     }
 
 
-def calculate_production_impact(target: int, available_material: int) -> Dict[str, Any]:
+@checked_output(ProductionImpact)
+def calculate_production_impact(target: int, available_material: float, material_per_unit: float = 1.0) -> Dict[str, Any]:
     """
     Tool 4: Calculate production impact and adjusted output based on available inventory.
     Example: Target = 10000, Available material = 6000
@@ -182,7 +194,10 @@ def calculate_production_impact(target: int, available_material: int) -> Dict[st
       "adjustedOutput": 6000
     }
     """
-    adjusted_output = min(target, available_material)
+    import math
+    if not all(math.isfinite(float(v)) for v in (target, available_material, material_per_unit)) or target < 0 or available_material < 0 or material_per_unit <= 0:
+        raise ValueError("Production quantities must be finite and nonnegative; material-per-unit must be positive")
+    adjusted_output = min(target, math.floor(available_material / material_per_unit))
     return {
         "plannedOutput": target,
         "availableMaterial": available_material,

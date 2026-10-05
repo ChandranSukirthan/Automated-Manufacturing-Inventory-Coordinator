@@ -117,6 +117,8 @@ namespace backend.Services
                     objective = $"Procure raw material '{materialName}' ({specification}) — net deficit {netDeficit ?? requiredQuantity} {unit ?? "units"} — budget ${budgetLimit ?? 0:F2}",
                     workflowId,
                     procurementRequestId,
+                    triggerType = "Manual",
+                    requestedQuantity = requiredQuantity,
                     materialId,
                     materialName,
                     specification,

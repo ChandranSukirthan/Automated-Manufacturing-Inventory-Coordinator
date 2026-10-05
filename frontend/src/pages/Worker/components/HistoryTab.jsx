@@ -27,7 +27,7 @@ export default function HistoryTab({
       {/* Material selector chips */}
       <div className="space-y-2">
         <label className="text-xs text-slate-400 font-medium">Select Material:</label>
-        <div className="flex flex-wrap gap-2">
+        <div className="worker-material-selector flex flex-wrap gap-2 pr-1">
           {rawMaterials.map((m) => {
             const isActive = selectedHistoryMaterialId === m.id;
             return (
@@ -61,7 +61,7 @@ export default function HistoryTab({
           />
         </div>
       ) : (
-        <div className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
+        <div className="worker-table-scroll border border-slate-800 rounded-2xl bg-slate-900/60 overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-950/80 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
               <tr>

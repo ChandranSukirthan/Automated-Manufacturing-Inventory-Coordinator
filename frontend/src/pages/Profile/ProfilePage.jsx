@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../../context/useAuth';
 import authService from '../../services/authService';
 import { parseErrorMessage } from '../../utils/errorHandler';
-import QALayout from '../../components/Layout/QALayout';
+import RoleLayout from '../../components/Layout/RoleLayout';
 import PageHeader from '../../components/QA/PageHeader';
 
 export default function ProfilePage() {
@@ -70,9 +70,6 @@ export default function ProfilePage() {
     }
   };
 
-  const roleStr = String(user?.role ?? '').toLowerCase();
-  const isQA = roleStr === 'qualityinspector' || roleStr === '2';
-
   const getRoleDisplay = (r) => {
     const s = String(r ?? '').toLowerCase();
     if (s === 'qualityinspector' || s === '2') return 'Quality Inspector';
@@ -91,13 +88,7 @@ export default function ProfilePage() {
         <p className="text-sm font-medium">Loading profile credentials...</p>
       </div>
     );
-    return isQA ? (
-      <QALayout title="Account Profile" subtitle="Account information">
-        <div className="p-6 lg:p-8 max-w-7xl mx-auto">{loadingView}</div>
-      </QALayout>
-    ) : (
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-8">{loadingView}</div>
-    );
+    return <RoleLayout title="Account Profile" subtitle="Account information">{loadingView}</RoleLayout>;
   }
 
   const profileContent = (
@@ -226,13 +217,5 @@ export default function ProfilePage() {
     </div>
   );
 
-  return isQA ? (
-    <QALayout title="Account Profile" subtitle="Account information">
-      {profileContent}
-    </QALayout>
-  ) : (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-500 selection:text-white">
-      {profileContent}
-    </div>
-  );
+  return <RoleLayout title="Account Profile" subtitle="Account information">{profileContent}</RoleLayout>;
 }

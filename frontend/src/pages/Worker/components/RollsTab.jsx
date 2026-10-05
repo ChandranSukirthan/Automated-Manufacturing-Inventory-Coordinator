@@ -82,7 +82,7 @@ export default function RollsTab({
           </div>
         </div>
 
-        <form onSubmit={onQrSearch} className="flex gap-3">
+        <form onSubmit={onQrSearch} className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
             placeholder="Enter QR barcode value (e.g. ROLL-001, ROLL-2026-STEEL-009)..."
@@ -150,9 +150,9 @@ export default function RollsTab({
       </div>
 
       {/* ── Roll Management ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Register Roll Form */}
-        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
+        <div className="worker-panel min-w-0 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-4 h-4 text-cyan-400" />
             <h3 className="text-base font-bold text-white">Register New Roll</h3>
@@ -250,7 +250,7 @@ export default function RollsTab({
         </div>
 
         {/* Active Rolls List */}
-        <div className="lg:col-span-2 border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden flex flex-col">
+        <div className="xl:col-span-2 min-w-0 border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden flex flex-col">
           <div className="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
               <h3 className="text-sm font-bold text-white">Warehouse Inventory Rolls</h3>

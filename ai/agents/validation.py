@@ -4,6 +4,7 @@ Performs multi-point constraint checks and produces a structured validation resu
 Never bypasses budget rules, supplier verification, quality requirements, or human approval.
 """
 from __future__ import annotations
+from ai.core.supplier_ranking import supplier_rank_key
 
 import logging
 import psycopg
@@ -12,6 +13,7 @@ from typing import Any, Dict
 
 from ai.core.state import AgentState, WorkflowStatus, ApprovalStatus
 from ai.core.contracts import first_present
+from ai.core.validation_contract import finite_number, failed_checks
 from ai.core.config import settings
 from ai.agents.quality_agent import run_quality_validation
 
@@ -20,7 +22,7 @@ logger = logging.getLogger("amic_agentic_ai.validation")
 
 def _check_material_quarantine_count(mat_id: Any, mat_name: str = "", sku_code: str = "") -> int:
     try:
-        with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+        with psycopg.connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as connection:
             with connection.cursor() as cursor:
                 cursor.execute('''
                     SELECT "Id", "SkuCode" FROM "RawMaterials"
@@ -49,7 +51,7 @@ def _check_material_quarantine_count(mat_id: Any, mat_name: str = "", sku_code: 
 
 def _check_historical_material_quality_risk(mat_id: Any, mat_name: str = "") -> dict[str, Any] | None:
     try:
-        with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+        with psycopg.connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as connection:
             with connection.cursor() as cursor:
                 cursor.execute('''
                     SELECT d."Id", m."Name", d."Description", d."Severity", d."AffectedInventoryJson"
@@ -83,10 +85,11 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     # ── Read purchasing & production outputs ────────────────────────────────────
     recommended_supplier = state.get("recommended_supplier") or {}
     draft_po = state.get("draft_po") or state.get("purchasing_data", {}).get("draft_po") or {}
-    net_deficit = float(state.get("net_deficit") or 0.0)
-    recommended_qty = float(state.get("recommended_quantity") or state.get("required_quantity") or draft_po.get("quantity") or 0.0)
-    estimated_total = float(state.get("estimated_total_cost") or state.get("total_cost") or draft_po.get("totalAmount") or draft_po.get("estimatedCostUsd") or 0.0)
-    budget_limit = float(first_present(state.get("budget_limit"), draft_po.get("budgetLimit"), 20000.0 if settings.demo_mode else 0))
+    net_deficit = finite_number(state.get("net_deficit") or 0.0, "net deficit")
+    required_purchase = finite_number(state.get("requested_quantity") or state.get("required_quantity"), "manual request", positive=True) if state.get("trigger_type") == "Manual" else net_deficit
+    recommended_qty = finite_number(first_present(state.get("recommended_quantity"), draft_po.get("quantity"), state.get("required_quantity")), "proposal quantity", positive=True)
+    estimated_total = finite_number(first_present(state.get("estimated_total_cost"), state.get("total_cost"), draft_po.get("totalAmount"), draft_po.get("estimatedCostUsd")), "proposal total", positive=True)
+    budget_limit = finite_number(first_present(state.get("budget_limit"), draft_po.get("budgetLimit"), 20000.0 if settings.demo_mode else 0), "budget")
     budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
     supplier_verification = state.get("supplier_verification") or recommended_supplier.get("verificationStatus") or "UNVERIFIED"
     attempt = int(state.get("supplier_selection_attempt") or 1)
@@ -112,7 +115,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         errors.append(f"Budget exceeded: ${estimated_total:,.2f} > limit ${budget_limit:,.2f}")
         rejection_reasons.append(f"Total order cost (${estimated_total:,.2f}) exceeds authorized budget limit (${budget_limit:,.2f}).")
 
-    unit_price = float(draft_po.get("unitPrice") or 0.0)
+    unit_price = finite_number(draft_po.get("unitPrice"), "unit price", positive=True)
     expected_cost = quantity * unit_price if (quantity > 0 and unit_price > 0) else cost
     po_math_check = "PASSED"
     is_valid = budget_check_passed
@@ -127,6 +130,17 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         is_valid = False
         rejection_reasons.append(f"Calculation mismatch: {quantity} x ${unit_price:.2f} != ${cost:.2f}")
 
+    expected_currency = (state.get("procurement_requirement") or {}).get("currency", "USD")
+    if draft_po.get("currency", "USD") != expected_currency or recommended_supplier.get("currency", "USD") != expected_currency:
+        po_math_check = "CALCULATION_MISMATCH"
+        is_valid = False
+        rejection_reasons.append("Proposal currency differs from the authorized budget currency.")
+    request_unit = state.get("unit")
+    if request_unit and recommended_supplier.get("unit") and str(request_unit).upper() != str(recommended_supplier["unit"]).upper():
+        po_math_check = "CALCULATION_MISMATCH"
+        is_valid = False
+        rejection_reasons.append("Supplier quote unit differs from the authorized material unit.")
+
     # Supplier validation against PostgreSQL database
     supplier_val = "PASSED"
     try:
@@ -137,7 +151,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
             dbname=settings.DB_NAME,
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
-            connect_timeout=2
+            connect_timeout=2, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
         ) as conn:
             with conn.cursor() as cur:
                 # Check Supplier status
@@ -187,7 +201,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                 dbname=settings.DB_NAME,
                 user=settings.DB_USER,
                 password=settings.DB_PASSWORD,
-                connect_timeout=2
+                connect_timeout=2, options="-c statement_timeout=5000 -c default_transaction_read_only=on"
             ) as conn:
                 with conn.cursor() as cur:
                     if str(mat_id).isdigit():
@@ -210,14 +224,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
                 rejection_reasons.append("Live material verification is unavailable.")
 
     # ── 2. Quantity check ──────────────────────────────────────────────────────
-    quantity_check = "PASS" if recommended_qty >= net_deficit else "FAIL"
+    quantity_check = "PASS" if recommended_qty >= required_purchase else "FAIL"
     if quantity_check == "FAIL":
         errors.append(f"Quantity insufficient: {recommended_qty} < required {net_deficit}")
 
     # ── 3. MOQ & Pack Size checks ──────────────────────────────────────────────
-    moq = float(recommended_supplier.get("moq") or recommended_supplier.get("minimumOrderQuantity") or 0.0)
+    moq = finite_number(first_present(recommended_supplier.get("moq"), recommended_supplier.get("minimumOrderQuantity"), 0), "MOQ")
     moq_check = "PASS" if recommended_qty >= moq else "FAIL"
-    pack_size = float(recommended_supplier.get("packSize") or 1.0)
+    pack_size = finite_number(first_present(recommended_supplier.get("packSize"), 1), "pack size", positive=True)
     pack_size_check = "PASS" if pack_size > 0 and abs(recommended_qty / pack_size - round(recommended_qty / pack_size)) < 1e-8 else "FAIL"
 
     # ── 4. Supplier verification check ────────────────────────────────────────
@@ -238,49 +252,27 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     # Historical Quality Risk Detection (Human-in-the-Loop requirement)
     historical_risk = _check_historical_material_quality_risk(mat_id, mat_name)
 
-    if defect:
+    recommended_quarantine_count = 0
+    if quarantined_rolls_count > 0:
+        quality_safety_status = "QUARANTINE_ACTIVE"
+    elif defect:
         try:
-            quality_state = run_quality_validation({
-                **state,
-                "purchasing_data": purchasing_data,
-                "quality_data": quality_data,
-            })
+            quality_state = run_quality_validation({**state, "purchasing_data": {}, "draft_po": None,
+                                                    "quality_data": quality_data})
             quality_data = quality_state.get("quality_data", quality_data)
             tool_results.update(quality_state.get("tool_results", {}))
-            q_val = quality_data.get("validation", {})
-            if q_val.get("valid") is False:
-                reason = q_val.get("reason", "Associated inventory is quarantined")
-                quality_safety_status = "QUARANTINE_REQUIRED"
-                is_valid = False
-                rejection_reasons.append(f"Quality Agent validation rejected: {reason}")
-            if q_val.get("quarantineRequired"):
-                quarantined_rolls_count = max(quarantined_rolls_count, len(q_val.get("affectedInventory", [])))
-                quality_safety_status = "QUARANTINE_REQUIRED"
-                completed.append(f"Quality Agent: Quarantine required for batch {q_val.get('batchId')}")
-        except Exception:
-            try:
-                from ai.tools.quality_tools import analyze_defect_context
-                ctx = analyze_defect_context(defect)
-                if ctx.get("quarantineRequired"):
-                    quality_safety_status = "QUARANTINE_REQUIRED"
-                    completed.append(f"Quality Agent: Quarantine required for batch {ctx.get('batchId')}")
-                else:
-                    completed.append(f"Quality Agent: Defect severity {ctx.get('severity')} - no quarantine required")
-            except Exception as inner_ex:
-                if str(defect.get("severity", "")).capitalize() in ("High", "Critical"):
-                    quality_safety_status = "QUARANTINE_REQUIRED"
-                    quarantined_rolls_count = max(quarantined_rolls_count, 1)
-                    completed.append(f"Quality Agent: Quarantine required for defect {defect.get('batchId', 'UNKNOWN')} ({defect.get('severity')} severity)")
-    elif quarantined_rolls_count > 0:
-        quality_safety_status = "QUARANTINE_ACTIVE"
-        completed.append(f"Quality Agent: Detected {quarantined_rolls_count} active quarantine holds")
+            assessment = quality_data["validation"]
+            if not assessment["valid"]:
+                quality_safety_status = "QUARANTINE_REQUIRED" if assessment.get("quarantineRequired") else "MANUAL_REVIEW_REQUIRED"
+                recommended_quarantine_count = len(assessment.get("affectedInventory", []))
+        except Exception as error:
+            quality_safety_status = "UNAVAILABLE"
+            is_valid = False
+            rejection_reasons.append(f"Quality assessment unavailable: {error}")
     elif historical_risk:
         quality_safety_status = "MANUAL_REVIEW_REQUIRED"
-        completed.append(f"Quality Agent: Flagged Historical Quality Risk on material '{historical_risk['material']}' (Roll: {historical_risk['relatedRoll']}) - Manual QA Review Required")
-    else:
-        completed.append("Quality Agent: Factory inventory quarantine status CLEAR")
+    completed.append(f"Quality Agent: {quality_safety_status}")
 
-    # ── 6. Diagnostic & Safety reasons ─────────────────────────────────────────
     diagnostic_reasons = []
     if quality_safety_status == "QUARANTINE_REQUIRED":
         diagnostic_reasons.append("Quality Agent quarantine recommendation requires authorization")
@@ -303,25 +295,30 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     manual_res_status = existing_vr.get("manualResolutionStatus")
     previous_risk = existing_vr.get("historicalRisk") or {}
-    if quality_safety_status in ("QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE"):
+    import json
+    defect_fingerprint = json.dumps(defect, sort_keys=True, default=str) if defect else None
+    if quality_safety_status == "QUARANTINE_ACTIVE" or (quality_safety_status == "QUARANTINE_REQUIRED" and (manual_res_status != "RESOLVED" or existing_vr.get("defectFingerprint") != defect_fingerprint)):
         manual_res_status = "PENDING_REVIEW"
         is_valid = False
     elif (manual_res_status == "RESOLVED" and historical_risk and
           previous_risk.get("defectId") != historical_risk.get("defectId")):
         manual_res_status = "PENDING_REVIEW"
         is_valid = False
-    if not manual_res_status:
-        if quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"] or not is_valid:
-            manual_res_status = "PENDING_REVIEW"
-        else:
-            manual_res_status = "NOT_REQUIRED"
-
-    if manual_res_status != "RESOLVED" and quality_safety_status == "MANUAL_REVIEW_REQUIRED" and historical_risk:
+    if existing_vr.get("manualResolutionStatus") in ("REJECTED", "ON_HOLD"):
+        manual_res_status = existing_vr["manualResolutionStatus"]
+        quality_safety_status = manual_res_status
         is_valid = False
-        rejection_reasons.append(f"Manual QA Review Required: Historical quality risk detected on material '{historical_risk['material']}' (Related roll: {historical_risk['relatedRoll']} - {historical_risk['issue']}). Waiting for QA Inspector review.")
+    elif manual_res_status == "RESOLVED" and quality_safety_status in ("MANUAL_REVIEW_REQUIRED", "QUARANTINE_REQUIRED"):
+        quality_safety_status = "CLEAR"
+    if quality_safety_status not in ("CLEAR", "PASSED"):
+        is_valid = False
+        manual_res_status = manual_res_status or "PENDING_REVIEW"
+        rejection_reasons.append(f"QA review required: {quality_safety_status}")
+    else:
+        manual_res_status = manual_res_status or "NOT_REQUIRED"
 
     available = recommended_supplier.get("availableQuantity")
-    availability_check = "PASS" if available is not None and float(available) >= recommended_qty else "UNKNOWN"
+    availability_check = "PASS" if available is not None and finite_number(available, "supplier availability") >= recommended_qty else "UNKNOWN"
     if not settings.demo_mode and availability_check != "PASS":
         is_valid = False
         rejection_reasons.append("Supplier availability is missing or insufficient for the recommended quantity.")
@@ -337,10 +334,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     if candidate_comparisons:
         best_candidate = min(
             candidate_comparisons,
-            key=lambda candidate: (
-                float(candidate.get("totalCost") or float("inf")),
-                int(candidate.get("leadTimeDays") or 999),
-            ),
+            key=supplier_rank_key,
         )
         selected_identity = str(
             recommended_supplier.get("supplierId") or recommended_supplier.get("supplierName") or ""
@@ -373,11 +367,14 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "qualitySafetyStatus": quality_safety_status,
         "supplierValidation": supplier_val,
         "budgetCheck": budget_val,
-        "toleranceCheck": "PASSED",
+        "toleranceCheck": "NOT_EVALUATED",
         "safetyLockoutCheck": "CLEAR" if (quality_safety_status == "CLEAR" or manual_res_status == "RESOLVED") else "LOCKED",
         "poMathematicalCheck": po_math_check,
         "materialValidation": material_val,
         "quarantinedRollsCount": quarantined_rolls_count,
+        "recommendedQuarantineRollsCount": recommended_quarantine_count,
+        "assessmentVersion": 2,
+        "defectFingerprint": defect_fingerprint,
         "historicalRisk": historical_risk,
         "impactReason": "; ".join(diagnostic_reasons) if diagnostic_reasons else "Operational parameters clear.",
         "rejectionReason": "; ".join(rejection_reasons) if rejection_reasons else "",
@@ -406,7 +403,10 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         "overallStatus": overall_status,
     }
 
-    validation_passed = bool(validation_results["isValid"] and overall_status == "APPROVED")
+    validation_results["failedChecks"] = failed_checks(validation_results)
+    validation_passed = not validation_results["failedChecks"]
+    validation_results["isValid"] = validation_results["valid"] = validation_passed
+    validation_results["overallStatus"] = "PASSED" if validation_passed else "BLOCKED"
     validation_history = list(state.get("validation_history") or [])
     validation_history.append({
         "attemptNumber": attempt,
@@ -429,108 +429,10 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
 
     completed.append("Validation/Safety: Completed multi-point risk, financial, and quality safety assessment")
 
-    # ── Already approved by manager (resumed workflow) ─────────────────────────
-    if state.get("approval_status") == ApprovalStatus.Approved:
-        return {
-            "current_agent": "Validation/Safety",
-            "status": WorkflowStatus.Running,
-            "validation_results": validation_results,
-            "validation_history": validation_history,
-            "requires_approval": False,
-            "completed_steps": completed,
-            "errors": errors,
-            "quality_data": quality_data,
-            "tool_results": tool_results,
-        }
-
-    # Failed automated validation returns control to the Supervisor, which asks
-    # Student 2 for another supplier. A fourth selection is never attempted.
-    if not validation_passed:
-        selected_id = recommended_supplier.get("supplierId")
-        excluded_supplier_ids = [
-            str(value) for value in (state.get("excluded_supplier_ids") or []) if value is not None
-        ]
-        if selected_id is not None and str(selected_id) not in excluded_supplier_ids:
-            excluded_supplier_ids.append(str(selected_id))
-
-        if attempt < max_attempts:
-            completed.append(
-                f"Supervisor: Validation rejected supplier attempt {attempt}/{max_attempts}; requesting a new Student 2 comparison"
-            )
-            return {
-                "current_agent": "Supervisor Agent",
-                "status": WorkflowStatus.Running,
-                "approval_status": ApprovalStatus.Pending,
-                "validation_results": validation_results,
-                "validation_history": validation_history,
-                "requires_approval": False,
-                "automatic_retry_required": True,
-                "excluded_supplier_ids": excluded_supplier_ids,
-                "draft_po": None,
-                "recommended_supplier": None,
-                "purchasing_data": {},
-                "completed_steps": completed,
-                "errors": errors,
-                "quality_data": quality_data,
-                "tool_results": tool_results,
-                "final_outcome": None,
-            }
-
-        completed.append(
-            f"Supervisor: Stopped after {max_attempts} rejected supplier validation attempts"
-        )
-        return {
-            "current_agent": "Supervisor Agent",
-            "status": WorkflowStatus.Failed,
-            "approval_status": ApprovalStatus.Pending,
-            "validation_results": validation_results,
-            "validation_history": validation_history,
-            "requires_approval": False,
-            "automatic_retry_required": False,
-            "excluded_supplier_ids": excluded_supplier_ids,
-            "completed_steps": completed,
-            "errors": errors + [
-                f"Quality validation rejected all {max_attempts} supplier selections."
-            ],
-            "quality_data": quality_data,
-            "tool_results": tool_results,
-            "final_outcome": (
-                f"Procurement workflow failed after {max_attempts} supplier validation attempts. "
-                "No payment approval was created. Review the validation ledger and supplier quote data."
-            ),
-        }
-
-    # ── Revision requested: re-enter purchasing with revision context ──────────
-    if state.get("approval_status") == ApprovalStatus.RevisionRequested:
-        revision = state.get("revision_request") or "Manager requested revision"
-        completed.append(f"Validation: Revision requested — {revision}")
-        return {
-            "current_agent": "Validation/Safety",
-            "status": WorkflowStatus.WaitingForApproval,
-            "approval_status": ApprovalStatus.Pending,
-            "validation_results": validation_results,
-            "validation_history": validation_history,
-            "requires_approval": True,
-            "completed_steps": completed,
-            "errors": errors,
-            "quality_data": quality_data,
-            "tool_results": tool_results,
-        }
-
-    # ── Route to human approval (all procurement requires manager sign-off) ────
-    return {
-        "current_agent": "Student 3 Quality Validation",
-        "status": WorkflowStatus.WaitingForApproval,
-        "approval_status": ApprovalStatus.Pending,
-        "validation_results": validation_results,
-        "validation_history": validation_history,
-        "requires_approval": True,
-        "automatic_retry_required": False,
-        "completed_steps": completed + ["Supervisor: Quality validation passed; waiting for Manager or IT Admin human approval"],
-        "errors": errors,
-        "quality_data": quality_data,
-        "tool_results": tool_results,
-    }
+    # Specialists return evidence. The supervisor owns routing and approval state.
+    return {"current_agent": "Validation/Safety", "validation_results": validation_results,
+            "validation_history": validation_history, "completed_steps": completed,
+            "errors": errors, "quality_data": quality_data, "tool_results": tool_results}
 
 
 def execution_node(state: AgentState) -> Dict[str, Any]:

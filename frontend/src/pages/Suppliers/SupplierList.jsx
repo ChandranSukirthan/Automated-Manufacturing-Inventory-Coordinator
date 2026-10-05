@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import ModalOverlay from '../../components/Common/ModalOverlay';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2,
@@ -25,6 +26,7 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function SupplierList() {
   const [suppliers, setSuppliers] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -61,8 +63,9 @@ export default function SupplierList() {
     setLoading(true);
     setError('');
     try {
-      const data = await supplierService.getSuppliers();
-      setSuppliers(data);
+      const data = await supplierService.getPage({ page: currentPage, pageSize: itemsPerPage, search: searchTerm, status: statusFilter, sort: sortBy, direction: sortOrder });
+      setSuppliers(data.items);
+      setTotalCount(data.totalCount);
     } catch (err) {
       setError(parseErrorMessage(err, 'Failed to load suppliers.'));
     } finally {
@@ -71,48 +74,24 @@ export default function SupplierList() {
   };
 
   useEffect(() => {
-    const initialLoad = setTimeout(fetchSuppliers, 0);
-    return () => clearTimeout(initialLoad);
-  }, []);
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const data = await supplierService.getPage({ page: currentPage, pageSize: itemsPerPage, search: searchTerm, status: statusFilter, sort: sortBy, direction: sortOrder }, controller.signal);
+        if (!controller.signal.aborted) { setSuppliers(data.items); setTotalCount(data.totalCount); setError(''); }
+      } catch (err) {
+        if (!controller.signal.aborted) setError(parseErrorMessage(err, 'Failed to load suppliers.'));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [currentPage, searchTerm, statusFilter, sortBy, sortOrder]);
 
-  // Filtered & Sorted Suppliers
-  const filteredSuppliers = useMemo(() => {
-    return suppliers
-      .filter((s) => {
-        const matchesSearch =
-          s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (s.supplierCode && s.supplierCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          s.contactEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (s.contactPhone && s.contactPhone.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (s.address && s.address.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        if (!matchesSearch) return false;
-
-        if (statusFilter === 'active') return s.isActive;
-        if (statusFilter === 'inactive') return !s.isActive;
-        return true;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'name') {
-          return sortOrder === 'asc'
-            ? a.name.localeCompare(b.name)
-            : b.name.localeCompare(a.name);
-        }
-        if (sortBy === 'date') {
-          const dateA = new Date(a.createdAt || 0);
-          const dateB = new Date(b.createdAt || 0);
-          return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        }
-        return 0;
-      });
-  }, [suppliers, searchTerm, statusFilter, sortBy, sortOrder]);
-
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage) || 1;
-  const paginatedSuppliers = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredSuppliers.slice(start, start + itemsPerPage);
-  }, [filteredSuppliers, currentPage]);
+  const filteredSuppliers = suppliers;
+  const paginatedSuppliers = suppliers;
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -205,9 +184,9 @@ export default function SupplierList() {
   };
 
   // Metrics
-  const totalCount = suppliers.length;
+
   const activeCount = suppliers.filter((s) => s.isActive).length;
-  const inactiveCount = totalCount - activeCount;
+  const inactiveCount = suppliers.filter(s => !s.isActive).length;
 
   return (
     <AppLayout
@@ -227,21 +206,21 @@ export default function SupplierList() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Vendors</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Matching Vendors</p>
             <Building2 className="w-5 h-5 text-brand-400" />
           </div>
           <p className="text-2xl font-bold text-white mt-2">{totalCount}</p>
         </div>
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Partners</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active on This Page</p>
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-emerald-400 mt-2">{activeCount}</p>
         </div>
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Inactive Vendors</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Inactive on This Page</p>
             <XCircle className="w-5 h-5 text-slate-500" />
           </div>
           <p className="text-2xl font-bold text-slate-400 mt-2">{inactiveCount}</p>
@@ -454,8 +433,8 @@ export default function SupplierList() {
             <div className="p-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
               <span>
                 Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
-                {Math.min(currentPage * itemsPerPage, filteredSuppliers.length)} of{' '}
-                {filteredSuppliers.length} suppliers
+                {Math.min(currentPage * itemsPerPage, totalCount)} of{' '}
+                {totalCount} suppliers
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -483,7 +462,7 @@ export default function SupplierList() {
 
       {/* Create / Edit Supplier Modal */}
       {(isCreateModalOpen || isEditModalOpen) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="text-lg font-bold text-white">
               {isCreateModalOpen ? 'Add New Supplier' : `Edit Supplier — ${selectedSupplier?.name}`}
@@ -640,7 +619,7 @@ export default function SupplierList() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* Delete / Deactivate Confirmation Modal */}

@@ -350,7 +350,8 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 WorkerId = string.IsNullOrWhiteSpace(alertDto.WorkerId) ? "Floor Worker" : alertDto.WorkerId,
                 Status = "Pending",
                 Timestamp = DateTime.UtcNow,
-                MaterialId = alertDto.MaterialId ?? item?.Id,
+                MaterialId = await _context.RawMaterials.Where(m => m.SkuCode == resolved.Sku)
+                    .Select(m => (int?)m.Id).SingleOrDefaultAsync(),
                 MaterialName = materialName,
                 CurrentStock = currentStock,
                 RequiredQuantity = requiredQty,
@@ -397,6 +398,8 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
 
         public async Task<bool> UpdateAlertStatusAsync(int id, string newStatus)
         {
+            if (newStatus is not ("Pending" or "Processing" or "Acknowledged" or "Resolved" or "Dismissed"))
+                throw new ArgumentException("Choose Pending, Processing, Acknowledged, Resolved or Dismissed as the alert status.");
             var alert = await _context.StockAlerts.FindAsync(id);
             if (alert == null) return false;
             alert.Status = newStatus;
@@ -944,6 +947,8 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 throw new ArgumentException("Requested quantity must be greater than zero.");
             }
 
+            if (dto.TriggerType is not ("Manual" or "AutoLowStock"))
+                throw new ArgumentException("Choose Manual or AutoLowStock as the trigger type.");
             var agentBaseUrl = _configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000";
             var objective = !string.IsNullOrWhiteSpace(dto.Objective)
                 ? dto.Objective
@@ -1001,6 +1006,10 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 {
                     objective = objective,
                     background = true,
+                    workflowId = dto.WorkflowId,
+                    triggerType = dto.TriggerType,
+                    requestedQuantity = dto.TriggerType == "Manual" ? (decimal?)dto.RequiredQuantity : null,
+                    requestReason = objective,
                     materialName = materialName,
                     currentStock = item?.StockLevel ?? 0,
                     safetyStock = item?.ReorderThreshold ?? 0,

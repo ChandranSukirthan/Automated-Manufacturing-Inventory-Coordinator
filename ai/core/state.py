@@ -25,8 +25,15 @@ class ApprovalStatus(StrEnum):
 
 
 class AgentState(TypedDict, total=False):
+    synchronization_pending: bool
+    synchronization_error: str | None
     # ── Workflow metadata ──────────────────────────────────────────────────────
+    trigger_type: str
+    requested_quantity: float | None
+    request_reason: str | None
+    required_action: str | None
     workflow_type: str
+    request_identity: dict[str, Any]
     queued_request: dict[str, Any] | None
     machine_id: str | None
     dispatch_confirmed: bool

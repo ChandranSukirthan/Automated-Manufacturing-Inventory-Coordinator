@@ -117,163 +117,62 @@ from ai.agents.data_extraction import data_extraction_node
 from ai.agents.production_analysis import production_analysis_node
 from ai.agents.purchasing import purchasing_node
 from ai.agents.validation import validation_node, execution_node
+from ai.agents.supervisor import supervisor_node
 
 
 # ── Database sync ──────────────────────────────────────────────────────────────
 
-def sync_to_database(state: AgentState) -> None:
+def _publication_headers(encoded_state: str):
+    import hmac
+    from ai.core.request_context import inventory_api_headers
+    timestamp = str(int(time.time()))
+    signature = hmac.new(settings.jwt_secret_key.encode(), (timestamp + "\n" + encoded_state).encode(), hashlib.sha256).hexdigest()
+    return {**inventory_api_headers(), "Content-Type": "application/json", "X-AI-Timestamp": timestamp, "X-AI-Signature": signature}
+
+
+def sync_to_database(state: AgentState) -> bool:
+    """Publish structured state through the backend. SQLite retains failed updates.
+
+    No AI-owned PostgreSQL mutation; the backend authenticates and persists this
+    bounded contract. A failed publication is visible and blocks manager readiness.
+    Retry occurs on the next workflow/revalidation action using the durable session.
     """
-    Syncs workflow state to PostgreSQL AgentWorkflows table.
-    ASP.NET Core and React dashboards read live updates from this table.
-    Does NOT store chain-of-thought — only structured execution fields.
-    """
-    workflow_id = state.get("workflow_id")
-    if not workflow_id:
-        return
-
-    status_val = (
-        state.get("status").value
-        if isinstance(state.get("status"), WorkflowStatus)
-        else str(state.get("status") or "Running")
-    )
-    approval_val = (
-        state.get("approval_status").value
-        if isinstance(state.get("approval_status"), ApprovalStatus)
-        else str(state.get("approval_status") or "Pending")
-    )
-    completed_at = (
-        datetime.now(timezone.utc)
-        if status_val in (WorkflowStatus.Completed.value, WorkflowStatus.Failed.value)
-        else None
-    )
-
-    # Extract QA validation metadata if present
-    validation_results_json = None
-    val_res = state.get("validation_results")
-    if isinstance(val_res, dict) and val_res:
-        validation_results_json = json.dumps({
-            "isValid": bool(val_res.get("isValid", False)),
-            "qualitySafetyStatus": val_res.get("qualitySafetyStatus", "UNKNOWN"),
-            "supplierValidation": val_res.get("supplierValidation", "UNKNOWN"),
-            "budgetCheck": val_res.get("budgetCheck", "UNKNOWN"),
-            "poMathematicalCheck": val_res.get("poMathematicalCheck", "UNKNOWN"),
-            "materialValidation": val_res.get("materialValidation", "UNKNOWN"),
-            "quarantinedRollsCount": int(val_res.get("quarantinedRollsCount", 0) or 0),
-            "impactReason": val_res.get("impactReason") or "",
-            "rejectionReason": val_res.get("rejectionReason") or "",
-            "manualResolutionStatus": val_res.get("manualResolutionStatus") or "NOT_REQUIRED",
-            "manualResolutionNote": val_res.get("manualResolutionNote") or "",
-            "resolvedBy": val_res.get("resolvedBy") or "",
-            "resolvedAt": val_res.get("resolvedAt") or None,
-            "historicalRisk": val_res.get("historicalRisk") or None,
-            "bestChoiceCheck": val_res.get("bestChoiceCheck", "UNKNOWN"),
-            "candidateComparisonCount": int(val_res.get("candidateComparisonCount", 0) or 0),
-            "attemptNumber": int(val_res.get("attemptNumber", 0) or 0),
-            "maxAttempts": int(val_res.get("maxAttempts", 3) or 3),
-            "checkedSupplier": val_res.get("checkedSupplier") or None,
-            "validationHistory": state.get("validation_history") or [],
-        })
-
+    import httpx
+    import logging
+    from ai.config import BACKEND_HOST, API_TIMEOUT_SECONDS
+    from ai.core.request_context import inventory_api_headers
+    from ai.session_store import clean_state
+    if not state.get("workflow_id"):
+        return False
+    state["synchronization_pending"] = True
+    clean = clean_state(state)
     try:
-        with psycopg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            dbname=settings.DB_NAME,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            connect_timeout=3,
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO "AgentWorkflows"
-                        ("Id", "WorkflowId", "Objective", "CurrentAgent", "Status",
-                         "ApprovalStatus", "StartedAt", "CompletedAt", "FinalOutcome", "ValidationResults", "WorkflowType", "MachineId", "StateJson")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT ("WorkflowId") DO UPDATE
-                    SET "Objective"          = EXCLUDED."Objective",
-                        "CurrentAgent"       = EXCLUDED."CurrentAgent",
-                        "Status"             = EXCLUDED."Status",
-                        "ApprovalStatus"     = EXCLUDED."ApprovalStatus",
-                        "CompletedAt"        = EXCLUDED."CompletedAt",
-                        "FinalOutcome"       = EXCLUDED."FinalOutcome",
-                        "ValidationResults"  = COALESCE(EXCLUDED."ValidationResults", "AgentWorkflows"."ValidationResults"),
-                        "WorkflowType" = EXCLUDED."WorkflowType", "MachineId" = EXCLUDED."MachineId", "StateJson" = EXCLUDED."StateJson";
-                    """,
-                    (
-                        str(uuid.uuid4()),
-                        workflow_id,
-                        state.get("objective", ""),
-                        state.get("current_agent", "Planner"),
-                        status_val,
-                        approval_val,
-                        datetime.now(timezone.utc),
-                        completed_at,
-                        state.get("final_outcome"),
-                        validation_results_json,
-                        state.get("workflow_type", "Procurement"), state.get("machine_id"),
-                        json.dumps(dict(state), default=str),
-                    ),
-                )
-            conn.commit()
-    except Exception as ex:
-        print(f"[Workflow Sync Warning] Could not sync {workflow_id} to DB: {ex}")
+        # Sign and transmit identical JSON bytes across HTTPX versions.
+        encoded_state = json.dumps(clean, separators=(",", ":"), ensure_ascii=False, default=str)
+        with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+            response = client.put(
+                f"{BACKEND_HOST}/api/internal/workflows/{state['workflow_id']}/state",
+                headers=_publication_headers(encoded_state), content='{"state":' + encoded_state + '}')
+            response.raise_for_status()
+        state["synchronization_pending"] = False
+        state.pop("synchronization_error", None)
+        success = True
+    except Exception as error:
+        # Do not persist headers, tokens or arbitrary provider exception text.
+        state["synchronization_error"] = "Backend state publication failed; retry with an authorized session"
+        logging.getLogger(__name__).warning("Workflow publication failed: %s (%s)", state["workflow_id"], type(error).__name__)
+        success = False
+    WORKFLOW_SESSIONS[state["workflow_id"]] = state
+    return success
 
 
 def save_procurement_outcome(state: AgentState) -> None:
+    """Actual order/payment/delivery outcomes belong to the backend lifecycle.
+
+    The manager decision is already included in structured workflow publication;
+    recording an AI approval as completed procurement would corrupt learning data.
     """
-    Persists a structured procurement outcome record for the future learning dataset.
-    Called after manager approval/rejection so the full cycle is captured.
-    Never stores chain-of-thought — only structured outcome fields.
-    """
-    try:
-        with psycopg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            dbname=settings.DB_NAME,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            connect_timeout=3,
-        ) as conn:
-            with conn.cursor() as cur:
-                rec_supplier = state.get("recommended_supplier") or {}
-                cur.execute(
-                    """
-                    INSERT INTO "ProcurementOutcomes"
-                        ("Material", "RequestedQuantity", "RecommendedQuantity",
-                         "FinalOrderedQuantity", "RecommendedSupplier", "SelectedSupplier",
-                         "EstimatedPrice", "FinalPrice", "EstimatedLeadTime", "ActualLeadTime",
-                         "QualityEvidence", "SupplierVerification",
-                         "ManagerDecision", "ManagerRevision",
-                         "ProcurementSuccess", "PaymentSuccess", "DeliverySuccess",
-                         "CreatedAt")
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT DO NOTHING;
-                    """,
-                    (
-                        state.get("material_name") or "Unknown",
-                        state.get("net_deficit") or 0,
-                        state.get("recommended_quantity") or 0,
-                        0,  # No confirmed order quantity at recommendation approval.
-                        rec_supplier.get("supplierName") or "Unknown",
-                        rec_supplier.get("supplierName") or "Unknown",
-                        state.get("estimated_unit_price") or 0,
-                        0,  # Final price is recorded by the backend order lifecycle.
-                        int(str(rec_supplier.get("leadTime") or "0").split()[0]) if rec_supplier.get("leadTime") else 0,
-                        0,  # actualLeadTime — updated after delivery
-                        rec_supplier.get("qualityEvidence") or "UNKNOWN",
-                        state.get("supplier_verification") or "UNVERIFIED",
-                        state.get("manager_decision") or "Pending",
-                        state.get("revision_request"),
-                        False,  # Approval is not procurement completion.
-                        False,   # paymentSuccess — updated by ASP.NET after Stripe
-                        False,   # deliverySuccess — updated after delivery
-                        datetime.now(timezone.utc),
-                    ),
-                )
-            conn.commit()
-    except Exception as ex:
-        print(f"[Procurement Outcome Warning] Could not persist outcome: {ex}")
+    return None
 
 
 # ── Conditional routers ────────────────────────────────────────────────────────
@@ -308,7 +207,7 @@ def _maintenance_node(state):
     machine_id = state.get("machine_id")
     if not machine_id:
         raise ValueError("Maintenance requires an exact machine ID")
-    with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+    with psycopg.connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as connection:
         with connection.cursor() as cursor:
             cursor.execute('SELECT "Name", "UptimeHours", "MaintenanceIntervalHours", "Status" FROM "Machines" WHERE "Id" = %s', (machine_id,))
             row = cursor.fetchone()
@@ -324,12 +223,16 @@ def _maintenance_node(state):
 
 def _record_stage(node):
     def recorded(state):
+        started = time.perf_counter()
         try:
             difference = node(state)
         except Exception as error:
-            difference = {"status": WorkflowStatus.Failed, "errors": state.get("errors", []) + [str(error)],
+            difference = {"status": WorkflowStatus.Failed, "requires_approval": False,
+                          "required_action": "RESTORE_SERVICE" if "unavailable" in str(error).lower() else "CORRECT_DATA",
+                          "validation_results": {**(state.get("validation_results") or {}), "isValid": False, "valid": False, "overallStatus": "BLOCKED"}, "errors": state.get("errors", []) + [str(error)],
                           "current_agent": node.__name__, "final_outcome": "This workflow failed; correct the reported issue and retry."}
         difference["agent_handoffs"] = state.get("agent_handoffs", []) + [{
+            "durationMs": round((time.perf_counter() - started) * 1000, 2),
             "agent": node.__name__, "receivedFields": sorted(state.keys()),
             "receivedToolResults": sorted((state.get("tool_results") or {}).keys()),
             "producedFields": sorted(difference.keys()),
@@ -338,6 +241,8 @@ def _record_stage(node):
         updated = {**state, **difference}
         WORKFLOW_SESSIONS[updated["workflow_id"]] = updated
         sync_to_database(updated)
+        difference["synchronization_pending"] = updated.get("synchronization_pending", False)
+        difference["synchronization_error"] = updated.get("synchronization_error")
         return difference
     return recorded
 
@@ -364,6 +269,7 @@ def build_workflow_graph():
     workflow.add_node("production_analysis", _record_stage(production_analysis_node))
     workflow.add_node("purchasing", _record_stage(purchasing_node))
     workflow.add_node("validation", _record_stage(validation_node))
+    workflow.add_node("supervisor", _record_stage(supervisor_node))
 
     workflow.add_edge(START, "planner")
     workflow.add_node("maintenance", _record_stage(_maintenance_node))
@@ -382,8 +288,9 @@ def build_workflow_graph():
         _after_purchasing,
         {"validation": "validation", END: END},
     )
+    workflow.add_conditional_edges("validation", lambda state: END if state.get("status") == WorkflowStatus.Failed else "supervisor", {END: END, "supervisor": "supervisor"})
     workflow.add_conditional_edges(
-        "validation",
+        "supervisor",
         _after_validation,
         {"purchasing": "purchasing", END: END},
     )
@@ -426,6 +333,9 @@ def _run_workflow_unlocked(
     purchasing_data: Optional[Dict[str, Any]] = None,
     workflow_type: str = "Procurement",
     machine_id: Optional[str] = None,
+    trigger_type: str = "AutoLowStock",
+    requested_quantity: Optional[float] = None,
+    request_reason: Optional[str] = None,
 ) -> AgentState:
     """
     Starts and executes the workflow up to completion or the human approval gate.
@@ -434,13 +344,15 @@ def _run_workflow_unlocked(
     """
     wf_id = workflow_id or f"WF-{uuid.uuid4().hex[:6].upper()}"
     existing = WORKFLOW_SESSIONS.get(wf_id)
+    identity = dict(trigger_type=trigger_type, requested_quantity=requested_quantity, objective=objective,
+                    material_id=material_id, workflow_type=workflow_type, machine_id=machine_id,
+                    required_quantity=required_quantity, budget_limit=budget_limit, net_deficit=net_deficit,
+                    procurement_request_id=procurement_request_id, specification=specification,
+                    quality_requirement=quality_requirement, preferred_region=preferred_region,
+                    required_by_date=required_by_date)
     if existing and existing.get("current_agent") != "Queued":
-        identity = dict(objective=objective, material_id=material_id, workflow_type=workflow_type,
-                        machine_id=machine_id, required_quantity=required_quantity, budget_limit=budget_limit,
-                        net_deficit=net_deficit, procurement_request_id=procurement_request_id,
-                        specification=specification, quality_requirement=quality_requirement,
-                        preferred_region=preferred_region, required_by_date=required_by_date)
-        if any(existing.get(key) != value for key, value in identity.items()):
+        original = existing.get("request_identity") or existing
+        if any(original.get(key) != value for key, value in identity.items()):
             raise ValueError("Workflow ID is already assigned to a different request")
         return existing
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -455,7 +367,9 @@ def _run_workflow_unlocked(
     initial_state: AgentState = {
         "workflow_id": wf_id,
         "queued_request": existing.get("queued_request") if existing else None,
+        "request_identity": identity,
         "workflow_type": workflow_type,
+        "trigger_type": trigger_type, "requested_quantity": requested_quantity, "request_reason": request_reason,
         "machine_id": machine_id,
         "procurement_request_id": procurement_request_id,
         "objective": objective,
@@ -492,9 +406,9 @@ def _run_workflow_unlocked(
         "supplier_candidates": [],
         "recommended_supplier": None,
         "alternative_suppliers": [],
-        "supplier_selection_attempt": 0,
+        "supplier_selection_attempt": (existing or {}).get("supplier_selection_attempt", 0),
         "max_supplier_selection_attempts": 3,
-        "excluded_supplier_ids": [],
+        "excluded_supplier_ids": (existing or {}).get("excluded_supplier_ids", []),
         "automatic_retry_required": False,
         "recommended_quantity": None,
         "estimated_unit_price": None,
@@ -505,8 +419,8 @@ def _run_workflow_unlocked(
         "risks": [],
         "sources": [],
         "draft_po": None,
-        "validation_results": {},
-        "validation_history": [],
+        "validation_results": (existing or {}).get("validation_results", {}),
+        "validation_history": (existing or {}).get("validation_history", []),
         "requires_approval": False,
         "manager_decision": None,
         "revision_request": None,
@@ -532,6 +446,54 @@ def _run_workflow_unlocked(
     return result_state
 
 
+def _refresh_quality_decision(state):
+    """Read QA decisions from their authoritative store; never copy stale finance checks."""
+    if settings.demo_mode:
+        return
+    with psycopg.connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as connection:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT "ValidationResults" FROM "AgentWorkflows" WHERE "WorkflowId" = %s', (state["workflow_id"],))
+            row = cursor.fetchone()
+    if row and row[0]:
+        results = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+        prior = dict(state.get("validation_results") or {})
+        for key in ("manualResolutionStatus", "manualResolutionNote", "resolvedBy", "resolvedAt", "historicalRisk", "defectFingerprint"):
+            if key in results:
+                prior[key] = results[key]
+        state["validation_results"] = prior
+
+
+def _evaluate_proposal(state):
+    while True:
+        state.update(_record_stage(validation_node)(state))
+        # A crashed specialist must never be interpreted as a successful assessment.
+        if state.get("status") == WorkflowStatus.Failed:
+            return
+        state.update(_record_stage(supervisor_node)(state))
+        if not state.get("automatic_retry_required"):
+            return
+        state.update(_record_stage(purchasing_node)(state))
+        if state.get("status") == WorkflowStatus.Failed:
+            return
+
+
+@_serialized_action
+def revalidate_workflow(workflow_id):
+    state = WORKFLOW_SESSIONS.get(workflow_id)
+    if not state:
+        return None
+    if state.get("approval_status") in (ApprovalStatus.Approved, ApprovalStatus.Rejected):
+        raise ValueError("A decided workflow cannot be resumed")
+    if not state.get("draft_po"):
+        raise ValueError("There is no proposal to revalidate")
+    _refresh_quality_decision(state)
+    state.update(status=WorkflowStatus.Running, automatic_retry_required=False)
+    _evaluate_proposal(state)
+    WORKFLOW_SESSIONS[workflow_id] = state
+    sync_to_database(state)
+    return state
+
+
 @_serialized_action
 def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> Optional[AgentState]:
     """
@@ -539,6 +501,8 @@ def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> O
     Resumes execution and persists procurement outcome for future learning.
     """
     state = WORKFLOW_SESSIONS.get(workflow_id)
+    if state and state.get("synchronization_pending") and not sync_to_database(state):
+        raise ValueError("Publish the durable workflow to the backend before approving")
     if not state:
         return None
 
@@ -549,6 +513,15 @@ def approve_and_resume(workflow_id: str, approved_by: Optional[str] = None) -> O
     if state.get("workflow_type") == "Maintenance":
         raise ValueError("Maintenance authorization is performed by the backend IT Admin service")
 
+    _refresh_quality_decision(state)
+    state.update(_record_stage(validation_node)(state))
+    if state.get("status") != WorkflowStatus.Failed:
+        state.update(_record_stage(supervisor_node)(state))
+    if state.get("status") != WorkflowStatus.WaitingForApproval or not state.get("validation_results", {}).get("isValid"):
+        state.update(status=WorkflowStatus.Failed, requires_approval=False, automatic_retry_required=False)
+        WORKFLOW_SESSIONS[workflow_id] = state
+        sync_to_database(state)
+        raise ValueError("Fresh validation failed; resolve the findings before approval")
     state["approval_status"] = ApprovalStatus.Approved
     state["requires_approval"] = False
     state["status"] = WorkflowStatus.Running
@@ -619,6 +592,9 @@ def request_revision(
     if state.get("workflow_type") == "Maintenance":
         raise ValueError("Maintenance decisions belong to the backend IT Admin service")
 
+    if int(state.get("supplier_selection_attempt") or 0) >= 3:
+        raise ValueError("Three supplier attempts have been used; start a new reviewed request")
+    _refresh_quality_decision(state)
     state["approval_status"] = ApprovalStatus.RevisionRequested
     state["manager_decision"] = "REQUEST_REVISION"
     state["revision_request"] = revision_notes
@@ -635,11 +611,10 @@ def request_revision(
     state["errors"] = []
     state["draft_po"] = None
     state["purchasing_data"] = {key: value for key, value in state.get("purchasing_data", {}).items() if key != "draft_po"}
-    state["validation_results"] = {}
     with _workflow_lock(workflow_id):
         result_state = {**state, **_record_stage(purchasing_node)(state)}
         if result_state.get("draft_po") and result_state.get("status") != WorkflowStatus.Failed:
-            result_state.update(_record_stage(validation_node)(result_state))
+            _evaluate_proposal(result_state)
     WORKFLOW_SESSIONS[workflow_id] = result_state
     sync_to_database(result_state)
 
@@ -660,7 +635,9 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
     else:
         status_str = str(status_val or "Running")
 
-    if status_str == WorkflowStatus.WaitingForApproval.value:
+    if state.get("synchronization_pending"):
+        output_status = "SYNC_PENDING"
+    elif status_str == WorkflowStatus.WaitingForApproval.value:
         output_status = "READY_FOR_MANAGER_REVIEW"
     elif status_str == WorkflowStatus.Completed.value:
         output_status = "COMPLETED"
@@ -670,6 +647,8 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
         output_status = "IN_PROGRESS"
 
     return {
+        "synchronizationPending": bool(state.get("synchronization_pending")),
+        "synchronizationError": state.get("synchronization_error"),
         "workflowType": state.get("workflow_type", "Procurement"),
         "agentHandoffs": state.get("agent_handoffs", []),
         "machineId": state.get("machine_id"),
@@ -708,6 +687,9 @@ def get_final_output(state: AgentState) -> Dict[str, Any]:
         "quality_evidence": state.get("quality_evidence") or [],
         "supplierVerification": state.get("supplier_verification"),
         "supplier_verification": state.get("supplier_verification"),
+        "requiredAction": state.get("required_action"),
+        "triggerType": state.get("trigger_type", "AutoLowStock"),
+        "requestedQuantity": state.get("requested_quantity"),
         "validationResults": validation,
         "validation_results": validation,
         "validationHistory": state.get("validation_history") or [],

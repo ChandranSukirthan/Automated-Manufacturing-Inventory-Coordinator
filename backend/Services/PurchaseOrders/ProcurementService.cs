@@ -87,7 +87,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             // 1. Quantity & Cost Calculation
             var (finalQty, cost) = CalculateOrderQuantityAndCost(
-                request.CalculatedNetQuantity,
+                request.ProductionRequirement > 0 ? request.ProductionRequirement : request.CalculatedNetQuantity,
                 candidate.MinimumOrderQuantity,
                 candidate.PackSize,
                 candidate.UnitPrice);
@@ -212,8 +212,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (request == null)
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
 
-            if (request.CalculatedNetQuantity <= 0)
-                throw new InvalidOperationException("There is no uncovered material deficit to procure.");
+            if (request.ProductionRequirement <= 0)
+                throw new InvalidOperationException("Manual procurement requires a positive requested quantity.");
             request.Status = ProcurementRequestStatus.Researching;
             request.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();

@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import useCurrentTime from '../../hooks/useCurrentTime';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
@@ -1871,7 +1872,7 @@ export default function ProcurementResearch() {
 
       {/* SUPPLIER ONBOARDING & VERIFICATION MODAL */}
       {verifyModalOpen && candidateToVerify && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1993,7 +1994,7 @@ export default function ProcurementResearch() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* CONFIRMATION MODALS: Approve, Reject, Revise */}
@@ -2009,7 +2010,7 @@ export default function ProcurementResearch() {
       />
 
       {rejectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
             <h3 className="text-base font-bold text-white">Reject Purchase Order</h3>
             <p className="text-xs text-slate-400">
@@ -2038,11 +2039,11 @@ export default function ProcurementResearch() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {reviseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
             <h3 className="text-base font-bold text-white">Request PO Revision</h3>
             <p className="text-xs text-slate-400">
@@ -2071,7 +2072,7 @@ export default function ProcurementResearch() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

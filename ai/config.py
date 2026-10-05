@@ -16,7 +16,7 @@ ALERTS_API_URL = os.getenv("ALERTS_API_URL", f"{BACKEND_HOST}/api/inventory/aler
 PURCHASE_ORDERS_API_URL = os.getenv("PURCHASE_ORDERS_API_URL", f"{BACKEND_HOST}/api/purchase-orders")
 
 API_TIMEOUT_SECONDS = float(os.getenv("API_TIMEOUT_SECONDS", "5.0"))
-AI_SERVER_HOST = os.getenv("AI_SERVER_HOST", "0.0.0.0")
+AI_SERVER_HOST = os.getenv("AI_SERVER_HOST", "127.0.0.1")
 AI_SERVER_PORT = int(os.getenv("AI_SERVER_PORT", "8000"))
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "60"))
 

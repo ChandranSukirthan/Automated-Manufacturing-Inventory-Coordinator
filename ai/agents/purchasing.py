@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from ai.core.state import AgentState, WorkflowStatus
 from ai.core.contracts import first_present
+from ai.core.validation_contract import finite_number
 from ai.tools.purchasing_tools import (
     search_external_supplier_market,
     calculate_purchase_quantity,
@@ -46,7 +47,9 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     tool_results = dict(state.get("tool_results") or {})
     now_iso = datetime.now(timezone.utc).isoformat()
     attempt = int(state.get("supplier_selection_attempt") or 0) + 1
-    max_attempts = int(state.get("max_supplier_selection_attempts") or 3)
+    max_attempts = 3
+    if attempt > max_attempts:
+        raise ValueError("Three supplier attempts have been used; start a new reviewed request")
     excluded_supplier_ids = {
         str(value) for value in (state.get("excluded_supplier_ids") or []) if value is not None
     }
@@ -115,6 +118,9 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     current_stk = float(first_present(state.get("current_stock"), req.get("currentStock"), inv_data.get("currentStock"), 0))
     open_po = float(first_present(state.get("open_po_quantity"), req.get("openPOQuantity"), req.get("existingOpenPoQuantity"), 0))
 
+    if state.get("trigger_type") == "Manual":
+        explicit_deficit = finite_number(first_present(state.get("requested_quantity"), state.get("required_quantity")), "manual requested quantity", positive=True)
+
     qty_calc = calculate_purchase_quantity(
         production_requirement=prod_req,
         safety_stock=safety,
@@ -151,6 +157,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         available_suppliers = []
 
     # ── External market research via Gemini Search Grounding ──────────────────
+    internal_suppliers = query_internal_supplier_data(material_name=material_id)
     market_candidates = search_external_supplier_market(
         material_name=material_name,
         specification=specification,
@@ -160,7 +167,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         preferred_region=preferred_region,
         required_by_date=required_by_date,
         revision_notes=state.get("revision_request"),
-    )
+    ) if not internal_suppliers or state.get("revision_request") else []
     tool_log.append({
         "tool": "search_external_supplier_market",
         "inputs": {"material": material_name, "quantity": net_deficit},
@@ -170,7 +177,6 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     completed.append(f"Purchasing: Discovered {len(market_candidates)} external candidate(s) via Gemini market research")
 
     # ── Internal approved suppliers ───────────────────────────────────────────
-    internal_suppliers = query_internal_supplier_data(material_name=material_id)
     all_candidates: List[Dict[str, Any]] = []
 
     for s in internal_suppliers:
@@ -185,7 +191,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "specification": specification,
             "unitPrice": float(s.get("unitPrice") or s.get("unitPriceUsd") or 0),
             "currency": s.get("currency", "USD"),
-            "unit": unit,
+            "unit": s.get("unit") or unit,
             "minimumOrderQuantity": float(s.get("minimumOrderQuantity", 0)),
             "packSize": float(s.get("packSize", 1)),
             "availableQuantity": float(s.get("availableQuantity", max(net_deficit * 2, 10000) if settings.demo_mode else 0)),
@@ -281,6 +287,9 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
         # MOQ/pack rounding changes both cost and availability requirements.
         val_report = validate_supplier_candidate(cand, {**eval_requirement, "requiredQuantity": cand_qty})
+        if str(cand.get("currency", "USD")).upper() != str(req.get("currency", "USD")).upper() or str(cand.get("unit", unit)).upper() != unit.upper():
+            val_report["isValid"] = False
+            val_report["rejectionReasons"].append("Quote currency or unit differs from the authorized request; conversion is required.")
         val_report["adjustedQuantity"] = cand_qty
         val_report["recommendedQuantity"] = cand_qty
         val_report["totalCost"] = cost_info["totalCost"]
@@ -325,6 +334,14 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         "isActive": top_cand.get("supplierStatus") == "APPROVED",
         "currency": top_cand.get("currency", "USD"),
     }
+
+    if inv_data.get("currentStock") is not None and inv_data.get("burnRate") is not None:
+        from ai.tools.inventory_tools import detect_low_stock
+        coverage = detect_low_stock.invoke({"materialId": material_id,
+            "currentStock": inv_data["currentStock"], "minimumStock": inv_data.get("minimumStock", 0),
+            "burnRate": inv_data["burnRate"], "supplierLeadTime": top_cand.get("leadTimeDays", 0)})
+        inv_data.update({key: coverage[key] for key in ("lowStock", "daysRemaining", "severity", "reason")})
+        tool_results["detect_low_stock_with_supplier"] = coverage
 
     # ── Create Draft PO ───────────────────────────────────────────────────────
     draft_po = create_draft_po(
@@ -378,6 +395,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "qualityEvidenceStatus": cand.get("qualityEvidenceStatus", "UNKNOWN"),
             "sourceUrl": cand.get("sourceUrl"),
             "sourceTitle": cand.get("sourceTitle"),
+            "supplierStatus": cand.get("supplierStatus", "UNVERIFIED"),
             "verificationStatus": cand.get("verificationStatus", "UNVERIFIED"),
             "recommendedQuantity": report.get("recommendedQuantity"),
             "totalCost": report.get("totalCost"),
@@ -439,8 +457,10 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         "supplier_selection_attempt": attempt,
         "max_supplier_selection_attempts": max_attempts,
         "automatic_retry_required": False,
-        "validation_results": {},
-        "net_deficit": net_deficit,
+        "validation_results": {key: value for key, value in (state.get("validation_results") or {}).items()
+            if key in ("manualResolutionStatus", "manualResolutionNote", "resolvedBy", "resolvedAt", "historicalRisk", "defectFingerprint")},
+        "net_deficit": state.get("net_deficit") if state.get("trigger_type") == "Manual" else net_deficit,
+        "inventory_data": inv_data,
         "supplier_candidates": supplier_candidates_out,
         "recommended_supplier": top_cand,
         "alternative_suppliers": selection.get("alternatives", []),

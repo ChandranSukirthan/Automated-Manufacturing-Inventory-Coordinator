@@ -880,23 +880,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
                     bool isQuarantineRequired = qualitySafetyStatus == "QUARANTINE_REQUIRED" || qualitySafetyStatus == "QUARANTINE_ACTIVE";
 
-                    // Verify whether active quarantine hold actually applies to this PO's materials
-                    if (isQuarantineRequired && manualResolutionStatus != "RESOLVED")
-                    {
-                        var activeQuarantinesCount = await GetMaterialQuarantinedRollsCountAsync(po);
-                        if (activeQuarantinesCount == 0)
-                        {
-                            // No active quarantine holds apply to this order's specific materials.
-                            // Clear false alarm from unrelated inventory items.
-                            isQuarantineRequired = false;
-                            qualitySafetyStatus = "CLEAR";
-                            if (!string.IsNullOrWhiteSpace(rejectionReason) && rejectionReason.Contains("quarantine", StringComparison.OrdinalIgnoreCase))
-                            {
-                                rejectionReason = null;
-                            }
-                            isValid = true;
-                        }
-                    }
+                    if (!ManufacturingCoordinator.Api.Helpers.QualityValidationPolicy.NonQualityChecksPassed(root))
+                        throw new InvalidOperationException("Approval blocked: proposal checks are incomplete or failed. Re-run validation.");
+                    if (manualResolutionStatus is "REJECTED" or "ON_HOLD")
+                        throw new InvalidOperationException("Approval blocked: QA has rejected or held this proposal.");
+                    if (!isValid)
+                        throw new InvalidOperationException("Approval blocked: current validation has not passed. Re-run validation after QA review.");
 
                     bool isManualReviewRequired = qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || isQuarantineRequired;
 
@@ -1212,6 +1201,24 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 ["resolvedAt"] = resolvedAt,
                 ["historicalRisk"] = historicalRisk
             };
+
+            // A native QA refresh must preserve the cooperative proposal checks.
+            if (!string.IsNullOrWhiteSpace(existingWf?.ValidationResults))
+            {
+                using var previous = JsonDocument.Parse(existingWf.ValidationResults);
+                foreach (var property in previous.RootElement.EnumerateObject())
+                    if (!validationDict.ContainsKey(property.Name)) validationDict[property.Name] = property.Value.Clone();
+                if (previous.RootElement.TryGetProperty("assessmentVersion", out var version) && version.TryGetInt32(out var number) && number >= 2 &&
+                    previous.RootElement.TryGetProperty("checkedSupplier", out var assessed) &&
+                    assessed.TryGetProperty("totalCost", out var assessedCost) && assessedCost.TryGetDecimal(out var oldCost) && oldCost != po.TotalCost)
+                {
+                    validationDict["bestChoiceCheck"] = "STALE_PROPOSAL";
+                    validationDict["rejectionReason"] = "Order changed after cooperative validation. Obtain a fresh proposal assessment.";
+                }
+                isValid = isValid && ManufacturingCoordinator.Api.Helpers.QualityValidationPolicy.NonQualityChecksPassed(validationDict);
+                validationDict["isValid"] = isValid;
+                validationDict["valid"] = isValid;
+            }
 
             var json = JsonSerializer.Serialize(validationDict);
 

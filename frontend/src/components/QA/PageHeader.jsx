@@ -8,15 +8,15 @@ export default function PageHeader({
 }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-6 mb-6">
-      <div>
-        <div className="flex items-center gap-2">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-blue-400 uppercase tracking-widest text-xs font-bold">
             {category}
           </span>
           <span className="text-slate-600">•</span>
           <span className="text-slate-400 text-xs font-medium">Control Center</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight mt-1">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight mt-1 break-words">
           {title}
         </h1>
         {subtitle && (
@@ -27,7 +27,7 @@ export default function PageHeader({
       </div>
 
       {actions && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
           {actions}
         </div>
       )}

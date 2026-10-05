@@ -1,3 +1,4 @@
+import useMobileNavigation from './useMobileNavigation';
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -21,12 +22,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 import adminService from '../../services/adminService';
+import { normalizeRole } from '../../utils/roles';
 
-export default function AdminLayout({ children, title, subtitle }) {
+export default function AdminLayout({ children, title, subtitle, actionButton }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { mobileMenuOpen, setMobileMenuOpen, sidebarRef } = useMobileNavigation();
   const [pendingWfCount, setPendingWfCount] = useState(0);
 
   React.useEffect(() => {
@@ -36,7 +38,7 @@ export default function AdminLayout({ children, title, subtitle }) {
         const workflows = await adminService.getAgentWorkflows();
         if (isMounted && Array.isArray(workflows)) {
           const pending = workflows.filter(
-            w => (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
+            w => w.workflowType === 'Maintenance' && (w.status === 3 || w.status === 'WaitingForApproval' || w.approvalStatus === 0 || w.approvalStatus === 'Pending') &&
                  w.status !== 1 && w.status !== 'Completed' &&
                  w.status !== 2 && w.status !== 'Failed'
           ).length;
@@ -80,12 +82,23 @@ export default function AdminLayout({ children, title, subtitle }) {
         { label: 'AI Workflows', path: '/admin/agent-workflows', icon: Bot },
         { label: 'Payment Approvals', path: '/ai-approvals', icon: CreditCard },
         { label: 'System Health', path: '/admin/system-health', icon: Activity },
+        { label: 'My Profile', path: '/profile', icon: UserIcon },
+      ]
+    },
+    {
+      title: 'Shared Operations',
+      items: [
+        { label: 'Purchase Orders', path: '/purchase-orders', icon: Package },
+        { label: 'Suppliers', path: '/suppliers', icon: Users },
+        { label: 'AI Procurement', path: '/purchase-orders/procurement', icon: Bot },
+        { label: 'Quality Control', path: '/quality', icon: ShieldCheck },
+        { label: 'Worker Inventory', path: '/inventory', icon: Package },
       ]
     }
   ];
 
   const getRoleLabel = (role) => {
-    switch (role) {
+    switch (normalizeRole(role)) {
       case 0:
       case 'FloorWorker':
         return 'Floor Worker';
@@ -104,7 +117,7 @@ export default function AdminLayout({ children, title, subtitle }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-brand-500 selection:text-white">
+    <div className="role-shell role-admin min-h-screen bg-slate-950 text-slate-100 flex font-sans selection:bg-brand-500 selection:text-white">
       {/* Ambient background glows */}
       <div className="fixed top-0 left-64 w-96 h-96 bg-brand-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
       <div className="fixed bottom-0 right-10 w-96 h-96 bg-cyan-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
@@ -118,8 +131,8 @@ export default function AdminLayout({ children, title, subtitle }) {
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900/80 backdrop-blur-2xl border-r border-white/10 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
-        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      <aside ref={sidebarRef} className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-slate-900/80 backdrop-blur-2xl border-r border-white/10 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full invisible lg:visible'
       }`}>
         {/* Brand Header */}
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
@@ -154,7 +167,11 @@ export default function AdminLayout({ children, title, subtitle }) {
               <div className="space-y-1">
                 {section.items.map((item) => {
                   const Icon = item.icon;
-                  const isActive = location.pathname === item.path;
+                  const currentPath = location.pathname === '/purchase-orders/approvals' ? '/ai-approvals' : location.pathname;
+                  const activePath = navSections.flatMap((group) => group.items)
+                    .filter((link) => currentPath === link.path || (link.path !== '/admin' && currentPath.startsWith(`${link.path}/`)))
+                    .sort((a, b) => b.path.length - a.path.length)[0]?.path;
+                  const isActive = item.path === activePath;
                   return (
                     <Link
                       key={item.path}
@@ -166,7 +183,7 @@ export default function AdminLayout({ children, title, subtitle }) {
                           : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Icon className={`w-4 h-4 transition-colors ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-brand-400'}`} />
                         <span>{item.label}</span>
                       </div>
@@ -195,9 +212,6 @@ export default function AdminLayout({ children, title, subtitle }) {
               </div>
               <div className="truncate">
                 <p className="text-sm font-semibold text-white truncate">{user?.fullName || 'Administrator'}</p>
-                <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
-                  {getRoleLabel(user?.role)}
-                </span>
                 {getRoleLabel(user?.role) ? (
                   <span className="inline-block px-2 py-0.5 text-[10px] font-medium rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
                     {getRoleLabel(user?.role)}
@@ -219,33 +233,34 @@ export default function AdminLayout({ children, title, subtitle }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
         {/* Top Header */}
-        <header className="sticky top-0 z-30 h-16 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 px-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <header className="role-topbar sticky top-0 z-30 min-h-16 bg-slate-950/80 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <button
-              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu" onClick={() => setMobileMenuOpen(true)}
               className="lg:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 border border-white/10"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">{title || 'Manufacturing Coordinator'}</h1>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-white tracking-tight break-words">{title || 'Manufacturing Coordinator'}</h1>
               {subtitle && <p className="text-xs text-slate-400 hidden sm:block">{subtitle}</p>}
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             <Link 
               to="/admin/system-health"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-xs text-slate-300"
+              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-xs text-slate-300"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-mono text-emerald-400 font-medium">System Online</span>
             </Link>
+            {actionButton}
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+        <main className="role-content flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
           {children}
         </main>
       </div>

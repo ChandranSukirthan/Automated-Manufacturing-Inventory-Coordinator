@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any, Literal
 from fastapi import APIRouter, Header, HTTPException, status, Depends, BackgroundTasks
 import uuid
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from ai.core.state import WorkflowStatus, ApprovalStatus
 from ai.graph.workflow import (
@@ -28,10 +28,17 @@ from ai.core.request_context import (
 
 from ai.security import require_actor, require_role
 router = APIRouter(prefix="/api/workflows", tags=["Agent Workflows"], dependencies=[Depends(require_actor)])
-tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"])
+tools_router = APIRouter(prefix="/api/tools", tags=["Production Tools"], dependencies=[Depends(require_actor)])
 
 
 # ── Request / Response Schemas ─────────────────────────────────────────────────
+
+class ProductionContext(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    shiftId: str = Field(min_length=1, max_length=64)
+    machineId: Optional[str] = Field(None, max_length=64)
+    materialPerUnit: float = Field(gt=0)
+
 
 class RunWorkflowRequest(BaseModel):
     """
@@ -39,6 +46,20 @@ class RunWorkflowRequest(BaseModel):
     Supports both camelCase and snake_case formats.
     All quantity/budget fields are authoritative — the AI never invents them.
     """
+    model_config = ConfigDict(allow_inf_nan=False)
+    triggerType: Literal["AutoLowStock", "Manual"] = "AutoLowStock"
+    requestedQuantity: Optional[float] = Field(None, gt=0)
+    requestReason: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_manual_quantity(self):
+        if self.triggerType == "Manual":
+            quantity = self.requestedQuantity if self.requestedQuantity is not None else (self.requiredQuantity if self.requiredQuantity is not None else self.required_quantity)
+            if quantity is None or quantity <= 0:
+                raise ValueError("Manual requests require a positive requested quantity")
+            self.requestedQuantity = quantity
+        return self
+
     objective: str = Field(..., description="Business objective for the Planner agent.")
     workflowId: Optional[str] = Field(None)
     procurementRequestId: Optional[int] = Field(None)
@@ -55,6 +76,8 @@ class RunWorkflowRequest(BaseModel):
     netDeficit: Optional[float] = None          # authoritative — never invented by AI
     budgetLimit: Optional[float] = None
     unit: Optional[str] = None
+    currency: Literal["USD"] = "USD"
+    productionContext: Optional[ProductionContext] = None
     qualityRequirement: Optional[str] = None
     preferredRegion: Optional[str] = None
     requiredByDate: Optional[str] = None
@@ -85,14 +108,16 @@ class ApproveRequest(BaseModel):
 
 
 class MaintenanceCheckRequest(BaseModel):
-    uptime: float = Field(...)
-    maintenanceInterval: float = Field(...)
+    model_config = ConfigDict(allow_inf_nan=False)
+    uptime: float = Field(..., ge=0)
+    maintenanceInterval: float = Field(..., gt=0)
     machineId: str = Field("M001")
 
 
 class ProductionImpactRequest(BaseModel):
-    target: int = Field(...)
-    availableMaterial: int = Field(...)
+    model_config = ConfigDict(allow_inf_nan=False)
+    target: int = Field(..., ge=0)
+    availableMaterial: int = Field(..., ge=0)
 
 
 
@@ -139,7 +164,11 @@ def _trigger_workflow(request, authorization, background_tasks, actor):
                   "current_agent": "Queued", "queued_request": request.model_dump(), "errors": []}
         WORKFLOW_SESSIONS[request.workflowId] = queued
         from ai.graph.workflow import sync_to_database
-        sync_to_database(queued)
+        publication_token = set_authorization_header(authorization)
+        try:
+            sync_to_database(queued)
+        finally:
+            reset_authorization_header(publication_token)
         request.background = False
         background_tasks.add_task(trigger_workflow, request, authorization, actor=actor)
         return get_final_output(queued)
@@ -150,7 +179,9 @@ def _trigger_workflow(request, authorization, background_tasks, actor):
     resolved_quantity = request.requiredQuantity if request.requiredQuantity is not None else request.required_quantity
 
     # Build legacy procurement_requirement dict for backward compatibility
-    req_dict: Dict[str, Any] = {}
+    req_dict: Dict[str, Any] = {"currency": request.currency}
+    if request.productionContext:
+        req_dict["productionContext"] = request.productionContext.model_dump()
     if budget is not None:
         req_dict["budgetLimit"] = budget
         req_dict["maximumBudget"] = budget
@@ -181,6 +212,7 @@ def _trigger_workflow(request, authorization, background_tasks, actor):
     token = set_authorization_header(authorization)
     try:
         state = run_workflow(
+        trigger_type=request.triggerType, requested_quantity=request.requestedQuantity, request_reason=request.requestReason,
         objective=request.objective,
         workflow_id=request.workflowId,
         procurement_requirement=req_dict if req_dict else None,
@@ -220,9 +252,27 @@ def retry_workflow(workflow_id: str, background_tasks: BackgroundTasks,
         raise HTTPException(404, "Workflow was not found")
     require_role(actor, *(('ITAdmin',) if state.get('workflow_type') == 'Maintenance'
                          else ('FloorWorker', 'SupplyChainManager', 'ITAdmin')))
+    if state.get("synchronization_pending"):
+        from ai.graph.workflow import sync_to_database
+        token = set_authorization_header(authorization)
+        try:
+            sync_to_database(state)
+            return get_final_output(state)
+        finally:
+            reset_authorization_header(token)
     if state.get("status") != WorkflowStatus.Failed and state.get("current_agent") != "Supplier Review":
         raise HTTPException(409, "Only failed analyses or supplier review without an order can be retried")
+    if state.get("draft_po") and state.get("required_action") in ("QA_REVIEW", "RESTORE_SERVICE", "CORRECT_DATA"):
+        from ai.graph.workflow import revalidate_workflow
+        token = set_authorization_header(authorization)
+        try:
+            return get_final_output(revalidate_workflow(workflow_id))
+        finally:
+            reset_authorization_header(token)
+    if int(state.get("supplier_selection_attempt") or 0) >= 3:
+        raise HTTPException(409, "Three supplier attempts have been used; start a new reviewed request")
     request = state.get("queued_request") or {
+        "triggerType": state.get("trigger_type", "AutoLowStock"), "requestedQuantity": state.get("requested_quantity"),
         "objective": state["objective"], "workflowId": workflow_id,
         "materialId": state.get("material_id"), "materialName": state.get("material_name"),
         "requiredQuantity": state.get("required_quantity"), "currentStock": state.get("current_stock"),
@@ -256,17 +306,36 @@ def get_workflow(workflow_id: str):
     return get_final_output(session)
 
 
+@router.post("/{workflow_id}/revalidate")
+def revalidate_endpoint(workflow_id: str, authorization: Optional[str] = Header(default=None), actor: dict = Depends(require_actor)):
+    require_role(actor, "QualityInspector", "SupplyChainManager", "ITAdmin")
+    from ai.graph.workflow import revalidate_workflow
+    token = set_authorization_header(authorization)
+    try:
+        result = revalidate_workflow(workflow_id)
+        if result is None:
+            raise HTTPException(404, "Workflow was not found")
+        return get_final_output(result)
+    except ValueError as error:
+        raise HTTPException(409, str(error))
+    finally:
+        reset_authorization_header(token)
+
+
 @router.post("/{workflow_id}/approve")
-def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest(), actor: dict = Depends(require_actor)):
+def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest(), authorization: Optional[str] = Header(default=None), actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager APPROVE action.
     Resumes execution and persists procurement outcome for future learning.
     """
     require_role(actor, "SupplyChainManager")
+    token = set_authorization_header(authorization)
     try:
         resumed = approve_and_resume(workflow_id, approved_by=actor.get("sub"))
     except ValueError as error:
         raise HTTPException(409, str(error))
+    finally:
+        reset_authorization_header(token)
     if not resumed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -276,17 +345,20 @@ def approve_workflow(workflow_id: str, request: ApproveRequest = ApproveRequest(
 
 
 @router.post("/{workflow_id}/reject")
-def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest, actor: dict = Depends(require_actor)):
+def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest, authorization: Optional[str] = Header(default=None), actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager REJECT action.
     Persists rejection reason for future learning dataset.
     """
     require_role(actor, "SupplyChainManager")
+    token = set_authorization_header(authorization)
     try:
         rejected = reject_workflow(workflow_id, reason=request.reason or "Rejected by Supply Chain Manager",
                                    rejected_by=actor.get("sub"))
     except ValueError as error:
         raise HTTPException(409, str(error))
+    finally:
+        reset_authorization_header(token)
     if not rejected:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -296,17 +368,20 @@ def reject_workflow_endpoint(workflow_id: str, request: RejectWorkflowRequest, a
 
 
 @router.post("/{workflow_id}/revision")
-def request_revision_endpoint(workflow_id: str, request: RevisionRequest, actor: dict = Depends(require_actor)):
+def request_revision_endpoint(workflow_id: str, request: RevisionRequest, authorization: Optional[str] = Header(default=None), actor: dict = Depends(require_actor)):
     """
     Supply Chain Manager REQUEST_REVISION action.
     Sends structured revision requirement back into the purchasing → validation loop.
     """
     require_role(actor, "SupplyChainManager")
+    token = set_authorization_header(authorization)
     try:
         revised = request_revision(workflow_id, revision_notes=request.revisionNotes,
                                    requested_by=actor.get("sub"))
     except ValueError as error:
         raise HTTPException(409, str(error))
+    finally:
+        reset_authorization_header(token)
     if not revised:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

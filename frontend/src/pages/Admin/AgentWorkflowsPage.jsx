@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
   Bot, 
@@ -340,7 +341,7 @@ export default function AgentWorkflowsPage() {
 
       {/* Trigger Workflow Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div className="flex items-center gap-2.5">
@@ -436,7 +437,7 @@ export default function AgentWorkflowsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

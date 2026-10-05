@@ -9,15 +9,18 @@ import 'po_details_screen.dart';
 class ProcurementDetailsScreen extends StatefulWidget {
   const ProcurementDetailsScreen({
     required this.service,
+    this.showAppBar = true,
     this.procurementId,
     super.key,
   });
 
   final PurchaseOrderService service;
+  final bool showAppBar;
   final int? procurementId;
 
   @override
-  State<ProcurementDetailsScreen> createState() => _ProcurementDetailsScreenState();
+  State<ProcurementDetailsScreen> createState() =>
+      _ProcurementDetailsScreenState();
 }
 
 class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
@@ -97,106 +100,170 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
 
     return Scaffold(
       backgroundColor: navyBg,
-      appBar: AppBar(
-        backgroundColor: navyBg,
-        elevation: 0,
-        title: Text(
-          _activeId != null ? 'Procurement #$_activeId' : 'Procurement Tracker',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: _fetchDetails,
-            tooltip: 'Refresh Status',
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: navyBg,
+              elevation: 0,
+              title: Text(
+                _activeId != null
+                    ? 'Procurement #$_activeId'
+                    : 'Procurement Tracker',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: Colors.white70,
+                  ),
+                  onPressed: _fetchDetails,
+                  tooltip: 'Refresh Status',
+                ),
+              ],
+            )
+          : null,
+      body: Column(
+        children: [
+          if (!widget.showAppBar)
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Refresh',
+                onPressed: _fetchDetails,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? StateMessage(
+                    message: _error!,
+                    icon: Icons.cloud_off,
+                    action: _fetchDetails,
+                  )
+                : _statusTracking == null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.assignment_outlined,
+                            size: 56,
+                            color: Colors.white24,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No Active Procurement Found',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Submit a Low Stock Alert from the Factory Assistant to initiate AI procurement research.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _fetchDetails,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: cyanAccent,
+                              foregroundColor: Colors.black,
+                            ),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Check Again'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _fetchDetails,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Top Header / Material Overview Card ──
+                          _buildHeaderCard(cardBg, cyanAccent, emeraldAccent),
+                          const SizedBox(height: 16),
+
+                          // ── Safety Gate Banner (Approval Pending) ──
+                          if (_statusTracking!.isApprovalPending) ...[
+                            _buildSafetyGateBanner(cardBg, amberAccent),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // ── 11-Stage Pipeline Stepper ──
+                          _buildPipelineStepper(
+                            cardBg,
+                            cyanAccent,
+                            emeraldAccent,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ── AI Recommendation Summary ──
+                          if (_statusTracking!.supplierName != null &&
+                              _statusTracking!.supplierName!.isNotEmpty) ...[
+                            _buildRecommendationSummaryCard(
+                              cardBg,
+                              cyanAccent,
+                              emeraldAccent,
+                              amberAccent,
+                              roseAccent,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // ── Evaluated Candidates Selection ──
+                          _buildCandidateSelectionCard(
+                            cardBg,
+                            cyanAccent,
+                            emeraldAccent,
+                            amberAccent,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ── Approved Purchase Telemetry (Post-Approval) ──
+                          if (_isApprovedOrLater) ...[
+                            _buildApprovedPurchaseCard(
+                              cardBg,
+                              emeraldAccent,
+                              cyanAccent,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // ── Incoming Supply Tracking (Delivery Phase) ──
+                          if (_isDeliveryPhase) ...[
+                            _buildIncomingSupplyCard(
+                              cardBg,
+                              cyanAccent,
+                              emeraldAccent,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? StateMessage(
-                  message: _error!,
-                  icon: Icons.cloud_off,
-                  action: _fetchDetails,
-                )
-              : _statusTracking == null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.assignment_outlined, size: 56, color: Colors.white24),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No Active Procurement Found',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Submit a Low Stock Alert from the Factory Assistant to initiate AI procurement research.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white54, fontSize: 13),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: _fetchDetails,
-                              style: ElevatedButton.styleFrom(backgroundColor: cyanAccent, foregroundColor: Colors.black),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Check Again'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _fetchDetails,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // ── Top Header / Material Overview Card ──
-                            _buildHeaderCard(cardBg, cyanAccent, emeraldAccent),
-                            const SizedBox(height: 16),
-
-                            // ── Safety Gate Banner (Approval Pending) ──
-                            if (_statusTracking!.isApprovalPending) ...[
-                              _buildSafetyGateBanner(cardBg, amberAccent),
-                              const SizedBox(height: 16),
-                            ],
-
-                            // ── 11-Stage Pipeline Stepper ──
-                            _buildPipelineStepper(cardBg, cyanAccent, emeraldAccent),
-                            const SizedBox(height: 16),
-
-                            // ── AI Recommendation Summary ──
-                            if (_statusTracking!.supplierName != null && _statusTracking!.supplierName!.isNotEmpty) ...[
-                              _buildRecommendationSummaryCard(cardBg, cyanAccent, emeraldAccent, amberAccent, roseAccent),
-                              const SizedBox(height: 16),
-                            ],
-
-                            // ── Evaluated Candidates Selection ──
-                            _buildCandidateSelectionCard(cardBg, cyanAccent, emeraldAccent, amberAccent),
-                            const SizedBox(height: 16),
-
-                            // ── Approved Purchase Telemetry (Post-Approval) ──
-                            if (_isApprovedOrLater) ...[
-                              _buildApprovedPurchaseCard(cardBg, emeraldAccent, cyanAccent),
-                              const SizedBox(height: 16),
-                            ],
-
-                            // ── Incoming Supply Tracking (Delivery Phase) ──
-                            if (_isDeliveryPhase) ...[
-                              _buildIncomingSupplyCard(cardBg, cyanAccent, emeraldAccent),
-                              const SizedBox(height: 16),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
     );
   }
 
@@ -239,11 +306,16 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: emeraldAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: emeraldAccent.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: emeraldAccent.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Text(
                   step.title,
@@ -335,7 +407,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E170A),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: amberAccent.withValues(alpha: 0.5), width: 1.5),
+        border: Border.all(
+          color: amberAccent.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: amberAccent.withValues(alpha: 0.12),
@@ -355,7 +430,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                   color: amberAccent.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.lock_outline_rounded, color: amberAccent, size: 22),
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  color: amberAccent,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -389,7 +468,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 const SizedBox(width: 6),
                 Text(
                   'Supply Chain Authority Granted • Actionable Mobile Mode',
-                  style: TextStyle(color: amberAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: amberAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -400,7 +483,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
   }
 
   // ── 11-Stage Pipeline Stepper ──────────────────────────────────────────────
-  Widget _buildPipelineStepper(Color cardBg, Color cyanAccent, Color emeraldAccent) {
+  Widget _buildPipelineStepper(
+    Color cardBg,
+    Color cyanAccent,
+    Color emeraldAccent,
+  ) {
     final steps = ProcurementPipelineStep.values;
     final currentIdx = _statusTracking!.pipelineStep.index;
 
@@ -498,16 +585,21 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                                   color: isCurrent
                                       ? cyanAccent
                                       : isCompleted
-                                          ? Colors.white
-                                          : Colors.white54,
-                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                                      ? Colors.white
+                                      : Colors.white54,
+                                  fontWeight: isCurrent
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
                                   fontSize: 13,
                                 ),
                               ),
                               if (isCurrent) ...[
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: cyanAccent.withValues(alpha: 0.2),
                                     borderRadius: BorderRadius.circular(4),
@@ -529,7 +621,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                           Text(
                             step.description,
                             style: TextStyle(
-                              color: isCurrent ? Colors.white70 : Colors.white38,
+                              color: isCurrent
+                                  ? Colors.white70
+                                  : Colors.white38,
                               fontSize: 11,
                             ),
                           ),
@@ -563,8 +657,8 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     final qualityColor = qualityStatus == 'VERIFIED'
         ? emeraldAccent
         : qualityStatus == 'NOT VERIFIED'
-            ? roseAccent
-            : Colors.white54;
+        ? roseAccent
+        : Colors.white54;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -604,23 +698,35 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           // Detail rows
           _buildDetailRow('Material', t.materialName),
           _buildDetailRow('Recommended Supplier', t.supplierName ?? 'Pending'),
-          _buildDetailRow('Recommended Product', t.requiredSpecification.isNotEmpty ? t.requiredSpecification : t.materialName),
+          _buildDetailRow(
+            'Recommended Product',
+            t.requiredSpecification.isNotEmpty
+                ? t.requiredSpecification
+                : t.materialName,
+          ),
           _buildDetailRow(
             'Recommended Quantity',
             '${t.recommendedQuantity?.toStringAsFixed(0) ?? t.netDeficit.toStringAsFixed(0)} units',
           ),
           _buildDetailRow(
             'Unit Price',
-            t.unitPrice != null ? '\$${t.unitPrice!.toStringAsFixed(2)}' : 'TBD',
+            t.unitPrice != null
+                ? '\$${t.unitPrice!.toStringAsFixed(2)}'
+                : 'TBD',
           ),
           _buildDetailRow(
             'Estimated Total',
-            t.totalCost != null ? '\$${t.totalCost!.toStringAsFixed(2)}' : 'TBD',
+            t.totalCost != null
+                ? '\$${t.totalCost!.toStringAsFixed(2)}'
+                : 'TBD',
             valueColor: cyanAccent,
             isBold: true,
           ),
           _buildDetailRow('Availability', t.availability ?? 'In Stock'),
-          _buildDetailRow('Lead Time', t.leadTimeDays != null ? '${t.leadTimeDays} days' : 'Standard'),
+          _buildDetailRow(
+            'Lead Time',
+            t.leadTimeDays != null ? '${t.leadTimeDays} days' : 'Standard',
+          ),
 
           const SizedBox(height: 12),
           Row(
@@ -631,13 +737,17 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 decoration: BoxDecoration(
                   color: supplierColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: supplierColor.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: supplierColor.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isApprovedSupplier ? Icons.verified : Icons.warning_amber_rounded,
+                      isApprovedSupplier
+                          ? Icons.verified
+                          : Icons.warning_amber_rounded,
                       size: 13,
                       color: supplierColor,
                     ),
@@ -661,7 +771,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 decoration: BoxDecoration(
                   color: qualityColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: qualityColor.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: qualityColor.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Text(
                   'Quality: $qualityStatus',
@@ -678,7 +790,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
             const SizedBox(height: 8),
             Text(
               'Evidence: ${t.qualityEvidence}',
-              style: const TextStyle(color: Colors.white54, fontSize: 11, fontStyle: FontStyle.italic),
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ],
         ],
@@ -687,7 +803,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
   }
 
   // ── Approved Purchase Telemetry ────────────────────────────────────────────
-  Widget _buildApprovedPurchaseCard(Color cardBg, Color emeraldAccent, Color cyanAccent) {
+  Widget _buildApprovedPurchaseCard(
+    Color cardBg,
+    Color emeraldAccent,
+    Color cyanAccent,
+  ) {
     final t = _statusTracking!;
     final payStatus = (t.paymentStatus ?? 'Paid').toUpperCase();
     final notifStatus = (t.supplierNotificationStatus ?? 'Sent').toUpperCase();
@@ -719,13 +839,32 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           const SizedBox(height: 12),
           const Divider(color: Colors.white12, height: 1),
           const SizedBox(height: 12),
-          _buildDetailRow('PO Number', t.purchaseOrderNumber ?? 'PO-${t.purchaseOrderId ?? 101}'),
-          _buildDetailRow('PO Status', 'APPROVED', valueColor: emeraldAccent, isBold: true),
-          _buildDetailRow('Payment Status', 'Stripe: $payStatus', valueColor: emeraldAccent),
-          _buildDetailRow('Supplier Notification', 'SendGrid PDF: $notifStatus', valueColor: cyanAccent),
+          _buildDetailRow(
+            'PO Number',
+            t.purchaseOrderNumber ?? 'PO-${t.purchaseOrderId ?? 101}',
+          ),
+          _buildDetailRow(
+            'PO Status',
+            'APPROVED',
+            valueColor: emeraldAccent,
+            isBold: true,
+          ),
+          _buildDetailRow(
+            'Payment Status',
+            'Stripe: $payStatus',
+            valueColor: emeraldAccent,
+          ),
+          _buildDetailRow(
+            'Supplier Notification',
+            'SendGrid PDF: $notifStatus',
+            valueColor: cyanAccent,
+          ),
           _buildDetailRow(
             'Expected Delivery',
-            DateTime.now().add(Duration(days: t.leadTimeDays ?? 5)).toString().substring(0, 10),
+            DateTime.now()
+                .add(Duration(days: t.leadTimeDays ?? 5))
+                .toString()
+                .substring(0, 10),
           ),
         ],
       ),
@@ -733,9 +872,15 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
   }
 
   // ── Incoming Supply Tracking ───────────────────────────────────────────────
-  Widget _buildIncomingSupplyCard(Color cardBg, Color cyanAccent, Color emeraldAccent) {
+  Widget _buildIncomingSupplyCard(
+    Color cardBg,
+    Color cyanAccent,
+    Color emeraldAccent,
+  ) {
     final t = _statusTracking!;
-    final deliveryStatus = SupplyDeliveryStatus.fromString(t.purchaseOrderStatus);
+    final deliveryStatus = SupplyDeliveryStatus.fromString(
+      t.purchaseOrderStatus,
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -752,7 +897,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.local_shipping_outlined, color: cyanAccent, size: 20),
+                  Icon(
+                    Icons.local_shipping_outlined,
+                    color: cyanAccent,
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'Incoming Supply Tracking',
@@ -769,7 +918,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 decoration: BoxDecoration(
                   color: deliveryStatus.color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: deliveryStatus.color.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: deliveryStatus.color.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Text(
                   deliveryStatus.label,
@@ -788,10 +939,20 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           _buildDetailRow('PO Number', t.purchaseOrderNumber ?? 'Not created'),
           _buildDetailRow('Supplier', t.supplierName ?? 'Not selected'),
           _buildDetailRow('Material', t.materialName),
-          _buildDetailRow('Quantity', t.recommendedQuantity == null ? 'Not recorded' : '${t.recommendedQuantity!.toStringAsFixed(0)} units'),
+          _buildDetailRow(
+            'Quantity',
+            t.recommendedQuantity == null
+                ? 'Not recorded'
+                : '${t.recommendedQuantity!.toStringAsFixed(0)} units',
+          ),
           _buildDetailRow(
             'Expected Delivery',
-            t.leadTimeDays == null ? 'Not recorded' : DateTime.now().add(Duration(days: t.leadTimeDays!)).toString().substring(0, 10),
+            t.leadTimeDays == null
+                ? 'Not recorded'
+                : DateTime.now()
+                      .add(Duration(days: t.leadTimeDays!))
+                      .toString()
+                      .substring(0, 10),
           ),
         ],
       ),
@@ -820,7 +981,11 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
               Expanded(
                 child: Row(
                   children: [
-                    Icon(Icons.inventory_2_outlined, color: cyanAccent, size: 18),
+                    Icon(
+                      Icons.inventory_2_outlined,
+                      color: cyanAccent,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
@@ -841,11 +1006,19 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: cyanAccent.withValues(alpha: 0.15),
                   foregroundColor: cyanAccent,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 icon: const Icon(Icons.search, size: 14),
-                label: const Text('AI Research', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'AI Research',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -865,9 +1038,15 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                     const SizedBox(height: 8),
                     ElevatedButton.icon(
                       onPressed: _handleTriggerResearch,
-                      style: ElevatedButton.styleFrom(backgroundColor: cyanAccent, foregroundColor: Colors.black),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: cyanAccent,
+                        foregroundColor: Colors.black,
+                      ),
                       icon: const Icon(Icons.auto_awesome, size: 16),
-                      label: const Text('Trigger AI Agent Sourcing', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'Trigger AI Agent Sourcing',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -889,7 +1068,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                     color: Colors.black.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isApproved ? emeraldAccent.withValues(alpha: 0.3) : amberAccent.withValues(alpha: 0.3),
+                      color: isApproved
+                          ? emeraldAccent.withValues(alpha: 0.3)
+                          : amberAccent.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Column(
@@ -909,11 +1090,18 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: c.statusBadgeColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: c.statusBadgeColor.withValues(alpha: 0.4)),
+                              border: Border.all(
+                                color: c.statusBadgeColor.withValues(
+                                  alpha: 0.4,
+                                ),
+                              ),
                             ),
                             child: Text(
                               c.supplierStatus,
@@ -929,7 +1117,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                       const SizedBox(height: 6),
                       Text(
                         'Material: ${c.materialName}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -937,11 +1128,18 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                         children: [
                           Text(
                             'MOQ: ${c.minimumOrderQuantity.toStringAsFixed(0)} units @ \$${c.unitPrice.toStringAsFixed(2)}',
-                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
                           ),
                           Text(
                             'Total: \$${c.totalCost.toStringAsFixed(2)}',
-                            style: TextStyle(color: cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                            style: TextStyle(
+                              color: cyanAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -954,25 +1152,50 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF10B981),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
                               icon: const Icon(Icons.check, size: 14),
-                              label: const Text('Select Candidate & Generate PO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              label: const Text(
+                                'Select Candidate & Generate PO',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                           if (c.isUnverified) ...[
                             const SizedBox(width: 8),
                             ElevatedButton.icon(
-                              onPressed: () => _handleVerifySupplier(c.id, c.supplierName),
+                              onPressed: () =>
+                                  _handleVerifySupplier(c.id, c.supplierName),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFF59E0B),
                                 foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
-                              icon: const Icon(Icons.verified_user_outlined, size: 14),
-                              label: const Text('Verify', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              icon: const Icon(
+                                Icons.verified_user_outlined,
+                                size: 14,
+                              ),
+                              label: const Text(
+                                'Verify',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ],
@@ -990,25 +1213,34 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
   Future<void> _handleSelectCandidate(int candidateId) async {
     if (_activeId == null) return;
     try {
-      final po = await widget.service.createDraftPoFromCandidate(_activeId!, candidateId);
+      final po = await widget.service.createDraftPoFromCandidate(
+        _activeId!,
+        candidateId,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Draft Purchase Order ${po.poNumber} created successfully!'),
+            content: Text(
+              'Draft Purchase Order ${po.poNumber} created successfully!',
+            ),
             backgroundColor: const Color(0xFF10B981),
           ),
         );
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => PODetailsScreen(service: widget.service, poId: po.id),
+            builder: (_) =>
+                PODetailsScreen(service: widget.service, poId: po.id),
           ),
         );
       }
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate Draft PO: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to generate Draft PO: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -1021,7 +1253,9 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('AI Agent Market Research initiated! Fetching supplier candidates...'),
+            content: Text(
+              'AI Agent Market Research initiated! Fetching supplier candidates...',
+            ),
             backgroundColor: Color(0xFF5CC8F8),
           ),
         );
@@ -1030,13 +1264,19 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to trigger AI research: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to trigger AI research: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
-  Future<void> _handleVerifySupplier(int candidateId, String supplierName) async {
+  Future<void> _handleVerifySupplier(
+    int candidateId,
+    String supplierName,
+  ) async {
     if (_activeId == null) return;
     try {
       await widget.service.verifySupplierCandidate(_activeId!, candidateId, {
@@ -1056,7 +1296,10 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Supplier verification failed: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Supplier verification failed: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -1093,4 +1336,3 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
     );
   }
 }
-

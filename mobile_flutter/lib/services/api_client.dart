@@ -16,15 +16,6 @@ String get _defaultApiBaseUrl {
   return 'http://localhost:5070/api';
 }
 
-String get _defaultAiBaseUrl {
-  const envUrl = String.fromEnvironment('AI_API_BASE_URL');
-  if (envUrl.isNotEmpty) return envUrl;
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    return 'http://10.0.2.2:8000';
-  }
-  return 'http://localhost:8000';
-}
-
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode});
 
@@ -42,7 +33,6 @@ class ApiClient {
       : storage = storage ?? SessionStorage(),
         baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
 
-  final String aiBaseUrl = _defaultAiBaseUrl.replaceAll(RegExp(r'/$'), '');
   final SessionStorage storage;
   final String baseUrl;
   Future<void> Function()? onSessionExpired;

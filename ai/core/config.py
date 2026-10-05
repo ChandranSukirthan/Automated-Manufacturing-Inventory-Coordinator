@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -62,12 +63,12 @@ class Settings(BaseSettings):
 
     @property
     def FASTAPI_HOST(self) -> str:
-        return "0.0.0.0"
+        return "127.0.0.1"
 
     @property
     def database_url(self) -> str:
         return (
-            f"postgresql://{self.db_user}:{self.db_password}"
+            f"postgresql://{quote(self.db_user, safe='')}:{quote(self.db_password, safe='')}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 

@@ -101,3 +101,13 @@ ai/.workflow_locks/
 
 ai/test-temp*/
 ai/workflow_history.sqlite3*
+
+# Disposable integration test data
+.test-tmp-*/
+.test-postgres-*/
+TestResults/
+
+deploy/.env
+
+# Local database snapshots may contain authentication data.
+.local-backups/

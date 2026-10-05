@@ -23,8 +23,8 @@ def _normalize_material_id(raw_id: str) -> str:
     if not raw_id:
         raise ValueError("A material ID is required.")
     cleaned = str(raw_id).strip().upper()
-    # Remove potentially dangerous characters
-    cleaned = "".join(c for c in cleaned if c.isalnum() or c in ("-", "_"))
+    if len(cleaned) > 100 or any(not (c.isascii() and (c.isalnum() or c in ("-", "_"))) for c in cleaned):
+        raise ValueError("Invalid material identifier.")
     if not cleaned:
         raise ValueError("A material ID is required.")
     return cleaned
@@ -166,6 +166,7 @@ def detect_low_stock(
     burnRate: float,
     daysRemaining: Optional[float] = None,
     supplierLeadTime: float = 0.0,
+    warningHorizonDays: float = 7.0,
     materialId: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -182,38 +183,30 @@ def detect_low_stock(
     burn_rate = max(0.0, float(burnRate))
     lead_time = max(0.0, float(supplierLeadTime))
 
-    # Calculate days remaining if not supplied
-    if daysRemaining is None:
-        if burn_rate > 0:
-            # Case 1: 350 / 80 = 4.375
-            days_rem = round(current_stock / burn_rate, 3)
-        else:
-            # Case 3: Burn rate is 0 -> Infinite safe buffer, no division error!
-            days_rem = 999.0
-    else:
-        days_rem = round(float(daysRemaining), 3)
-
-    # Determine low stock condition
-    # Stock is low if below minimum OR will breach safety stock within lead time horizon (leadTime * 1.5)
+    # Derive coverage from authoritative stock and consumption, never a caller estimate.
+    days_rem = current_stock / burn_rate if burn_rate > 0 else (0.0 if current_stock == 0 else None)
+    horizon = max(float(warningHorizonDays), lead_time * 1.5)
     is_below_min = current_stock <= min_stock
-    is_near_runout = days_rem <= (lead_time * 1.5)
-    low_stock = is_below_min or is_near_runout
-
-    # Assess severity level
-    if current_stock <= (min_stock * 0.5) or days_rem <= lead_time:
+    is_near_runout = days_rem is not None and days_rem <= horizon
+    # Preserve safety stock while awaiting delivery as well as detecting exhaustion.
+    safety_breach = burn_rate > 0 and current_stock - burn_rate * lead_time <= min_stock
+    low_stock = is_below_min or is_near_runout or safety_breach
+    if current_stock == 0 or current_stock <= min_stock * 0.5 or (days_rem is not None and days_rem <= lead_time):
         severity = "CRITICAL"
     elif low_stock:
         severity = "HIGH"
-    elif days_rem <= (lead_time * 3.0):
-        severity = "MEDIUM"
     else:
         severity = "NORMAL"
+    reason = ("Stock is at or below minimum" if is_below_min else
+              "Stock will fall below required level within the warning or delivery horizon" if low_stock else
+              "No consumption recorded; days remaining cannot be estimated" if burn_rate == 0 else
+              "Stock covers the configured warning and delivery horizon")
 
     out = LowStockOutput(
         materialId=safe_id,
         lowStock=low_stock,
         daysRemaining=days_rem,
-        severity=severity
+        severity=severity, reason=reason, zeroConsumption=burn_rate == 0
     )
     return out.model_dump()
 

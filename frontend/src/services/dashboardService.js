@@ -6,8 +6,8 @@ const dashboardService = {
     return response.data;
   },
 
-  getAiValidation: async () => {
-    const response = await api.get('/quality/ai-validation');
+  getAiValidation: async (workflowId) => {
+    const response = await api.get('/quality/ai-validation', workflowId ? { params: { workflowId } } : undefined);
     return response.data;
   },
 

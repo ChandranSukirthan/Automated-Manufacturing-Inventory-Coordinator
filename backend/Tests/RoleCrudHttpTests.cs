@@ -40,7 +40,7 @@ public sealed class RoleCrudHttpTests : IDisposable
         var database = Guid.NewGuid().ToString();
         var root = new InMemoryDatabaseRoot();
         server = new TestServer(new WebHostBuilder().ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["AiService:BaseUrl"] = "http://127.0.0.1:1" }))
+            new Dictionary<string, string?> { ["AiService:BaseUrl"] = "http://127.0.0.1:1", ["JwtSettings:SecretKey"] = Key }))
             .ConfigureServices(services =>
             {
                 services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(database, root));
@@ -81,6 +81,67 @@ public sealed class RoleCrudHttpTests : IDisposable
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => throw new HttpRequestException("AI is deliberately unavailable during manual CRUD verification");
     }
+    [Fact]
+    public async Task BoundedSupplierListRejectsInvalidPagingAndFiltersBeforePaging()
+    {
+        using var client = Client("SupplyChainManager");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/suppliers/paged?pageSize=101")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync("/api/suppliers/paged?sort=arbitrary_sql")).StatusCode);
+        var response = await client.GetAsync("/api/suppliers/paged?page=1&pageSize=5&search=missing");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, body.GetProperty("totalCount").GetInt32());
+        Assert.Equal(5, body.GetProperty("pageSize").GetInt32());
+    }
+
+    [Fact]
+    public async Task WorkflowPublicationRequiresTrustedSignatureAndCannotMutateInventory()
+    {
+        using var client = Client("FloorWorker");
+        var state = "{\"workflow_id\":\"WF-SIGNED\",\"objective\":\"Replenish\",\"status\":\"Running\"}";
+        var body = new StringContent("{\"state\":" + state + "}", Encoding.UTF8, "application/json");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PutAsync("/api/internal/workflows/WF-SIGNED/state", body)).StatusCode);
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var signature = System.Security.Cryptography.HMACSHA256.HashData(Encoding.UTF8.GetBytes(Key), Encoding.UTF8.GetBytes(timestamp + "\n" + state));
+        client.DefaultRequestHeaders.Add("X-AI-Timestamp", timestamp);
+        client.DefaultRequestHeaders.Add("X-AI-Signature", Convert.ToHexString(signature));
+        var signed = await client.PutAsync("/api/internal/workflows/WF-SIGNED/state", new StringContent("{\"state\":" + state + "}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
+        using var scope = server.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Single(await db.AgentWorkflows.ToListAsync());
+        Assert.Empty(await db.PurchaseOrders.ToListAsync());
+        Assert.Empty(await db.InventoryItems.ToListAsync());
+    }
+
+    [Fact]
+    public async Task LocalPagedApiPerformanceEvidence()
+    {
+        using var client = Client("SupplyChainManager");
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.Suppliers.AddRange(Enumerable.Range(1, 1000).Select(i => new ManufacturingCoordinator.Models.PurchaseOrders.Supplier { Name = $"Supplier {i:D4}", SupplierCode = $"SUP-{i:D4}" }));
+            await db.SaveChangesAsync();
+        }
+        for (var i = 0; i < 5; i++) await Success(await client.GetAsync("/api/suppliers/paged?pageSize=20"));
+        var samples = new List<double>();
+        for (var i = 0; i < 50; i++)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var result = await Success(await client.GetAsync($"/api/suppliers/paged?pageSize=20&page={i % 10 + 1}"));
+            watch.Stop(); samples.Add(watch.Elapsed.TotalMilliseconds);
+            Assert.Equal(20, result.GetProperty("items").GetArrayLength());
+            Assert.Equal(1000, result.GetProperty("totalCount").GetInt32());
+        }
+        samples.Sort();
+        var report = new { environment = "Local ASP.NET TestServer, EF InMemory, 1000 suppliers; no network or PostgreSQL latency", requests = 50, meanMs = samples.Average(), p95Ms = samples[47], maxMs = samples[^1], measuredAt = DateTime.UtcNow };
+        var output = Path.Combine("TestResults", "performance.json");
+        Directory.CreateDirectory("TestResults");
+        await File.WriteAllTextAsync(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        Assert.True(report.p95Ms < 2000, "Local paged API regression exceeded two seconds.");
+    }
+
     public void Dispose() => server.Dispose();
     private HttpClient Client(string? role)
     {
@@ -88,7 +149,7 @@ public sealed class RoleCrudHttpTests : IDisposable
         if (role != null)
         {
             var token = new JwtSecurityToken("test", "test", new[] { new Claim(ClaimTypes.NameIdentifier, actor.ToString()),
-                new Claim(ClaimTypes.Name, "Offline operator"), new Claim(ClaimTypes.Role, role) }, expires: DateTime.UtcNow.AddMinutes(10),
+                new Claim(ClaimTypes.Name, "Offline operator"), new Claim("employee_id", "EMP-HTTP-TEST"), new Claim(ClaimTypes.Role, role) }, expires: DateTime.UtcNow.AddMinutes(10),
                 signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Key)), SecurityAlgorithms.HmacSha256));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(token));
         }
@@ -120,6 +181,58 @@ public sealed class RoleCrudHttpTests : IDisposable
         using var client = Client(null);
         foreach (var route in new[] { "/api/inventory", "/api/defects", "/api/suppliers", "/api/machines", "/api/admin/users" })
             Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(route)).StatusCode);
+    }
+
+    [Fact]
+    public async Task QualityWorkflowHistoryIncludesProductQuantityAndValidationExecution()
+    {
+        using var client = Client("QualityInspector");
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.AgentWorkflows.Add(new ManufacturingCoordinator.Models.Administration.AgentWorkflow {
+                WorkflowId = "WF-QA-CONTEXT", Objective = "Replenish film",
+                ValidationResults = "{\"isValid\":true,\"supplierValidation\":\"PASSED\",\"qualitySafetyStatus\":\"CLEAR\"}",
+                StateJson = "{\"material_id\":\"BP-FILM-001\",\"material_name\":\"Film\",\"required_quantity\":2000,\"unit\":\"KG\",\"draft_po\":{\"quantity\":2100}}"
+            });
+            db.AgentWorkflows.Add(new ManufacturingCoordinator.Models.Administration.AgentWorkflow {
+                WorkflowId = "WF-NO-SUPPLIER", Objective = "Replenish ink",
+                ValidationResults = "{\"isValid\":false,\"overallStatus\":\"NO_VALID_SUPPLIER\"}",
+                StateJson = "{\"material_id\":\"BP-INK-001\",\"required_quantity\":100}"
+            });
+            await db.SaveChangesAsync();
+        }
+        var history = await Success(await client.GetAsync("/api/quality/ai-validation/history"));
+        var checkedWorkflow = history.EnumerateArray().Single(w => w.GetProperty("workflowId").GetString() == "WF-QA-CONTEXT");
+        Assert.Equal("BP-FILM-001", checkedWorkflow.GetProperty("materialId").GetString());
+        Assert.Equal("Film", checkedWorkflow.GetProperty("materialName").GetString());
+        Assert.Equal(2100, checkedWorkflow.GetProperty("quantity").GetDecimal());
+        Assert.True(checkedWorkflow.GetProperty("validationExecuted").GetBoolean());
+        var blocked = history.EnumerateArray().Single(w => w.GetProperty("workflowId").GetString() == "WF-NO-SUPPLIER");
+        Assert.False(blocked.GetProperty("validationExecuted").GetBoolean());
+        var selected = await Success(await client.GetAsync("/api/quality/ai-validation?workflowId=WF-QA-CONTEXT"));
+        Assert.Equal("WF-QA-CONTEXT", selected.GetProperty("workflowId").GetString());
+    }
+
+    [Fact]
+    public async Task FloorWorker_AlertsUseMaterialIdentityAndRejectInvalidStatus()
+    {
+        using var client = Client("FloorWorker");
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ManufacturingContext>();
+            db.InventoryItems.Add(new InventoryItem { Id = 91, RawMaterialId = 1, Sku = "BP-FILM-001", Name = "Film", StockLevel = 10 });
+            await db.SaveChangesAsync();
+        }
+        var alert = await Success(await client.PostAsJsonAsync("/api/inventory/alerts", new { sku = "BP-FILM-001", quantityRequested = 100, materialId = 999 }));
+        var id = alert.GetProperty("id").GetInt32();
+        Assert.Equal(1, alert.GetProperty("materialId").GetInt32());
+        var duplicate = await Success(await client.PostAsJsonAsync("/api/inventory/alerts", new { sku = "BP-FILM-001", quantityRequested = 100 }));
+        Assert.Equal(id, duplicate.GetProperty("id").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/inventory/alerts/{id}", new { status = "INVALID" })).StatusCode);
+        await Success(await client.PutAsJsonAsync($"/api/inventory/alerts/{id}", new { status = "Acknowledged" }));
+        var alerts = await Success(await client.GetAsync("/api/inventory/alerts"));
+        Assert.Equal("Acknowledged", alerts[0].GetProperty("status").GetString());
     }
 
     [Fact]
