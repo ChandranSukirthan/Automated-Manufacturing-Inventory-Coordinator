@@ -257,7 +257,7 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                 _specRow('Uptime Total', '${_currentMachine.uptimeHours.toStringAsFixed(1)} hours'),
                 _specRow('Remaining to Service', '${_currentMachine.remainingHours.toStringAsFixed(1)} hours'),
                 _specRow('Service Cycle Interval', '${_currentMachine.maintenanceIntervalHours.toInt()} hours'),
-                _specRow('Last Synced', _currentMachine.updatedAt.toLocal().toString().split('.')[0]),
+                _specRow('Last Synced', _currentMachine.updatedAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]),
               ],
             ),
           ),

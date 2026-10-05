@@ -8,6 +8,7 @@ namespace ManufacturingCoordinator.Api.DTOs.Quality
     public class DefectReportDto
     {
         public Guid Id { get; set; }
+        public string SkuCode { get; set; } = string.Empty;
         public string BatchId { get; set; } = string.Empty;
         public Guid? ReportedByUserId { get; set; }
         public ProductType ProductType { get; set; }

@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +14,14 @@ class Settings(BaseSettings):
     db_user: str = "postgres"
     db_password: str = ""
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
     fastapi_port: int = 8000
+    demo_mode: bool = False
+    jwt_secret_key: str = ""
+    jwt_issuer: str = "InventoryCoordinatorAPI"
+    jwt_audience: str = "InventoryCoordinatorClient"
 
     model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 
@@ -42,17 +50,25 @@ class Settings(BaseSettings):
         return self.openai_api_key
 
     @property
+    def GEMINI_API_KEY(self) -> str:
+        return (self.gemini_api_key or "").strip("'\" \t\r\n")
+
+    @property
+    def GEMINI_MODEL(self) -> str:
+        return self.gemini_model
+
+    @property
     def FASTAPI_PORT(self) -> int:
         return self.fastapi_port
 
     @property
     def FASTAPI_HOST(self) -> str:
-        return "0.0.0.0"
+        return "127.0.0.1"
 
     @property
     def database_url(self) -> str:
         return (
-            f"postgresql://{self.db_user}:{self.db_password}"
+            f"postgresql://{quote(self.db_user, safe='')}:{quote(self.db_password, safe='')}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
 

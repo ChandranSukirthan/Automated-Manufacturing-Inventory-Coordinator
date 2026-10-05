@@ -2,9 +2,9 @@ namespace backend.Dtos
 {
     public class AgentStateUpdateDto
     {
-        public string WorkflowId { get; set; }
-        public string State { get; set; }
-        public string Message { get; set; }
+        public string WorkflowId { get; set; } = string.Empty;
+        public string State { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
     }
 }
 

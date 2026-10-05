@@ -10,6 +10,8 @@ import 'package:mobile_flutter/screens/admin/tabs/admin_overview_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/production_equipment_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/agent_workflows_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/system_health_tab.dart';
+import 'package:mobile_flutter/screens/defects_screen.dart';
+import 'package:mobile_flutter/services/quality_service.dart';
 
 class ItAdminMainScreen extends StatefulWidget {
   final ApiClient apiClient;
@@ -157,7 +159,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _workflows.where((w) => w.isWaitingForApproval).length;
+    final pendingCount = _workflows.where((w) => w.canAuthorizeMaintenance).length;
 
     final tabs = [
       AdminOverviewTab(
@@ -186,6 +188,10 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
         health: _health,
         loading: _loading,
         onRefresh: _loadAllData,
+      ),
+      DefectsScreen(
+        service: QualityService(widget.apiClient),
+        showAppBar: false,
       ),
     ];
 
@@ -362,6 +368,11 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
               icon: Icon(Icons.monitor_heart_outlined),
               activeIcon: Icon(Icons.monitor_heart_rounded),
               label: 'Health',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.assignment_outlined),
+              activeIcon: Icon(Icons.assignment_rounded),
+              label: 'Reports',
             ),
           ],
         ),

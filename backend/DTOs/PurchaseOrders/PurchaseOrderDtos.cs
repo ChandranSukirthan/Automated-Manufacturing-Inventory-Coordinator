@@ -41,10 +41,14 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string RawMaterialSku { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public decimal Quantity { get; set; }
+        public decimal CurrentStock { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalPrice { get; set; }
         public decimal Subtotal => TotalPrice;
     }
+
+    public class CreateOrderLineDto : OrderLineDto { }
+    public class UpdateOrderLineDto : OrderLineDto { }
 
     // ── Purchase Order ──────────────────────────────────────────────────────────
 
@@ -54,7 +58,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int SupplierId { get; set; }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         [Required]
         [Range(0.01, double.MaxValue, ErrorMessage = "Budget limit must be greater than zero.")]
@@ -62,6 +66,12 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
         [MaxLength(1000)]
         public string? Notes { get; set; }
+
+        public int? ProcurementRequestId { get; set; }
+        public int? CandidateId { get; set; }
+
+        public decimal Tax { get; set; } = 0m;
+        public decimal Shipping { get; set; } = 0m;
 
         [Required]
         [MinLength(1, ErrorMessage = "At least one order line is required.")]
@@ -74,7 +84,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int SupplierId { get; set; }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         [Required]
         [Range(0.01, double.MaxValue)]
@@ -100,9 +110,10 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string PoNumber { get; set; } = string.Empty;
         public string SupplierName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
+        public decimal BudgetLimit { get; set; }
         public bool RequiresApproval { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
@@ -114,8 +125,14 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string PoNumber { get; set; } = string.Empty;
         public int SupplierId { get; set; }
         public string SupplierName { get; set; } = string.Empty;
+        public string SupplierCode { get; set; } = string.Empty;
+        public string SupplierContactEmail { get; set; } = string.Empty;
+        public string SupplierContactPhone { get; set; } = string.Empty;
+        public string SupplierAddress { get; set; } = string.Empty;
+        public string SupplierPaymentTerms { get; set; } = string.Empty;
+        public int SupplierLeadTimeDays { get; set; }
         public string Status { get; set; } = string.Empty;
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
         public decimal BudgetLimit { get; set; }
@@ -129,11 +146,28 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public DateTime? ApprovedAt { get; set; }
         public string? StripePaymentIntentId { get; set; }
         public string? StripePaymentStatus { get; set; }
+        public string? BankSlipUrl { get; set; }
+        public string? BankReferenceNumber { get; set; }
+        public string? BankSlipStatus { get; set; }
+        public DateTime? BankSlipUploadedAt { get; set; }
+        public string TrackingStatus { get; set; } = "Draft";
+        public string? TrackingNumber { get; set; }
+        public DateTime? ExpectedDeliveryDate { get; set; }
         public string? EmailStatus { get; set; }
         public DateTime? EmailSentAt { get; set; }
         public List<OrderLineResponseDto> OrderLines { get; set; } = new();
         public List<PurchaseOrderApprovalDto> Approvals { get; set; } = new();
         public List<PaymentTransactionDto> Transactions { get; set; } = new();
+        public string? QualitySafetyStatus { get; set; }
+        public string? ManualResolutionStatus { get; set; }
+        public string? ManualResolutionNote { get; set; }
+        public string? ResolvedBy { get; set; }
+        public DateTime? ResolvedAt { get; set; }
+        public string? SupplierValidation { get; set; }
+        public string? BudgetValidation { get; set; }
+        public string? PoMathematicalCheck { get; set; }
+        public string? MaterialValidation { get; set; }
+        public object? HistoricalRisk { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -153,9 +187,77 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int Id { get; set; }
         public string? TransactionId { get; set; }
         public decimal Amount { get; set; }
-        public string Currency { get; set; } = "usd";
+        public string Currency { get; set; } = "lkr";
         public string PaymentStatus { get; set; } = string.Empty;
         public string? FailureReason { get; set; }
         public DateTime Timestamp { get; set; }
+    }
+
+    /// <summary>
+    /// Delivery and incoming supply tracking DTO for Floor Workers on mobile.
+    /// </summary>
+    public class PurchaseOrderDeliveryStatusDto
+    {
+        public int PurchaseOrderId { get; set; }
+        public string PoNumber { get; set; } = string.Empty;
+        public string SupplierName { get; set; } = string.Empty;
+        public string MaterialName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public DateTime ExpectedDelivery { get; set; }
+
+        /// <summary>
+        /// EXPECTED, IN_TRANSIT, RECEIVED, PARTIALLY_RECEIVED, DELAYED, COMPLETED
+        /// </summary>
+        public string DeliveryStatus { get; set; } = "EXPECTED";
+
+        public string? TrackingNumber { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+        public string StatusRemarks { get; set; } = string.Empty;
+    }
+
+    public class BankSlipUploadDto
+    {
+        [Required]
+        public string BankReferenceNumber { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string? BankName { get; set; }
+
+        [MaxLength(1000)]
+        public string? Notes { get; set; }
+    }
+
+    public class TrackingTimelineStepDto
+    {
+        public string StepKey { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+        public bool IsCurrent { get; set; }
+        public DateTime? Timestamp { get; set; }
+    }
+
+    public class PurchaseOrderTrackingDto
+    {
+        public int PurchaseOrderId { get; set; }
+        public string PoNumber { get; set; } = string.Empty;
+        public int SupplierId { get; set; }
+        public string SupplierName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string TrackingStatus { get; set; } = "Draft";
+        public string? TrackingNumber { get; set; }
+        public decimal TotalCost { get; set; }
+        public string Currency { get; set; } = "LKR";
+        public string? PaymentMethod { get; set; }
+        public string? PaymentStatus { get; set; }
+        public string? PaymentReference { get; set; }
+        public string? BankSlipUrl { get; set; }
+        public string? EmailStatus { get; set; }
+        public DateTime? EmailSentAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ApprovedAt { get; set; }
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+        public List<TrackingTimelineStepDto> Timeline { get; set; } = new();
     }
 }

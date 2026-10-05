@@ -290,19 +290,12 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
 }
 
   List<Widget> _buildShiftsList() {
+    if (widget.shifts.isEmpty) {
+      return [const AdminCard(child: Text('No production shift is available. Create a shift or refresh the schedule.', style: TextStyle(color: Colors.white70)))];
+    }
     final activeShift = widget.shifts.firstWhere(
-      (s) => s.status == 'Active',
-      orElse: () => widget.shifts.isNotEmpty
-          ? widget.shifts.first
-          : ShiftModel(
-              id: '',
-              name: 'Morning Production Shift A',
-              startTime: DateTime.now(),
-              endTime: DateTime.now().add(const Duration(hours: 8)),
-              targetOutput: 450,
-              adjustedOutput: 420,
-              status: 'Active',
-            ),
+      (s) => s.status == 'Active' || s.status == 'InProgress',
+      orElse: () => widget.shifts.first,
     );
 
     return [
@@ -339,7 +332,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
             _specRow('Current Shift', activeShift.name),
             _specRow('Production Status', activeShift.status),
             _specRow('Production Target', '${activeShift.targetOutput.toInt()} units'),
-            _specRow('Adjusted Output', '${(activeShift.adjustedOutput > 0 ? activeShift.adjustedOutput : activeShift.targetOutput).toInt()} units'),
+            _specRow('Adjusted Output', '${activeShift.adjustedOutput.toInt()} units'),
 
             const SizedBox(height: 12),
             const Divider(color: Color(0xFF334155), height: 1),
@@ -419,7 +412,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                     const Icon(Icons.access_time_rounded, color: Color(0xFF64748B), size: 14),
                     const SizedBox(width: 4),
                     Text(
-                      '${shift.startTime.toLocal().toString().substring(11, 16)} - ${shift.endTime.toLocal().toString().substring(11, 16)}',
+                      '${shift.startTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)} - ${shift.endTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)}',
                       style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                     ),
                     const Spacer(),
@@ -442,7 +435,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                       style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                     ),
                     Text(
-                      'Adjusted Output: ${shift.adjustedOutput > 0 ? shift.adjustedOutput.toInt() : shift.targetOutput.toInt()}u',
+                      'Adjusted Output: ${shift.adjustedOutput.toInt()}u',
                       style: const TextStyle(
                         color: Color(0xFF10B981),
                         fontWeight: FontWeight.w600,

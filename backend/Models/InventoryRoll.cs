@@ -1,16 +1,18 @@
 using System;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 
 namespace backend.Models
 {
     public class InventoryRoll
     {
-        public string Id { get; set; } = string.Empty;
+        public int Id { get; set; }
         
         // Foreign Key
         public int RawMaterialId { get; set; }
-        
-        public string? BatchId { get; set; } = "BATCH001";
+
+        // Persisted batch identity connects physical receipts and QA records.
+        public string? BatchId { get; set; }
         
         [JsonIgnore]
         public RawMaterial? RawMaterial { get; set; }

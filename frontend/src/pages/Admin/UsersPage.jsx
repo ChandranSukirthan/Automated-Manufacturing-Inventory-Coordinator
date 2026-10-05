@@ -1,3 +1,5 @@
+import { formatColomboDate } from '../../utils/locale.js';
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -281,7 +283,7 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-xs text-slate-400 font-mono">
-                      {new Date(u.createdAt).toLocaleDateString()}
+                      {formatColomboDate(u.createdAt, 'toLocaleDateString')}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -332,7 +334,7 @@ export default function UsersPage() {
 
       {/* Create User Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -421,12 +423,12 @@ export default function UsersPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* Edit User Modal */}
       {isEditModalOpen && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -482,12 +484,12 @@ export default function UsersPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* Assign Role Modal */}
       {isRoleModalOpen && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -555,7 +557,7 @@ export default function UsersPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

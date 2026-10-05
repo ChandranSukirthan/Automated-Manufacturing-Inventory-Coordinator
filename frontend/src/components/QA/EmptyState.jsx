@@ -20,7 +20,7 @@ export default function EmptyState({
           onClick={onAction}
           className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-700 bg-slate-900 text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition-all shadow-sm"
         >
-          <RotateCcw className="w-4 h-4 text-purple-400" />
+          <RotateCcw className="w-4 h-4 text-blue-400" />
           <span>{actionLabel}</span>
         </button>
       )}

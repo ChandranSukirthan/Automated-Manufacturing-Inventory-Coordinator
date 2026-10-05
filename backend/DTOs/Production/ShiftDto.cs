@@ -7,6 +7,9 @@ namespace ManufacturingCoordinator.Api.DTOs.Production
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? MaterialSku { get; set; }
+        public Guid? MachineId { get; set; }
+        public decimal? MaterialPerUnit { get; set; }
         public int ProductionTarget { get; set; }
         public int AvailableMaterial { get; set; }
         public int AdjustedOutput { get; set; }

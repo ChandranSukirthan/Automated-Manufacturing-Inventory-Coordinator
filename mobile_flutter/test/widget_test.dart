@@ -21,7 +21,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: LoginScreen(appState: appState)));
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Welcome Back'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
   });
 }

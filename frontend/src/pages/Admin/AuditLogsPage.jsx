@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Filter, 
@@ -252,7 +253,7 @@ export default function AuditLogsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-white/5 text-xs uppercase tracking-wider text-slate-400">
-                <th className="py-3.5 px-4 font-semibold">Timestamp (UTC)</th>
+                <th className="py-3.5 px-4 font-semibold">Timestamp (Sri Lanka)</th>
                 <th className="py-3.5 px-4 font-semibold">User</th>
                 <th className="py-3.5 px-4 font-semibold">Action</th>
                 <th className="py-3.5 px-4 font-semibold">Entity & Target ID</th>
@@ -278,7 +279,7 @@ export default function AuditLogsPage() {
                 logs.map((log) => (
                   <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="py-3.5 px-4 text-xs text-slate-300">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {formatColomboDate(log.timestamp, 'toLocaleString')}
                     </td>
                     <td className="py-3.5 px-4 font-sans font-medium text-white">
                       <div className="flex items-center gap-2">

@@ -1,0 +1,1239 @@
+{
+  "WF-QA-8F0BF2": {
+    "workflow_id": "WF-QA-8F0BF2",
+    "objective": "Quality Defect Evaluation for RM-STEEL-001: Surface cracking detected on roll",
+    "plan": [
+      "Check inventory",
+      "Calculate burn rate",
+      "Check production requirements",
+      "Check machine status",
+      "Check supplier availability",
+      "Create draft purchase order",
+      "Validate purchase order",
+      "Request human approval"
+    ],
+    "current_agent": "Validation/Safety",
+    "status": "WaitingForApproval",
+    "approval_status": "Pending",
+    "inventory_data": {
+      "materialId": "RM-STEEL-001",
+      "itemCode": "RM-STEEL-001",
+      "itemName": "Cold Rolled Steel Sheet",
+      "currentStock": 100.0,
+      "availableQuantity": 100.0,
+      "minimumStock": 50.0,
+      "maximumStock": 250.0,
+      "reorderThreshold": 50.0,
+      "burnRate": 80.0,
+      "burnRatePerHour": 10.0,
+      "daysRemaining": 1.25,
+      "lowStock": true,
+      "status": "LOW_STOCK",
+      "requiredQuantity": 500,
+      "unit": "KG"
+    },
+    "production_data": {
+      "schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "purchasing_data": {
+      "supplier": {
+        "supplierId": "SUP-001",
+        "name": "Apex Industrial Metals",
+        "pricePerUnit": 4.5,
+        "leadTimeDays": 7,
+        "minOrderQuantity": 500,
+        "isActive": true,
+        "currency": "USD"
+      },
+      "draft_po": {
+        "poNumber": "PO-DRAFT-AD8F05",
+        "supplierId": "SUP-001",
+        "supplierName": "Apex Industrial Metals",
+        "materialId": "RM-STEEL-001",
+        "quantity": 4900.0,
+        "unitPrice": 4.5,
+        "totalAmount": 22050.0,
+        "currency": "USD",
+        "status": "Draft",
+        "paymentStatus": "UNPAID",
+        "emailSent": false,
+        "requiresApproval": true,
+        "budgetThreshold": 5000.0
+      }
+    },
+    "quality_data": {
+      "defect": {
+        "batchId": null,
+        "skuCode": "RM-STEEL-001",
+        "productType": null,
+        "severity": "HIGH",
+        "description": "Surface cracking detected on roll",
+        "affectedInventory": []
+      },
+      "recommendation": {
+        "batchId": "B004",
+        "quarantineRequired": true,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "HIGH",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ]
+      },
+      "validation": {
+        "batchId": "B004",
+        "quarantineRequired": true,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "HIGH",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ]
+      }
+    },
+    "validation_results": {
+      "valid": false,
+      "budgetCheck": "EXCEEDS_BUDGET_THRESHOLD",
+      "toleranceCheck": "PASSED",
+      "safetyLockoutCheck": "CLEAR",
+      "qualitySafetyStatus": "QUARANTINE_REQUIRED",
+      "quarantinedRollsCount": 4,
+      "isHighImpact": true,
+      "impactReason": "Procurement cost ($22,050.00) exceeds budget threshold ($5,000.00); Production output is material-constrained; Quality Agent quarantine recommendation requires authorization; Quality Agent detected 4 active quarantines"
+    },
+    "completed_steps": [
+      "Generated execution plan",
+      "Data Extraction: Analyzed inventory levels, burn rate & days remaining",
+      "Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput",
+      "Purchasing: Selected Apex Industrial Metals ($4.5/unit) and drafted PO-DRAFT-AD8F05",
+      "Quality Agent: Quarantine required for batch B004",
+      "Validation/Safety: Completed multi-point risk, financial, and quality safety assessment",
+      "Waiting for IT Admin human approval"
+    ],
+    "tool_results": {
+      "get_inventory_levels": {
+        "materialId": "RM-STEEL-001",
+        "currentStock": 100.0,
+        "minimumStock": 50.0,
+        "maximumStock": 250.0
+      },
+      "query_inventory_history": {
+        "materialId": "RM-STEEL-001",
+        "periodDays": 30,
+        "consumption": 2400.0
+      },
+      "calculate_burn_rate": {
+        "materialId": "RM-STEEL-001",
+        "burnRate": 80.0
+      },
+      "detect_low_stock": {
+        "materialId": "RM-STEEL-001",
+        "lowStock": true,
+        "daysRemaining": 1.25,
+        "severity": "CRITICAL"
+      },
+      "query_production_schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "calculate_machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "check_maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "calculate_production_impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "final_outcome": null,
+    "errors": [],
+    "requires_approval": true
+  },
+  "WF-QA-37924A": {
+    "workflow_id": "WF-QA-37924A",
+    "objective": "Quality Defect Evaluation for RM-STEEL-001: hyfyv",
+    "plan": [
+      "Check inventory",
+      "Calculate burn rate",
+      "Check production requirements",
+      "Check machine status",
+      "Check supplier availability",
+      "Create draft purchase order",
+      "Validate purchase order",
+      "Request human approval"
+    ],
+    "current_agent": "Validation/Safety",
+    "status": "WaitingForApproval",
+    "approval_status": "Pending",
+    "inventory_data": {
+      "materialId": "RM-STEEL-001",
+      "itemCode": "RM-STEEL-001",
+      "itemName": "Cold Rolled Steel Sheet",
+      "currentStock": 100.0,
+      "availableQuantity": 100.0,
+      "minimumStock": 50.0,
+      "maximumStock": 250.0,
+      "reorderThreshold": 50.0,
+      "burnRate": 80.0,
+      "burnRatePerHour": 10.0,
+      "daysRemaining": 1.25,
+      "lowStock": true,
+      "status": "LOW_STOCK",
+      "requiredQuantity": 500,
+      "unit": "KG"
+    },
+    "production_data": {
+      "schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "purchasing_data": {
+      "supplier": {
+        "supplierId": "SUP-001",
+        "name": "Apex Industrial Metals",
+        "pricePerUnit": 4.5,
+        "leadTimeDays": 7,
+        "minOrderQuantity": 500,
+        "isActive": true,
+        "currency": "USD"
+      },
+      "draft_po": {
+        "poNumber": "PO-DRAFT-20061C",
+        "supplierId": "SUP-001",
+        "supplierName": "Apex Industrial Metals",
+        "materialId": "RM-STEEL-001",
+        "quantity": 4900.0,
+        "unitPrice": 4.5,
+        "totalAmount": 22050.0,
+        "currency": "USD",
+        "status": "Draft",
+        "paymentStatus": "UNPAID",
+        "emailSent": false,
+        "requiresApproval": true,
+        "budgetThreshold": 5000.0
+      }
+    },
+    "quality_data": {
+      "defect": {
+        "batchId": null,
+        "skuCode": "RM-STEEL-001",
+        "productType": null,
+        "severity": "LOW",
+        "description": "hyfyv",
+        "affectedInventory": []
+      },
+      "recommendation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-37924A"
+      },
+      "validation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-37924A"
+      }
+    },
+    "validation_results": {
+      "valid": true,
+      "budgetCheck": "EXCEEDS_BUDGET_THRESHOLD",
+      "toleranceCheck": "PASSED",
+      "safetyLockoutCheck": "CLEAR",
+      "qualitySafetyStatus": "CLEAR",
+      "quarantinedRollsCount": 0,
+      "isHighImpact": true,
+      "impactReason": "Procurement cost ($22,050.00) exceeds budget threshold ($5,000.00); Production output is material-constrained"
+    },
+    "completed_steps": [
+      "Generated execution plan",
+      "Data Extraction: Analyzed inventory levels, burn rate & days remaining",
+      "Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput",
+      "Purchasing: Selected Apex Industrial Metals ($4.5/unit) and drafted PO-DRAFT-20061C",
+      "Validation/Safety: Completed multi-point risk, financial, and quality safety assessment",
+      "Waiting for IT Admin human approval"
+    ],
+    "tool_results": {
+      "get_inventory_levels": {
+        "materialId": "RM-STEEL-001",
+        "currentStock": 100.0,
+        "minimumStock": 50.0,
+        "maximumStock": 250.0
+      },
+      "query_inventory_history": {
+        "materialId": "RM-STEEL-001",
+        "periodDays": 30,
+        "consumption": 2400.0
+      },
+      "calculate_burn_rate": {
+        "materialId": "RM-STEEL-001",
+        "burnRate": 80.0
+      },
+      "detect_low_stock": {
+        "materialId": "RM-STEEL-001",
+        "lowStock": true,
+        "daysRemaining": 1.25,
+        "severity": "CRITICAL"
+      },
+      "query_production_schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "calculate_machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "check_maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "calculate_production_impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "final_outcome": null,
+    "errors": [],
+    "requires_approval": true
+  },
+  "WF-QA-4F2577": {
+    "workflow_id": "WF-QA-4F2577",
+    "objective": "Quality Defect Evaluation for RM-STEEL-001: jbjk",
+    "plan": [
+      "Check inventory",
+      "Calculate burn rate",
+      "Check production requirements",
+      "Check machine status",
+      "Check supplier availability",
+      "Create draft purchase order",
+      "Validate purchase order",
+      "Request human approval"
+    ],
+    "current_agent": "Execution",
+    "status": "Completed",
+    "approval_status": "Approved",
+    "inventory_data": {
+      "materialId": "RM-STEEL-001",
+      "itemCode": "RM-STEEL-001",
+      "itemName": "Cold Rolled Steel Sheet",
+      "currentStock": 100.0,
+      "availableQuantity": 100.0,
+      "minimumStock": 50.0,
+      "maximumStock": 250.0,
+      "reorderThreshold": 50.0,
+      "burnRate": 80.0,
+      "burnRatePerHour": 10.0,
+      "daysRemaining": 1.25,
+      "lowStock": true,
+      "status": "LOW_STOCK",
+      "requiredQuantity": 500,
+      "unit": "KG"
+    },
+    "production_data": {
+      "schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "purchasing_data": {
+      "supplier": {
+        "supplierId": "SUP-001",
+        "name": "Apex Industrial Metals",
+        "pricePerUnit": 4.5,
+        "leadTimeDays": 7,
+        "minOrderQuantity": 500,
+        "isActive": true,
+        "currency": "USD"
+      },
+      "draft_po": {
+        "poNumber": "PO-DRAFT-CEF8E5",
+        "supplierId": "SUP-001",
+        "supplierName": "Apex Industrial Metals",
+        "materialId": "RM-STEEL-001",
+        "quantity": 4900.0,
+        "unitPrice": 4.5,
+        "totalAmount": 22050.0,
+        "currency": "USD",
+        "status": "Draft",
+        "paymentStatus": "UNPAID",
+        "emailSent": false,
+        "requiresApproval": true,
+        "budgetThreshold": 5000.0
+      }
+    },
+    "quality_data": {
+      "defect": {
+        "batchId": null,
+        "skuCode": "RM-STEEL-001",
+        "productType": null,
+        "severity": "LOW",
+        "description": "jbjk",
+        "affectedInventory": []
+      },
+      "recommendation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-4F2577"
+      },
+      "validation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-4F2577"
+      }
+    },
+    "validation_results": {
+      "valid": true,
+      "budgetCheck": "EXCEEDS_BUDGET_THRESHOLD",
+      "toleranceCheck": "PASSED",
+      "safetyLockoutCheck": "CLEAR",
+      "qualitySafetyStatus": "CLEAR",
+      "quarantinedRollsCount": 0,
+      "isHighImpact": true,
+      "impactReason": "Procurement cost ($22,050.00) exceeds budget threshold ($5,000.00); Production output is material-constrained"
+    },
+    "completed_steps": [
+      "Generated execution plan",
+      "Data Extraction: Analyzed inventory levels, burn rate & days remaining",
+      "Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput",
+      "Purchasing: Selected Apex Industrial Metals ($4.5/unit) and drafted PO-DRAFT-CEF8E5",
+      "Validation/Safety: Completed multi-point risk, financial, and quality safety assessment",
+      "Waiting for IT Admin human approval",
+      "Execution: PO PO-DRAFT-CEF8E5 registered in manufacturing ERP staging queue"
+    ],
+    "tool_results": {
+      "get_inventory_levels": {
+        "materialId": "RM-STEEL-001",
+        "currentStock": 100.0,
+        "minimumStock": 50.0,
+        "maximumStock": 250.0
+      },
+      "query_inventory_history": {
+        "materialId": "RM-STEEL-001",
+        "periodDays": 30,
+        "consumption": 2400.0
+      },
+      "calculate_burn_rate": {
+        "materialId": "RM-STEEL-001",
+        "burnRate": 80.0
+      },
+      "detect_low_stock": {
+        "materialId": "RM-STEEL-001",
+        "lowStock": true,
+        "daysRemaining": 1.25,
+        "severity": "CRITICAL"
+      },
+      "query_production_schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "calculate_machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "check_maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "calculate_production_impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "final_outcome": "Objective achieved: 4900.0m raw film requisition queued under PO-DRAFT-CEF8E5. Production schedule reconciled.",
+    "errors": [],
+    "requires_approval": false
+  },
+  "WF-QA-8FBF13": {
+    "workflow_id": "WF-QA-8FBF13",
+    "objective": "Quality Defect Evaluation for RM-STEEL-001: sjadb",
+    "plan": [
+      "Check inventory",
+      "Calculate burn rate",
+      "Check production requirements",
+      "Check machine status",
+      "Check supplier availability",
+      "Create draft purchase order",
+      "Validate purchase order",
+      "Request human approval"
+    ],
+    "current_agent": "Validation/Safety",
+    "status": "Failed",
+    "approval_status": "Rejected",
+    "inventory_data": {
+      "materialId": "RM-STEEL-001",
+      "itemCode": "RM-STEEL-001",
+      "itemName": "Cold Rolled Steel Sheet",
+      "currentStock": 100.0,
+      "availableQuantity": 100.0,
+      "minimumStock": 50.0,
+      "maximumStock": 250.0,
+      "reorderThreshold": 50.0,
+      "burnRate": 80.0,
+      "burnRatePerHour": 10.0,
+      "daysRemaining": 1.25,
+      "lowStock": true,
+      "status": "LOW_STOCK",
+      "requiredQuantity": 500,
+      "unit": "KG"
+    },
+    "production_data": {
+      "schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "purchasing_data": {
+      "supplier": {
+        "supplierId": "SUP-001",
+        "name": "Apex Industrial Metals",
+        "pricePerUnit": 4.5,
+        "leadTimeDays": 7,
+        "minOrderQuantity": 500,
+        "isActive": true,
+        "currency": "USD"
+      },
+      "draft_po": {
+        "poNumber": "PO-DRAFT-551C86",
+        "supplierId": "SUP-001",
+        "supplierName": "Apex Industrial Metals",
+        "materialId": "RM-STEEL-001",
+        "quantity": 4900.0,
+        "unitPrice": 4.5,
+        "totalAmount": 22050.0,
+        "currency": "USD",
+        "status": "Draft",
+        "paymentStatus": "UNPAID",
+        "emailSent": false,
+        "requiresApproval": true,
+        "budgetThreshold": 5000.0
+      }
+    },
+    "quality_data": {
+      "defect": {
+        "batchId": null,
+        "skuCode": "RM-STEEL-001",
+        "productType": null,
+        "severity": "LOW",
+        "description": "sjadb",
+        "affectedInventory": []
+      },
+      "recommendation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-8FBF13"
+      },
+      "validation": {
+        "batchId": "B004",
+        "quarantineRequired": false,
+        "affectedInventory": [
+          "QA-AI-ROLL-20260921",
+          "wsdd",
+          "ww",
+          "ywdgaygh"
+        ],
+        "riskLevel": "LOW",
+        "inventoryContext": [
+          {
+            "inventoryRollId": "QA-AI-ROLL-20260921",
+            "rollIdentifier": "QA-AI-ROLL-20260921",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "80",
+            "initialQuantity": "80"
+          },
+          {
+            "inventoryRollId": "wsdd",
+            "rollIdentifier": "wsdd",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "100",
+            "initialQuantity": "100"
+          },
+          {
+            "inventoryRollId": "ww",
+            "rollIdentifier": "ww",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "10",
+            "initialQuantity": "10"
+          },
+          {
+            "inventoryRollId": "ywdgaygh",
+            "rollIdentifier": "ywdgaygh",
+            "rawMaterialId": 1,
+            "rawMaterialSku": "RM-STEEL-001",
+            "rawMaterialName": "Cold Rolled Steel Sheet",
+            "batchId": "B004",
+            "status": "In Stock",
+            "currentQuantity": "12",
+            "initialQuantity": "12"
+          }
+        ],
+        "workflowId": "WF-QA-8FBF13"
+      }
+    },
+    "validation_results": {
+      "valid": true,
+      "budgetCheck": "EXCEEDS_BUDGET_THRESHOLD",
+      "toleranceCheck": "PASSED",
+      "safetyLockoutCheck": "CLEAR",
+      "qualitySafetyStatus": "CLEAR",
+      "quarantinedRollsCount": 0,
+      "isHighImpact": true,
+      "impactReason": "Procurement cost ($22,050.00) exceeds budget threshold ($5,000.00); Production output is material-constrained"
+    },
+    "completed_steps": [
+      "Generated execution plan",
+      "Data Extraction: Analyzed inventory levels, burn rate & days remaining",
+      "Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput",
+      "Purchasing: Selected Apex Industrial Metals ($4.5/unit) and drafted PO-DRAFT-551C86",
+      "Validation/Safety: Completed multi-point risk, financial, and quality safety assessment",
+      "Waiting for IT Admin human approval",
+      "Rejected by IT Admin"
+    ],
+    "tool_results": {
+      "get_inventory_levels": {
+        "materialId": "RM-STEEL-001",
+        "currentStock": 100.0,
+        "minimumStock": 50.0,
+        "maximumStock": 250.0
+      },
+      "query_inventory_history": {
+        "materialId": "RM-STEEL-001",
+        "periodDays": 30,
+        "consumption": 2400.0
+      },
+      "calculate_burn_rate": {
+        "materialId": "RM-STEEL-001",
+        "burnRate": 80.0
+      },
+      "detect_low_stock": {
+        "materialId": "RM-STEEL-001",
+        "lowStock": true,
+        "daysRemaining": 1.25,
+        "severity": "CRITICAL"
+      },
+      "query_production_schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "calculate_machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "check_maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "calculate_production_impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "final_outcome": "Workflow rejected by human administrator: Rejected by IT Admin",
+    "errors": [],
+    "requires_approval": true
+  },
+  "hgvhbn": {
+    "workflow_id": "hgvhbn",
+    "objective": "Replenish BoxPouch film because inventory is low.",
+    "plan": [
+      "Check inventory",
+      "Calculate burn rate",
+      "Check production requirements",
+      "Check machine status",
+      "Check supplier availability",
+      "Create draft purchase order",
+      "Validate purchase order",
+      "Request human approval"
+    ],
+    "current_agent": "Validation/Safety",
+    "status": "WaitingForApproval",
+    "approval_status": "Pending",
+    "inventory_data": {
+      "materialId": "RM-STEEL-001",
+      "itemCode": "RM-STEEL-001",
+      "itemName": "Cold Rolled Steel Sheet",
+      "currentStock": 100.0,
+      "availableQuantity": 100.0,
+      "minimumStock": 50.0,
+      "maximumStock": 250.0,
+      "reorderThreshold": 50.0,
+      "burnRate": 80.0,
+      "burnRatePerHour": 10.0,
+      "daysRemaining": 1.25,
+      "lowStock": true,
+      "status": "LOW_STOCK",
+      "requiredQuantity": 500,
+      "unit": "KG"
+    },
+    "production_data": {
+      "schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "purchasing_data": {
+      "supplier": {
+        "supplierId": "SUP-001",
+        "name": "Apex Industrial Metals",
+        "pricePerUnit": 4.5,
+        "leadTimeDays": 7,
+        "minOrderQuantity": 500,
+        "isActive": true,
+        "currency": "USD"
+      },
+      "draft_po": {
+        "poNumber": "PO-DRAFT-105C33",
+        "supplierId": "SUP-001",
+        "supplierName": "Apex Industrial Metals",
+        "materialId": "RM-STEEL-001",
+        "quantity": 4900.0,
+        "unitPrice": 4.5,
+        "totalAmount": 22050.0,
+        "currency": "USD",
+        "status": "Draft",
+        "paymentStatus": "UNPAID",
+        "emailSent": false,
+        "requiresApproval": true,
+        "budgetThreshold": 5000.0
+      }
+    },
+    "quality_data": {},
+    "validation_results": {
+      "valid": true,
+      "budgetCheck": "EXCEEDS_BUDGET_THRESHOLD",
+      "toleranceCheck": "PASSED",
+      "safetyLockoutCheck": "CLEAR",
+      "qualitySafetyStatus": "CLEAR",
+      "quarantinedRollsCount": 0,
+      "isHighImpact": true,
+      "impactReason": "Procurement cost ($22,050.00) exceeds budget threshold ($5,000.00); Production output is material-constrained"
+    },
+    "completed_steps": [
+      "Generated execution plan",
+      "Data Extraction: Analyzed inventory levels, burn rate & days remaining",
+      "Production Analysis: Evaluated production schedule impact, machine uptime & adjusted throughput",
+      "Purchasing: Selected Apex Industrial Metals ($4.5/unit) and drafted PO-DRAFT-105C33",
+      "Quality Agent: Factory inventory quarantine status CLEAR",
+      "Validation/Safety: Completed multi-point risk, financial, and quality safety assessment",
+      "Waiting for IT Admin human approval"
+    ],
+    "tool_results": {
+      "get_inventory_levels": {
+        "materialId": "RM-STEEL-001",
+        "currentStock": 100.0,
+        "minimumStock": 50.0,
+        "maximumStock": 250.0
+      },
+      "query_inventory_history": {
+        "materialId": "RM-STEEL-001",
+        "periodDays": 30,
+        "consumption": 2400.0
+      },
+      "calculate_burn_rate": {
+        "materialId": "RM-STEEL-001",
+        "burnRate": 80.0
+      },
+      "detect_low_stock": {
+        "materialId": "RM-STEEL-001",
+        "lowStock": true,
+        "daysRemaining": 1.25,
+        "severity": "CRITICAL"
+      },
+      "query_production_schedule": {
+        "productionDate": "2026-09-27",
+        "machineId": "M001",
+        "plannedOutput": 5000,
+        "requiredMaterial": 1000
+      },
+      "calculate_machine_uptime": {
+        "machineId": "M001",
+        "uptimeHours": 480.0
+      },
+      "check_maintenance_requirement": {
+        "machineId": "M001",
+        "maintenanceDue": false,
+        "remainingHours": 20.0
+      },
+      "calculate_production_impact": {
+        "plannedOutput": 5000,
+        "availableMaterial": 100,
+        "adjustedOutput": 100
+      }
+    },
+    "final_outcome": null,
+    "errors": [],
+    "requires_approval": true
+  }
+}

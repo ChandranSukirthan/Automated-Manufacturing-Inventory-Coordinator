@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
+import ModalOverlay from '../../components/Common/ModalOverlay';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
@@ -16,7 +18,9 @@ import {
   Trash2,
   Loader2,
   AlertCircle,
-  X
+  X,
+  Sparkles,
+  CreditCard
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
@@ -51,36 +55,37 @@ export default function PurchaseOrderList() {
 
   const [poForm, setPoForm] = useState({
     supplierId: preselectedSupplierId ? parseInt(preselectedSupplierId, 10) : '',
-    budgetLimit: 15000,
+    budgetLimit: '',
     notes: '',
     lines: [
       {
-        rawMaterialId: 1,
-        description: 'Standard Grade Industrial Material',
-        quantity: 2000,
-        unitPrice: 4.5
+        rawMaterialId: '',
+        description: '',
+        quantity: '',
+        unitPrice: ''
       }
     ]
   });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const [ordersData, suppliersData, materialsData] = await Promise.all([
-        purchaseOrderService.getPurchaseOrders(),
-        supplierService.getSuppliers(),
-        rawMaterialService.getRawMaterials()
+        purchaseOrderService.getPurchaseOrders().catch(() => []),
+        supplierService.getSuppliers().catch(() => []),
+        rawMaterialService.getRawMaterials().catch(() => [])
       ]);
-      setOrders(ordersData);
-      setSuppliers(suppliersData.filter((s) => s.isActive));
-      setRawMaterials(materialsData);
+      setOrders(ordersData || []);
+      const activeSups = (suppliersData || []).filter((s) => s.isActive !== false);
+      setSuppliers(activeSups);
+      setRawMaterials(materialsData || []);
 
       // Default supplier if none preselected
-      if (!poForm.supplierId && suppliersData.length > 0) {
+      if (!poForm.supplierId && activeSups.length > 0) {
         setPoForm((prev) => ({
           ...prev,
-          supplierId: suppliersData[0].id
+          supplierId: activeSups[0].id
         }));
       }
     } catch (err) {
@@ -88,11 +93,12 @@ export default function PurchaseOrderList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [poForm.supplierId]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const initialLoad = setTimeout(loadData, 0);
+    return () => clearTimeout(initialLoad);
+  }, [loadData]);
 
   // Compute calculated values in real-time for PO creation
   const calculatedTotalCost = useMemo(() => {
@@ -103,7 +109,7 @@ export default function PurchaseOrderList() {
     }, 0);
   }, [poForm.lines]);
 
-  const exceedsThreshold = calculatedTotalCost > 5000;
+  const exceedsThreshold = calculatedTotalCost > 1500000;
   const exceedsBudget = calculatedTotalCost > parseFloat(poForm.budgetLimit || 0);
 
   // Line item handlers
@@ -252,11 +258,18 @@ export default function PurchaseOrderList() {
       actionButton={
         <div className="flex items-center gap-2">
           <Link
-            to="/purchase-orders/create"
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-sm transition-all shadow-lg shadow-brand-600/20"
+            to="/purchase-orders/procurement"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white font-semibold rounded-xl text-xs transition-all shadow-lg shadow-purple-600/20"
           >
-            <Plus className="w-4 h-4" />
-            <span>Create Purchase Order</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Procurement</span>
+          </Link>
+          <Link
+            to="/purchase-orders/create"
+            className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 text-white font-semibold rounded-xl text-xs transition-all shadow-lg shadow-brand-600/20"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Create PO</span>
           </Link>
           <button
             onClick={() => {
@@ -271,6 +284,30 @@ export default function PurchaseOrderList() {
         </div>
       }
     >
+      {/* AI Procurement Quick Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-900 border border-purple-800/40 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-white">
+              AI-Assisted Supplier Research & PO Generation (Student 2)
+            </h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Automate external market supplier discovery via Gemini Grounding, deterministic net deficit calculation, and pre-PO compliance checks.
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/purchase-orders/procurement"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0"
+        >
+          <span>Launch AI Procurement</span>
+          <ArrowUpDown className="w-3 h-3 rotate-90" />
+        </Link>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
@@ -308,7 +345,7 @@ export default function PurchaseOrderList() {
             <DollarSign className="w-4 h-4 text-cyan-400" />
           </div>
           <p className="text-2xl font-bold text-cyan-400 mt-2">
-            ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
         </div>
       </div>
@@ -459,29 +496,40 @@ export default function PurchaseOrderList() {
                       <StatusBadge status={order.status} />
                     </td>
                     <td className="py-4 px-4 font-bold text-white">
-                      ${(order.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMoney((order.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), order?.currency || 'LKR')}
                     </td>
                     <td className="py-4 px-4 text-xs">
                       {order.requiresApproval ? (
                         <span className="inline-flex items-center gap-1 text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
                           <AlertTriangle className="w-3 h-3" />
-                          <span>&gt; $5,000 (Req. Approval)</span>
+                          <span>&gt; LKR 1,500,000 (Req. Approval)</span>
                         </span>
                       ) : (
                         <span className="text-slate-400">Within Threshold</span>
                       )}
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-400">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {formatColomboDate(order.createdAt, 'toLocaleDateString')}
                     </td>
                     <td className="py-4 px-4 text-right">
-                      <Link
-                        to={`/purchase-orders/${order.id}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-400 hover:text-white hover:bg-slate-800"
-                      >
-                        <span>Manage</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        {(order.status === 'Approved' || order.status === 'Payment') && (
+                          <Link
+                            to={`/purchase-orders/${order.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-800/80 hover:bg-cyan-900/90 transition-all shadow-sm"
+                          >
+                            <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Pay (Stripe / Slip)</span>
+                          </Link>
+                        )}
+                        <Link
+                          to={`/purchase-orders/${order.id}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-400 hover:text-white hover:bg-slate-800"
+                        >
+                          <span>Manage</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -523,7 +571,7 @@ export default function PurchaseOrderList() {
 
       {/* Create Purchase Order Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl p-6 space-y-4 my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
@@ -571,7 +619,7 @@ export default function PurchaseOrderList() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Budget Limit ($ USD) <span className="text-rose-400">*</span>
+                    Budget Limit (LKR  LKR) <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="number"
@@ -650,7 +698,7 @@ export default function PurchaseOrderList() {
                         </div>
 
                         <div className="col-span-2">
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price ($)</label>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price (LKR )</label>
                           <input
                             type="number"
                             min="0.01"
@@ -664,7 +712,7 @@ export default function PurchaseOrderList() {
                         <div className="col-span-2 text-right">
                           <span className="text-[10px] text-slate-400 block mb-0.5">Line Total</span>
                           <span className="font-bold text-white">
-                            ${lineTotal.toFixed(2)}
+                            {formatMoney(lineTotal.toFixed(2), 'LKR')}
                           </span>
                         </div>
 
@@ -692,8 +740,7 @@ export default function PurchaseOrderList() {
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
                     <span>
-                      <strong>Manager Approval Threshold Exceeded:</strong> Total cost ($
-                      {calculatedTotalCost.toFixed(2)}) is greater than $5,000.00. This order will automatically require Supply Chain Manager approval.
+                      <strong>Manager Approval Threshold Exceeded:</strong> Total cost ({formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}) is greater than LKR 1,500,000.00. This order will automatically require Supply Chain Manager approval.
                     </span>
                   </div>
                 )}
@@ -702,7 +749,7 @@ export default function PurchaseOrderList() {
                   <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>
-                      <strong>Budget Limit Violation:</strong> Total cost (${calculatedTotalCost.toFixed(2)}) exceeds specified budget limit (${parseFloat(poForm.budgetLimit || 0).toFixed(2)}).
+                      <strong>Budget Limit Violation:</strong> Total cost ({formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}) exceeds specified budget limit ({formatMoney(parseFloat(poForm.budgetLimit || 0).toFixed(2), 'LKR')}).
                     </span>
                   </div>
                 )}
@@ -713,7 +760,7 @@ export default function PurchaseOrderList() {
                 <div>
                   <span className="text-xs text-slate-400 block">Total Calculated Cost</span>
                   <span className="text-xl font-extrabold text-white">
-                    ${calculatedTotalCost.toFixed(2)}
+                    {formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}
                   </span>
                 </div>
                 <div className="text-right">
@@ -743,7 +790,7 @@ export default function PurchaseOrderList() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

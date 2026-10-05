@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using backend.Dtos;
 using backend.Services;
@@ -9,13 +12,20 @@ namespace backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    // Stock-level routes are defined in this controller as well as inventory
+    // routes. Keep the worker role read/write access explicit at the boundary.
+    [Authorize(Roles = "FloorWorker,QualityInspector,SupplyChainManager,ITAdmin")]
     public class InventoryController : ControllerBase
     {
         private readonly IInventoryService _inventoryService;
+        private readonly IBarcodeService _barcodeService;
 
-        public InventoryController(IInventoryService inventoryService)
+        public InventoryController(
+            IInventoryService inventoryService,
+            IBarcodeService barcodeService)
         {
             _inventoryService = inventoryService;
+            _barcodeService = barcodeService;
         }
 
         // =========================================================================
@@ -41,30 +51,48 @@ namespace backend.Controllers
 
         // POST: api/inventory
         [HttpPost]
-        public async Task<ActionResult<InventoryItem>> CreateItem([FromBody] InventoryItem item)
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<ActionResult<InventoryItem>> CreateItem([FromBody] CreateInventoryItemRequest request)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var created = await _inventoryService.CreateInventoryItemAsync(item);
-            return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
+            try
+            {
+                var created = await _inventoryService.CreateInventoryItemFromSkuAsync(request);
+                return CreatedAtAction(nameof(GetItem), new { id = created.Id }, created);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
 
         // PUT: api/inventory/{id}
         [HttpPut("{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> PutItem(int id, [FromBody] InventoryItem item)
         {
             if (id != item.Id) return BadRequest("ID mismatch.");
-            var success = await _inventoryService.UpdateInventoryItemAsync(id, item);
-            if (!success) return NotFound();
-            return NoContent();
+            try
+            {
+                var success = await _inventoryService.UpdateInventoryItemAsync(id, item);
+                if (!success) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Conflict(ex.Message); }
         }
 
         // DELETE: api/inventory/{id}
         [HttpDelete("{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> DeleteItem(int id)
         {
-            var success = await _inventoryService.DeleteInventoryItemAsync(id);
-            if (!success) return NotFound();
-            return NoContent();
+            try
+            {
+                var success = await _inventoryService.DeleteInventoryItemAsync(id);
+                if (!success) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Conflict(ex.Message); }
         }
 
         // =========================================================================
@@ -79,6 +107,14 @@ namespace backend.Controllers
             return Ok(materials);
         }
 
+        // GET: api/inventory/packaging-types
+        [HttpGet("packaging-types")]
+        public async Task<ActionResult<IEnumerable<PackagingType>>> GetPackagingTypes()
+        {
+            var packagingTypes = await _inventoryService.GetPackagingTypesAsync();
+            return Ok(packagingTypes);
+        }
+
         // GET: api/inventory/rawmaterials/{id}
         [HttpGet("rawmaterials/{id:int}")]
         public async Task<ActionResult<RawMaterial>> GetRawMaterialById(int id)
@@ -90,6 +126,7 @@ namespace backend.Controllers
 
         // POST: api/inventory/rawmaterials
         [HttpPost("rawmaterials")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<ActionResult<RawMaterial>> CreateRawMaterial([FromBody] RawMaterial material)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -106,21 +143,31 @@ namespace backend.Controllers
 
         // PUT: api/inventory/rawmaterials/{id}
         [HttpPut("rawmaterials/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> UpdateRawMaterial(int id, [FromBody] RawMaterial material)
         {
             if (id != material.Id) return BadRequest("ID mismatch.");
-            var updated = await _inventoryService.UpdateRawMaterialAsync(id, material);
-            if (!updated) return NotFound();
-            return NoContent();
+            try
+            {
+                var updated = await _inventoryService.UpdateRawMaterialAsync(id, material);
+                if (!updated) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Conflict(ex.Message); }
         }
 
         // DELETE: api/inventory/rawmaterials/{id}
         [HttpDelete("rawmaterials/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> DeleteRawMaterial(int id)
         {
-            var deleted = await _inventoryService.DeleteRawMaterialAsync(id);
-            if (!deleted) return NotFound();
-            return NoContent();
+            try
+            {
+                var deleted = await _inventoryService.DeleteRawMaterialAsync(id);
+                if (!deleted) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Conflict(ex.Message); }
         }
 
         // =========================================================================
@@ -136,47 +183,116 @@ namespace backend.Controllers
         }
 
         // GET: api/inventory/rolls/{id}
-        [HttpGet("rolls/{id}")]
-        public async Task<ActionResult<InventoryRoll>> GetRollById(string id)
+        [HttpGet("rolls/{id:int}")]
+        public async Task<ActionResult<InventoryRoll>> GetRollById(int id)
         {
             var roll = await _inventoryService.GetInventoryRollByIdAsync(id);
             if (roll == null) return NotFound($"Roll {id} not found.");
             return Ok(roll);
         }
 
+        // GET: api/inventory/rolls/{rollIdentifier}/qr
+        // The Flutter client loads this authenticated local endpoint; the API
+        // keeps the QR provider URL and response validation server-side.
+        [HttpGet("rolls/{rollIdentifier}/qr")]
+        [Produces("image/png")]
+        public async Task<IActionResult> GetInventoryRollQrCode(
+            string rollIdentifier,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(rollIdentifier) ||
+                rollIdentifier.Length is < 2 or > 64 ||
+                !rollIdentifier.All(character =>
+                    char.IsLetterOrDigit(character) || character is '-' or '_'))
+            {
+                return BadRequest("Invalid inventory-roll identifier.");
+            }
+
+            var roll = await _inventoryService.GetInventoryRollByIdentifierAsync(rollIdentifier);
+            if (roll is null) return NotFound();
+
+            try
+            {
+                var image = await _barcodeService.GenerateInventoryRollQrAsync(
+                    roll.RollIdentifier,
+                    cancellationToken);
+                return File(image.Bytes, image.ContentType);
+            }
+            catch (QrCodeProviderException)
+            {
+                return Problem(
+                    statusCode: StatusCodes.Status502BadGateway,
+                    title: "QR code provider is unavailable.");
+            }
+            catch (ArgumentException)
+            {
+                return BadRequest("Invalid inventory-roll identifier.");
+            }
+        }
+
         // POST: api/inventory/rolls
         [HttpPost("rolls")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<ActionResult<InventoryRoll>> CreateRoll([FromBody] InventoryRoll roll)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (string.IsNullOrWhiteSpace(roll.BatchId) || roll.BatchId.Trim().Length > 80)
+                return BadRequest(new { message = "An explicit batch identifier of at most 80 characters is required." });
+            roll.BatchId = roll.BatchId.Trim();
             try
             {
                 var created = await _inventoryService.CreateInventoryRollAsync(roll);
                 return CreatedAtAction(nameof(GetRollById), new { id = created.Id }, created);
             }
-            catch (System.Exception ex)
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(ex.Message);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                var innerMsg = dbEx.InnerException?.Message ?? dbEx.Message;
+                if (innerMsg.Contains("PK_InventoryRolls") || innerMsg.Contains("RollIdentifier") || innerMsg.Contains("unique constraint") || innerMsg.Contains("23505"))
+                {
+                    return BadRequest($"An inventory roll with identifier '{roll.RollIdentifier}' already exists. Please choose a unique identifier.");
+                }
+                return BadRequest(innerMsg);
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.InnerException?.Message ?? ex.Message);
             }
         }
 
         // PUT: api/inventory/rolls/{id}
-        [HttpPut("rolls/{id}")]
-        public async Task<IActionResult> UpdateRoll(string id, [FromBody] InventoryRoll roll)
+        [HttpPut("rolls/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<IActionResult> UpdateRoll(int id, [FromBody] InventoryRoll roll)
         {
             if (id != roll.Id) return BadRequest("ID mismatch.");
-            var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
-            if (!updated) return NotFound();
-            return NoContent();
+            try
+            {
+                var updated = await _inventoryService.UpdateInventoryRollAsync(id, roll);
+                if (!updated) return NotFound();
+                return NoContent();
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(ex.InnerException?.Message ?? ex.Message);
+            }
         }
 
         // DELETE: api/inventory/rolls/{id}
-        [HttpDelete("rolls/{id}")]
-        public async Task<IActionResult> DeleteRoll(string id)
+        [HttpDelete("rolls/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<IActionResult> DeleteRoll(int id)
         {
-            var deleted = await _inventoryService.DeleteInventoryRollAsync(id);
-            if (!deleted) return NotFound();
-            return NoContent();
+            try
+            {
+                var deleted = await _inventoryService.DeleteInventoryRollAsync(id);
+                if (!deleted) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex) { return Conflict(ex.Message); }
         }
 
         // GET: api/inventory/roll/qr/{qrCode}
@@ -202,6 +318,7 @@ namespace backend.Controllers
 
         // POST: api/inventory/stock-levels
         [HttpPost("stock-levels")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<ActionResult<StockLevel>> CreateStockLevel([FromBody] StockLevel stockLevel)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -223,9 +340,14 @@ namespace backend.Controllers
 
         // POST: api/inventory/low-stock-alert
         [HttpPost("low-stock-alert")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<ActionResult<StockAlertResponseDto>> CreateLowStockAlert([FromBody] CreateStockAlertDto alertDto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!AssignWorkerEmployeeId(alertDto))
+            {
+                return BadRequest("Floor worker employee ID is missing. Please sign in again.");
+            }
             var created = await _inventoryService.CreateStockAlertAsync(alertDto);
             return Ok(created);
         }
@@ -240,15 +362,21 @@ namespace backend.Controllers
 
         // POST: api/inventory/alerts
         [HttpPost("alerts")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<ActionResult<StockAlertResponseDto>> CreateAlert([FromBody] CreateStockAlertDto alertDto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!AssignWorkerEmployeeId(alertDto))
+            {
+                return BadRequest("Floor worker employee ID is missing. Please sign in again.");
+            }
             var created = await _inventoryService.CreateStockAlertAsync(alertDto);
             return CreatedAtAction(nameof(GetAlerts), new { id = created.Id }, created);
         }
 
         // PUT: api/inventory/alerts/{id}
         [HttpPut("alerts/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> UpdateAlertStatus(int id, [FromBody] UpdateAlertStatusDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto?.Status)) return BadRequest("Status cannot be empty.");
@@ -275,11 +403,33 @@ namespace backend.Controllers
 
         // POST: api/inventory/trigger-replenishment
         [HttpPost("trigger-replenishment")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
         public async Task<IActionResult> TriggerReplenishment([FromBody] TriggerReplenishmentDto dto)
         {
             if (dto == null) return BadRequest("Replenishment request is empty.");
-            var result = await _inventoryService.TriggerAgentReplenishmentAsync(dto);
-            return Ok(result);
+            try
+            {
+                var result = await _inventoryService.TriggerAgentReplenishmentAsync(
+                    dto,
+                    Request.Headers.Authorization.ToString());
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (System.Net.Http.HttpRequestException ex)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
+            }
+        }
+
+        private bool AssignWorkerEmployeeId(CreateStockAlertDto alertDto)
+        {
+            var employeeId = User.FindFirst("employee_id")?.Value;
+            if (string.IsNullOrWhiteSpace(employeeId)) return false;
+            alertDto.WorkerId = employeeId;
+            return true;
         }
     }
 }

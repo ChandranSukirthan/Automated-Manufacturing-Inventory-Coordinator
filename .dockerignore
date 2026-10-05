@@ -1,0 +1,15 @@
+**/node_modules
+**/venv
+**/.venv
+**/bin
+**/obj
+**/build
+**/dist
+**/.env
+**/workflow_state.sqlite3*
+**/workflow_history.sqlite3*
+**/.workflow_locks
+**/__pycache__
+.git
+.local-backups
+.test-*

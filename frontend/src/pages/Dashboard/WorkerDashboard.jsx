@@ -1,3 +1,4 @@
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -9,11 +10,11 @@ import {
   Bot,
   PlusCircle,
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
 import inventoryService from '../../services/inventoryService';
+import { parseErrorMessage } from '../../utils/errorHandler';
 
 // ── Sub-components ──────────────────────────────────────────────
-import WorkerHeader from '../Worker/components/WorkerHeader';
+import RoleLayout from '../../components/Layout/RoleLayout';
 import KpiCards from '../Worker/components/KpiCards';
 import InventoryTab from '../Worker/components/InventoryTab';
 import RollsTab from '../Worker/components/RollsTab';
@@ -37,7 +38,6 @@ const TABS = [
 ];
 
 export default function WorkerDashboard() {
-  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -54,12 +54,18 @@ export default function WorkerDashboard() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('inventory');
+  const [tabChoice, setTabChoice] = useState(null);
+  const routeTab = location.pathname.includes('/rolls') ? 'rolls'
+    : location.pathname.includes('/stock-levels') ? 'stock-levels'
+    : location.pathname.includes('/low-stock') ? 'alerts'
+    : location.pathname.includes('/history') ? 'history' : 'inventory';
+  const activeTab = tabChoice?.path === location.pathname ? tabChoice.tab : routeTab;
+  const setActiveTab = (tab) => setTabChoice({ path: location.pathname, tab });
 
   // Modals
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [newItem, setNewItem] = useState({
-    sku: '', name: '', category: 'Metal', stockLevel: 100, reorderThreshold: 50,
+    rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0,
   });
   const [showAddAlertModal, setShowAddAlertModal] = useState(false);
   const [newAlert, setNewAlert] = useState({
@@ -68,8 +74,9 @@ export default function WorkerDashboard() {
 
   // Roll registration
   const [rollIdentifier, setRollIdentifier] = useState('');
+  const [rollBatchId, setRollBatchId] = useState('');
   const [rollQuantity, setRollQuantity] = useState('1');
-  const [rollRawMaterialId, setRollRawMaterialId] = useState(1);
+  const [rollRawMaterialId, setRollRawMaterialId] = useState('');
   const [registeredRoll, setRegisteredRoll] = useState(null);
 
   // QR lookup
@@ -81,27 +88,17 @@ export default function WorkerDashboard() {
   const [triggeringAi, setTriggeringAi] = useState(false);
   const [aiWorkflowResult, setAiWorkflowResult] = useState(null);
 
-  // ── Route sync ──────────────────────────────────────────────
-  useEffect(() => {
-    const path = location.pathname;
-    if (path.includes('/rolls')) setActiveTab('rolls');
-    else if (path.includes('/stock-levels')) setActiveTab('stock-levels');
-    else if (path.includes('/low-stock')) setActiveTab('alerts');
-    else if (path.includes('/history')) setActiveTab('history');
-    else if (path.includes('/inventory')) setActiveTab('inventory');
-  }, [location.pathname]);
-
   // ── Data loading ────────────────────────────────────────────
   const loadData = async () => {
     setLoading(true);
     setError('');
     try {
       const [itemsData, rawMatsData, rollsData, alertsData, levelsData] = await Promise.all([
-        inventoryService.getItems().catch(() => []),
-        inventoryService.getRawMaterials().catch(() => []),
-        inventoryService.getRolls().catch(() => []),
-        inventoryService.getAlerts().catch(() => []),
-        inventoryService.getStockLevels().catch(() => []),
+        inventoryService.getItems(),
+        inventoryService.getRawMaterials(),
+        inventoryService.getRolls(),
+        inventoryService.getAlerts(),
+        inventoryService.getStockLevels(),
       ]);
       setItems(itemsData || []);
       setRawMaterials(rawMatsData || []);
@@ -110,6 +107,7 @@ export default function WorkerDashboard() {
       setStockLevels(levelsData || []);
 
       if (rawMatsData && rawMatsData.length > 0) {
+        setRollRawMaterialId((prev) => (prev ? prev : String(rawMatsData[0].id)));
         const hist = await inventoryService.getHistory(rawMatsData[0].id).catch(() => []);
         setHistoryItems(hist || []);
       }
@@ -120,7 +118,10 @@ export default function WorkerDashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    const initialLoad = setTimeout(loadData, 0);
+    return () => clearTimeout(initialLoad);
+  }, []);
 
   const loadHistoryForMaterial = async (id) => {
     setSelectedHistoryMaterialId(id);
@@ -141,27 +142,39 @@ export default function WorkerDashboard() {
   const handleAddItem = async (e) => {
     e.preventDefault();
     try {
+      const material = rawMaterials.find((value) => value.id === Number(newItem.rawMaterialId));
+      if (!material?.packagingTypeId) throw new Error('Select a material with a reconciled packaging type.');
       await inventoryService.createItem({
-        ...newItem,
+        rawMaterialId: material.id,
+        packagingTypeId: material.packagingTypeId,
+        skuNumber: Number(newItem.skuNumber),
         stockLevel: Number(newItem.stockLevel),
         reorderThreshold: Number(newItem.reorderThreshold),
       });
       setShowAddItemModal(false);
-      setNewItem({ sku: '', name: '', category: 'Metal', stockLevel: 100, reorderThreshold: 50 });
+      setNewItem({ rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0 });
       showNotification('Inventory item created successfully!');
       loadData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create inventory item');
+      setError(parseErrorMessage(err, 'Failed to create inventory item'));
     }
   };
 
   const handleDeleteItem = async (id) => {
+    const item = items.find((value) => value.id === id);
+    if (item && Number(item.stockLevel) !== 0) {
+      setError(`Cannot delete ${item.sku}: it has ${item.stockLevel} units remaining. Record the actual stock usage or adjustment before deleting it.`);
+      return;
+    }
     if (!window.confirm('Delete this inventory item?')) return;
+    setError('');
     try {
       await inventoryService.deleteItem(id);
       showNotification('Item deleted successfully.');
       loadData();
-    } catch { setError('Failed to delete item.'); }
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to delete item.'));
+    }
   };
 
   const handleUpdateAlertStatus = async (alertId, newStatus) => {
@@ -169,7 +182,7 @@ export default function WorkerDashboard() {
       await inventoryService.updateAlertStatus(alertId, newStatus);
       showNotification(`Alert status updated to "${newStatus}"!`);
       loadData();
-    } catch { setError('Failed to update alert status'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to update alert status')); }
   };
 
   const handleAddAlert = async (e) => {
@@ -193,26 +206,45 @@ export default function WorkerDashboard() {
       setNewAlert({ sku: '', packagingType: 'Standard Roll', quantityRequested: 500, notes: '' });
       showNotification('Stock alert created successfully!');
       loadData();
-    } catch { setError('Failed to create stock alert'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to create stock alert')); }
   };
 
   const handleCreateRoll = async (e) => {
     e.preventDefault();
-    if (!rollIdentifier.trim()) return;
+    if (!rollIdentifier.trim() || !rollBatchId.trim()) {
+      setError('Please provide the physical roll and batch identifiers.');
+      return;
+    }
+    const matId = Number(rollRawMaterialId);
+    if (!matId || isNaN(matId)) {
+      setError('Please select a valid raw material.');
+      return;
+    }
+    const qty = Number(rollQuantity);
+    if (!qty || qty <= 0 || isNaN(qty)) {
+      setError('Roll quantity must be greater than zero.');
+      return;
+    }
+
     try {
       const created = await inventoryService.createRoll({
         rollIdentifier: rollIdentifier.trim(),
-        rawMaterialId: Number(rollRawMaterialId),
-        initialQuantity: Number(rollQuantity),
-        currentQuantity: Number(rollQuantity),
+        batchId: rollBatchId.trim(),
+        rawMaterialId: matId,
+        initialQuantity: qty,
+        currentQuantity: qty,
       });
       setRegisteredRoll(created);
       setRollIdentifier('');
+      setRollBatchId('');
       setRollQuantity('1');
       showNotification(`Inventory Roll ${created.rollIdentifier || rollIdentifier} registered!`);
       loadData();
     } catch (err) {
-      setError(err.response?.data || 'Failed to register inventory roll.');
+      const msg = typeof err.response?.data === 'string'
+        ? err.response.data
+        : err.response?.data?.message || err.message || 'Failed to register inventory roll.';
+      setError(msg);
     }
   };
 
@@ -222,7 +254,7 @@ export default function WorkerDashboard() {
       await inventoryService.deleteRoll(id);
       showNotification('Inventory roll deleted.');
       loadData();
-    } catch { setError('Failed to delete roll.'); }
+    } catch (err) { setError(parseErrorMessage(err, 'Failed to delete roll.')); }
   };
 
   const handleQrSearch = async (e) => {
@@ -242,11 +274,15 @@ export default function WorkerDashboard() {
     }
   };
 
-  const handleTriggerAiWorkflow = async (sku, qty = 2000) => {
+  const handleTriggerAiWorkflow = async (sku, qty) => {
+    setError('');
     setTriggeringAi(true);
     setAiWorkflowResult(null);
     try {
-      const materialCode = sku || 'RM-STEEL-001';
+      const materialCode = sku;
+      if (!materialCode || !(Number(qty) > 0)) {
+        throw new Error('Select an exact material and enter a positive required quantity.');
+      }
       const result = await inventoryService.triggerWorkflow(
         `Floor Worker Stock Replenishment: Reorder ${qty} units of ${materialCode}`,
         materialCode,
@@ -255,7 +291,12 @@ export default function WorkerDashboard() {
       setAiWorkflowResult(result);
       showNotification('Replenishment workflow initiated!');
       await loadData();
-    } catch { setError('Failed to trigger AI workflow.'); }
+    } catch (workflowError) {
+      setError(parseErrorMessage(
+        workflowError,
+        'Unable to start the AI workflow. Ensure the AI service is running, then try again.',
+      ));
+    }
     finally { setTriggeringAi(false); }
   };
 
@@ -290,13 +331,17 @@ export default function WorkerDashboard() {
 
   // ── Render ──────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <WorkerHeader user={user} loading={loading} onRefresh={loadData} onLogout={logout} />
+    <RoleLayout title="Floor Worker Console" subtitle="Inventory and stock logistics" loading={loading} onRefresh={loadData}>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-6">
+      <main className="worker-dashboard flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-400">Floor operations</p>
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">Inventory workspace</h2>
+          <p className="text-sm leading-6 text-slate-400">Manage materials, track warehouse stock and review replenishment activity.</p>
+        </div>
         {/* Banner messages */}
         {error && (
-          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm flex items-center justify-between tab-slide-in">
+          <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-sm flex flex-wrap items-center justify-between gap-3 tab-slide-in">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" />
               <span>{error}</span>
@@ -315,6 +360,15 @@ export default function WorkerDashboard() {
           </div>
         )}
 
+        <button
+          type="button"
+          onClick={() => navigate('/worker/replenishment')}
+          className="worker-replenishment-banner w-full rounded-2xl border border-cyan-500/25 bg-cyan-500/5 px-5 py-4 text-left text-sm text-cyan-100 transition hover:border-cyan-400/50 hover:bg-cyan-500/10 sm:flex sm:items-center sm:justify-between sm:gap-4"
+        >
+          <span className="font-semibold">Need material urgently?</span>
+          <span className="mt-1 block text-xs text-cyan-300 sm:mt-0">Open the replenishment request and workflow-status workspace →</span>
+        </button>
+
         {/* KPI Cards */}
         <KpiCards
           loading={loading}
@@ -327,7 +381,7 @@ export default function WorkerDashboard() {
         />
 
         {/* Tab navigation */}
-        <div className="border-b border-slate-800 overflow-x-auto">
+        <div className="worker-tabs rounded-2xl border border-slate-800 bg-slate-900/70 overflow-x-auto p-1.5">
           <div className="flex gap-1 min-w-max">
             {TABS.map((tab) => {
               const Icon = tab.icon;
@@ -337,10 +391,10 @@ export default function WorkerDashboard() {
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition -mb-px whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border transition whitespace-nowrap ${
                     isActive
-                      ? 'border-cyan-400 text-cyan-400'
-                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 shadow-sm'
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -379,6 +433,8 @@ export default function WorkerDashboard() {
             inventoryItems={items}
             rawMaterials={rawMaterials}
             rollIdentifier={rollIdentifier}
+            rollBatchId={rollBatchId}
+            setRollBatchId={setRollBatchId}
             setRollIdentifier={setRollIdentifier}
             rollQuantity={rollQuantity}
             setRollQuantity={setRollQuantity}
@@ -412,6 +468,8 @@ export default function WorkerDashboard() {
             alerts={alerts}
             onUpdateAlertStatus={handleUpdateAlertStatus}
             onShowAddModal={() => setShowAddAlertModal(true)}
+            onTriggerAi={handleTriggerAiWorkflow}
+            triggeringAi={triggeringAi}
           />
         )}
 
@@ -437,8 +495,8 @@ export default function WorkerDashboard() {
 
         {/* ── Modal: Add Stock Item ────────────────────────── */}
         {showAddItemModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
+          <ModalOverlay className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="worker-dashboard-modal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
                   <Package className="w-5 h-5" />
@@ -447,20 +505,23 @@ export default function WorkerDashboard() {
               </div>
               <form onSubmit={handleAddItem} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">SKU Code</label>
-                  <input
-                    type="text" required placeholder="e.g. RM-STEEL-001"
-                    value={newItem.sku}
-                    onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
+                  <label htmlFor="stock-material" className="block text-xs font-semibold text-slate-400 mb-1">Catalogue Material</label>
+                  <select id="stock-material"
+                    required value={newItem.rawMaterialId}
+                    onChange={(e) => setNewItem({ ...newItem, rawMaterialId: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
-                  />
+                  >
+                    <option value="">Select a material</option>
+                    {rawMaterials.filter((material) => material.packagingTypeId > 0).map((material) =>
+                      <option key={material.id} value={material.id}>{material.name} — {material.skuCode}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Item Name</label>
+                  <label htmlFor="stock-sequence" className="block text-xs font-semibold text-slate-400 mb-1">SKU Sequence Number</label>
                   <input
-                    type="text" required placeholder="e.g. Cold Rolled Steel Sheet"
-                    value={newItem.name}
-                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    id="stock-sequence" type="number" min="1" max="999999" step="1" required
+                    value={newItem.skuNumber}
+                    onChange={(e) => setNewItem({ ...newItem, skuNumber: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
                   />
                 </div>
@@ -494,13 +555,13 @@ export default function WorkerDashboard() {
                 </div>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* ── Modal: Log Stock Alert ───────────────────────── */}
         {showAddAlertModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
+          <ModalOverlay className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="worker-dashboard-modal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                   <AlertTriangle className="w-5 h-5" />
@@ -537,9 +598,9 @@ export default function WorkerDashboard() {
                 </div>
               </form>
             </div>
-          </div>
+          </ModalOverlay>
         )}
       </main>
-    </div>
+    </RoleLayout>
   );
 }

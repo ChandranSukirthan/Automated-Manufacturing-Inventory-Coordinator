@@ -27,9 +27,21 @@ namespace ManufacturingCoordinator.Data
         public DbSet<PurchaseOrder> PurchaseOrders { get; set; } = null!;
         public DbSet<OrderLine> OrderLines { get; set; } = null!;
         public DbSet<RawMaterial> RawMaterials { get; set; } = null!;
+        public DbSet<PackagingType> PackagingTypes { get; set; } = null!;
         public DbSet<PurchaseOrderApproval> PurchaseOrderApprovals { get; set; } = null!;
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; } = null!;
         public DbSet<SupplierPerformance> SupplierPerformances { get; set; } = null!;
+        public DbSet<ProcurementRequest> ProcurementRequests { get; set; } = null!;
+        public DbSet<SupplierCandidate> SupplierCandidates { get; set; } = null!;
+        public DbSet<ProcurementOutcome> ProcurementOutcomes { get; set; } = null!;
+        // Canonical physical stock, shared with ManufacturingContext.
+        public DbSet<backend.Models.InventoryRoll> StockRolls { get; set; } = null!;
+        public DbSet<InventoryItem> InventoryItems { get; set; } = null!;
+        public DbSet<StockAlert> StockAlerts { get; set; } = null!;
+        public DbSet<StockLevel> StockLevels { get; set; } = null!;
+        public DbSet<InventoryMovement> InventoryMovements { get; set; } = null!;
+        public DbSet<GoodsReceipt> GoodsReceipts { get; set; } = null!;
+        public DbSet<SupplierMaterialQuote> SupplierMaterialQuotes { get; set; } = null!;
 
         // Student 3 — QA / Defect Reporting & Inventory
         public DbSet<DefectReport> DefectReports { get; set; } = null!;
@@ -49,6 +61,22 @@ namespace ManufacturingCoordinator.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<InventoryItem>().Property(i => i.StockLevel).IsConcurrencyToken();
+            modelBuilder.Entity<backend.Models.InventoryRoll>(e =>
+            {
+                e.ToTable("InventoryRolls");
+                e.Property(r => r.CurrentQuantity).IsConcurrencyToken();
+                e.Property(r => r.Status).IsConcurrencyToken();
+                e.HasIndex(r => r.RollIdentifier).IsUnique();
+                e.HasOne(r => r.RawMaterial).WithMany(m => m.InventoryRolls)
+                    .HasForeignKey(r => r.RawMaterialId).OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<InventoryItem>().HasIndex(i => i.Sku).IsUnique();
+            modelBuilder.Entity<GoodsReceipt>().HasIndex(r => r.ReceiptKey).IsUnique();
+            modelBuilder.Entity<PurchaseOrder>().HasIndex(p => p.ProcurementRequestId).IsUnique()
+                .HasFilter("\"ProcurementRequestId\" IS NOT NULL").HasDatabaseName("UX_PurchaseOrders_ProcurementRequestId");
+            modelBuilder.Entity<AgentWorkflow>().Property(w => w.PurchaseOrderId).IsConcurrencyToken();
+            modelBuilder.Entity<PurchaseOrder>().Property(p => p.Status).IsConcurrencyToken();
 
             // ---- User ----
             modelBuilder.Entity<User>(entity =>
@@ -58,6 +86,12 @@ namespace ManufacturingCoordinator.Data
                 entity.Property(u => u.FullName)
                     .IsRequired()
                     .HasMaxLength(150);
+
+                entity.Property(u => u.EmployeeId)
+                    .HasMaxLength(16);
+
+                entity.HasIndex(u => u.EmployeeId)
+                    .IsUnique();
 
                 entity.Property(u => u.Email)
                     .IsRequired()
@@ -192,6 +226,12 @@ namespace ManufacturingCoordinator.Data
             {
                 entity.HasKey(d => d.Id);
 
+                entity.Property(d => d.SkuCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.HasIndex(d => d.SkuCode);
+
                 entity.Property(d => d.BatchId)
                     .IsRequired()
                     .HasMaxLength(80);
@@ -234,6 +274,10 @@ namespace ManufacturingCoordinator.Data
 
             modelBuilder.Entity<ManufacturingCoordinator.Models.Inventory.InventoryRoll>(entity =>
             {
+                // Student A's stock rolls already use the InventoryRolls table.
+                // Quality-control rolls have a different shape, so keep them in
+                // their own table instead of colliding with inventory tracking.
+                entity.ToTable("QualityInventoryRolls");
                 entity.HasKey(i => i.Id);
                 entity.Property(i => i.Id).HasMaxLength(120);
                 entity.Property(i => i.BatchId).IsRequired().HasMaxLength(80);
@@ -397,7 +441,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(po => po.Currency)
                     .HasMaxLength(10)
-                    .HasDefaultValue("USD");
+                    .HasDefaultValue("LKR");
 
                 entity.Property(po => po.TotalCost)
                     .HasColumnType("decimal(18,2)");
@@ -407,7 +451,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(po => po.ApprovalThreshold)
                     .HasColumnType("decimal(18,2)")
-                    .HasDefaultValue(5000m);
+                    .HasDefaultValue(1500000m);
 
                 entity.Property(po => po.Notes)
                     .HasMaxLength(1000);
@@ -432,6 +476,25 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(po => po.EmailFailureReason)
                     .HasMaxLength(500);
+
+                entity.Property(po => po.TrackingStatus)
+                    .HasMaxLength(50)
+                    .HasDefaultValue("Draft");
+
+                entity.Property(po => po.TrackingNumber)
+                    .HasMaxLength(200);
+
+                entity.Property(po => po.DeliveryRemarks)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.BankSlipUrl)
+                    .HasMaxLength(500);
+
+                entity.Property(po => po.BankReferenceNumber)
+                    .HasMaxLength(100);
+
+                entity.Property(po => po.BankSlipStatus)
+                    .HasMaxLength(50);
 
                 entity.Property(po => po.CreatedAt)
                     .HasDefaultValueSql("timezone('utc', now())");
@@ -497,7 +560,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(pt => pt.Currency)
                     .HasMaxLength(10)
-                    .HasDefaultValue("usd");
+                    .HasDefaultValue("lkr");
 
                 entity.Property(pt => pt.PaymentStatus)
                     .HasMaxLength(50)
@@ -598,6 +661,22 @@ namespace ManufacturingCoordinator.Data
                 entity.HasKey(rm => rm.Id);
                 entity.Property(rm => rm.SkuCode).IsRequired().HasMaxLength(50);
                 entity.HasIndex(rm => rm.SkuCode).IsUnique();
+                entity.Property(rm => rm.MaterialCode).IsRequired().HasMaxLength(20);
+                entity.HasIndex(rm => new { rm.PackagingTypeId, rm.MaterialCode });
+                entity.HasOne(rm => rm.PackagingType)
+                    .WithMany(pt => pt.RawMaterials)
+                    .HasForeignKey(rm => rm.PackagingTypeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PackagingType>(entity =>
+            {
+                entity.ToTable("PackagingTypes");
+                entity.HasKey(pt => pt.Id);
+                entity.Property(pt => pt.Name).IsRequired().HasMaxLength(100);
+                entity.Property(pt => pt.ShortCode).IsRequired().HasMaxLength(12);
+                entity.HasIndex(pt => pt.Name).IsUnique();
+                entity.HasIndex(pt => pt.ShortCode).IsUnique();
             });
 
             // ---- AuditLog (Student 4) ----
@@ -667,6 +746,169 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(w => w.FinalOutcome)
                     .HasMaxLength(1000);
+
+                entity.Property(w => w.ValidationResults);
+            });
+
+            // ── ProcurementRequest (Student 2) ───────────────────────────────────
+            modelBuilder.Entity<ProcurementRequest>(entity =>
+            {
+                entity.HasKey(pr => pr.Id);
+
+                entity.Property(pr => pr.RequiredSpecification)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(pr => pr.ProductionRequirement)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.CurrentStock)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.SafetyStock)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.ExistingOpenPoQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.CalculatedNetQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(pr => pr.MaximumBudget)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(pr => pr.QualityRequirement)
+                    .HasMaxLength(500);
+
+                entity.Property(pr => pr.PreferredRegion)
+                    .HasMaxLength(100);
+
+                entity.Property(pr => pr.Status)
+                    .HasConversion<string>()
+                    .IsRequired();
+
+                entity.Property(pr => pr.WorkflowId)
+                    .HasMaxLength(100);
+
+                entity.Property(pr => pr.MaterialName)
+                    .HasMaxLength(200);
+
+                entity.Property(pr => pr.FailureReason)
+                    .HasMaxLength(1000);
+
+                entity.Property(pr => pr.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.Property(pr => pr.UpdatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(pr => pr.RawMaterial)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.RawMaterialId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(pr => pr.RecommendedSupplier)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.RecommendedSupplierId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(pr => pr.GeneratedPurchaseOrder)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.GeneratedPurchaseOrderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(pr => pr.CreatedBy)
+                    .WithMany()
+                    .HasForeignKey(pr => pr.CreatedById)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── SupplierCandidate (Student 2) ────────────────────────────────────
+            modelBuilder.Entity<SupplierCandidate>(entity =>
+            {
+                entity.HasKey(sc => sc.Id);
+
+                entity.Property(sc => sc.SupplierName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(sc => sc.MaterialName)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(sc => sc.UnitPrice)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sc => sc.Currency)
+                    .HasMaxLength(10)
+                    .HasDefaultValue("LKR");
+
+                entity.Property(sc => sc.MinimumOrderQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(sc => sc.PackSize)
+                    .HasColumnType("decimal(18,3)")
+                    .HasDefaultValue(1m);
+
+                entity.Property(sc => sc.QualityEvidence)
+                    .HasMaxLength(500);
+
+                entity.Property(sc => sc.Availability)
+                    .HasMaxLength(100)
+                    .HasDefaultValue("In Stock");
+
+                entity.Property(sc => sc.SupplierStatus)
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasDefaultValue("UNVERIFIED");
+
+                entity.Property(sc => sc.ConfidenceScore)
+                    .HasColumnType("decimal(5,2)");
+
+                entity.Property(sc => sc.SourceUrl)
+                    .HasMaxLength(500);
+
+                entity.Property(sc => sc.ValidationRemarks)
+                    .HasMaxLength(1000);
+
+                entity.Property(sc => sc.RecommendedOrderQuantity)
+                    .HasColumnType("decimal(18,3)");
+
+                entity.Property(sc => sc.TotalCost)
+                    .HasColumnType("decimal(18,2)");
+
+                entity.Property(sc => sc.CreatedAt)
+                    .HasDefaultValueSql("timezone('utc', now())");
+
+                entity.HasOne(sc => sc.ProcurementRequest)
+                    .WithMany(pr => pr.Candidates)
+                    .HasForeignKey(sc => sc.ProcurementRequestId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(sc => sc.Supplier)
+                    .WithMany()
+                    .HasForeignKey(sc => sc.SupplierId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // ── ProcurementOutcome (Student 2 - Future Learning Dataset) ─────────
+            modelBuilder.Entity<ProcurementOutcome>(entity =>
+            {
+                entity.HasKey(po => po.Id);
+                entity.Property(po => po.Material).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.RecommendedSupplier).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.SelectedSupplier).IsRequired().HasMaxLength(200);
+                entity.Property(po => po.RequestedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.RecommendedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.FinalOrderedQuantity).HasColumnType("decimal(18,3)");
+                entity.Property(po => po.EstimatedPrice).HasColumnType("decimal(18,2)");
+                entity.Property(po => po.FinalPrice).HasColumnType("decimal(18,2)");
+                entity.Property(po => po.QualityEvidence).HasMaxLength(1000);
+                entity.Property(po => po.SupplierVerification).HasMaxLength(100);
+                entity.Property(po => po.ManagerDecision).IsRequired().HasMaxLength(100);
+                entity.Property(po => po.ManagerRevision).HasMaxLength(1000);
+                entity.Property(po => po.QualityOutcome).HasMaxLength(500);
+                entity.Property(po => po.CreatedAt).HasDefaultValueSql("timezone('utc', now())");
             });
         }
     }

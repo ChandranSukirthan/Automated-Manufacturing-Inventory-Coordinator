@@ -38,6 +38,12 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("PackagingTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RawMaterialId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ReorderThreshold")
                         .HasColumnType("integer");
 
@@ -45,18 +51,68 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("SkuNumber")
+                        .HasColumnType("integer");
+
                     b.Property<int>("StockLevel")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Sku")
+                        .IsUnique();
+
                     b.ToTable("InventoryItems");
+                });
+
+            modelBuilder.Entity("backend.Models.InventoryMovement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("NewStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("PreviousStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("RawMaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RollIdentifier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InventoryMovements");
                 });
 
             modelBuilder.Entity("backend.Models.InventoryRoll", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("text");
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("BarcodeUrl")
                         .IsRequired()
@@ -69,6 +125,7 @@ namespace backend.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("CurrentQuantity")
+                        .IsConcurrencyToken()
                         .HasColumnType("numeric");
 
                     b.Property<decimal>("InitialQuantity")
@@ -85,6 +142,7 @@ namespace backend.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -99,6 +157,38 @@ namespace backend.Migrations
                         .IsUnique();
 
                     b.ToTable("InventoryRolls");
+                });
+
+            modelBuilder.Entity("backend.Models.PackagingType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ShortCode")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("ShortCode")
+                        .IsUnique();
+
+                    b.ToTable("PackagingTypes");
                 });
 
             modelBuilder.Entity("backend.Models.RawMaterial", b =>
@@ -120,17 +210,25 @@ namespace backend.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("MaterialCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("PackagingTypeId")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("ReorderThreshold")
                         .HasColumnType("numeric");
 
                     b.Property<string>("SkuCode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("UnitOfMeasure")
                         .IsRequired()
@@ -144,6 +242,8 @@ namespace backend.Migrations
                     b.HasIndex("SkuCode")
                         .IsUnique();
 
+                    b.HasIndex("PackagingTypeId", "MaterialCode");
+
                     b.ToTable("RawMaterials");
                 });
 
@@ -155,12 +255,42 @@ namespace backend.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("CurrentStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaterialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MaterialName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("NetDeficit")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OpenPurchaseQuantity")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("PackagingType")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<int>("QuantityRequested")
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SafetyStock")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Sku")
                         .IsRequired()
@@ -215,10 +345,21 @@ namespace backend.Migrations
                     b.HasOne("backend.Models.RawMaterial", "RawMaterial")
                         .WithMany("InventoryRolls")
                         .HasForeignKey("RawMaterialId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("RawMaterial");
+                });
+
+            modelBuilder.Entity("backend.Models.RawMaterial", b =>
+                {
+                    b.HasOne("backend.Models.PackagingType", "PackagingType")
+                        .WithMany("RawMaterials")
+                        .HasForeignKey("PackagingTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PackagingType");
                 });
 
             modelBuilder.Entity("backend.Models.StockLevel", b =>
@@ -230,6 +371,11 @@ namespace backend.Migrations
                         .IsRequired();
 
                     b.Navigation("RawMaterial");
+                });
+
+            modelBuilder.Entity("backend.Models.PackagingType", b =>
+                {
+                    b.Navigation("RawMaterials");
                 });
 
             modelBuilder.Entity("backend.Models.RawMaterial", b =>

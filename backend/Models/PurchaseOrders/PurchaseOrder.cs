@@ -47,7 +47,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         /// <summary>Maximum allowed spend for this order.</summary>
         [Column(TypeName = "decimal(18,2)")]
@@ -55,7 +55,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         /// <summary>Threshold above which manager approval is mandatory.</summary>
         [Column(TypeName = "decimal(18,2)")]
-        public decimal ApprovalThreshold { get; set; } = 5000m;
+        public decimal ApprovalThreshold { get; set; } = 1500000m;
 
         /// <summary>Set to true by checkApprovalThreshold() when TotalCost > ApprovalThreshold.</summary>
         public bool RequiresApproval { get; set; }
@@ -73,6 +73,32 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         public DateTime? ApprovedAt { get; set; }
 
+        // ── AI Procurement Link ───────────────────────────────────────────────
+        /// <summary>Links this PO back to the AI ProcurementRequest that generated it.</summary>
+        public int? ProcurementRequestId { get; set; }
+
+        // ── Delivery / Tracking ───────────────────────────────────────────────
+        /// <summary>
+        /// Granular tracking status beyond PO workflow status.
+        /// Values: Draft, PendingApproval, Approved, PaymentPending, Paid,
+        ///         SupplierNotified, Ordered, InTransit, Delivered, Completed
+        /// </summary>
+        [MaxLength(50)]
+        public string TrackingStatus { get; set; } = "Draft";
+
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        public DateTime? ActualDeliveryDate { get; set; }
+
+        public bool IsAcknowledgedByScm { get; set; } = false;
+        public bool IsQualityVerified { get; set; } = false;
+        public bool IsFinancialVerified { get; set; } = false;
+
+        [MaxLength(200)]
+        public string? TrackingNumber { get; set; }
+
+        [MaxLength(500)]
+        public string? DeliveryRemarks { get; set; }
+
         // ── Stripe Payment ────────────────────────────────────────────────────
         [MaxLength(200)]
         public string? StripePaymentIntentId { get; set; }
@@ -82,6 +108,18 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         [MaxLength(500)]
         public string? PaymentFailureReason { get; set; }
+
+        // ── Bank Slip Payment ─────────────────────────────────────────────────
+        [MaxLength(500)]
+        public string? BankSlipUrl { get; set; }
+
+        [MaxLength(100)]
+        public string? BankReferenceNumber { get; set; }
+
+        [MaxLength(50)]
+        public string? BankSlipStatus { get; set; }
+
+        public DateTime? BankSlipUploadedAt { get; set; }
 
         // ── SendGrid Email ────────────────────────────────────────────────────
         [MaxLength(200)]

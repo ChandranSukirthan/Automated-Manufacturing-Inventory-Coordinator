@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -21,9 +20,19 @@ class DefectFormScreen extends StatefulWidget {
 class _DefectFormScreenState extends State<DefectFormScreen> {
   static const _severities = ['LOW', 'MEDIUM', 'HIGH', 'Critical'];
   static const _statuses = ['Open', 'InReview', 'Resolved', 'Closed'];
+  static const _agentProgressSteps = [
+    'Agent Activated',
+    'Analyzing Defect Context',
+    'Inspecting Related Inventory Rolls',
+    'Evaluating Quarantine Thresholds',
+    'Generating Roll Recommendations',
+    'Assessment Complete',
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final _description = TextEditingController();
   final _inventory = InventoryApiService();
+
   List<InventoryItemModel> _items = [];
   List<RawMaterialModel> _materials = [];
   List<InventoryRollModel> _rolls = [];
@@ -31,11 +40,12 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   String _severity = 'LOW';
   String _status = 'Open';
   Set<String> _selectedRolls = {};
+
   bool _loadingInventory = true;
   bool _saving = false;
   bool _analyzing = false;
-  int _analysisStatusIndex = 0;
-  Timer? _analysisStatusTimer;
+  int _aiStepIndex = 0;
+  Timer? _stepTimer;
   String? _error;
   String? _aiError;
   QualityRecommendation? _recommendation;
@@ -58,6 +68,8 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
             skuCode: item.sku.trim(),
             name: item.name.isEmpty ? material.name : item.name,
             category: material.category,
+            packagingTypeId: material.packagingTypeId,
+            materialCode: material.materialCode,
             unitOfMeasure: material.unitOfMeasure,
             reorderThreshold: material.reorderThreshold,
           );
@@ -85,7 +97,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
 
   @override
   void dispose() {
-    _analysisStatusTimer?.cancel();
+    _stepTimer?.cancel();
     _description.dispose();
     super.dispose();
   }
@@ -126,13 +138,13 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     final defect = widget.defect;
     if (defect == null) return;
     final affected = defect.affectedInventory.toSet();
-    final roll = _rolls.where((item) => affected.contains(item.id)).firstOrNull;
+    final roll = _rolls.where((item) => affected.contains(item.rollIdentifier)).firstOrNull;
     final material = _materials
         .where((item) => item.id == roll?.rawMaterialId)
         .firstOrNull;
     if (!mounted) return;
     setState(() {
-      _skuCode = material?.skuCode;
+      _skuCode = material?.skuCode ?? defect.skuCode;
       _selectedRolls = affected;
     });
   }
@@ -148,16 +160,16 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
 
   String? _validate({required bool requireRolls}) {
     if (_skuCode == null || _skuCode!.isEmpty) {
-      return 'Inventory roll is required.';
+      return 'Inventory roll SKU is required.';
     }
     if (requireRolls && _selectedRolls.isEmpty) {
-      return 'Select at least one inventory roll.';
+      return 'Select at least one inventory roll or click "Activate Agent" to evaluate affected rolls.';
     }
     if (_description.text.trim().isEmpty) return 'Description is required.';
     return null;
   }
 
-  Future<void> _analyzeWithAi() async {
+  Future<void> _activateAgent() async {
     final message = _validate(requireRolls: false);
     if (message != null) {
       setState(() => _aiError = message);
@@ -166,20 +178,20 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     setState(() {
       _analyzing = true;
       _aiError = null;
-      _analysisStatusIndex = 0;
+      _aiStepIndex = 0;
     });
-    _analysisStatusTimer?.cancel();
-    _analysisStatusTimer = Timer.periodic(const Duration(milliseconds: 1500), (
-      timer,
-    ) {
-      if (!mounted || !_analyzing) {
+
+    _stepTimer?.cancel();
+    _stepTimer = Timer.periodic(const Duration(milliseconds: 450), (timer) {
+      if (!mounted) {
         timer.cancel();
         return;
       }
-      setState(() {
-        _analysisStatusIndex = (_analysisStatusIndex + 1) % 3;
-      });
+      if (_aiStepIndex < _agentProgressSteps.length - 1) {
+        setState(() => _aiStepIndex++);
+      }
     });
+
     try {
       final recommendation = await widget.service.analyzeDefect(
         skuCode: _skuCode,
@@ -187,12 +199,32 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
         description: _description.text.trim(),
         affectedInventory: _selectedRolls.toList(),
       );
-      if (mounted) setState(() => _recommendation = recommendation);
+      if (mounted) {
+        setState(() {
+          _recommendation = recommendation;
+          // Auto-select recommended rolls
+          if (recommendation.affectedInventory.isNotEmpty) {
+            _selectedRolls = {
+              ..._selectedRolls,
+              ...recommendation.affectedInventory,
+            };
+          }
+        });
+      }
     } on ApiException catch (exception) {
       if (mounted) setState(() => _aiError = exception.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _aiError = 'Unable to complete AI defect analysis.');
+      }
     } finally {
-      _analysisStatusTimer?.cancel();
-      if (mounted) setState(() => _analyzing = false);
+      _stepTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _aiStepIndex = _agentProgressSteps.length - 1;
+          _analyzing = false;
+        });
+      }
     }
   }
 
@@ -238,6 +270,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   Widget build(BuildContext context) {
     final selectedMaterial = _selectedMaterial;
     final rolls = _skuRolls;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Defect Report' : 'Create Defect Report'),
@@ -248,10 +281,10 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
           : Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
                 children: [
                   const Text(
-                    'QUALITY ASSURANCE  •  CONTROL CENTER',
+                    'QUALITY ASSURANCE',
                     style: TextStyle(
                       color: AppColors.primaryLight,
                       fontSize: 11,
@@ -259,250 +292,404 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                       letterSpacing: 1.1,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    _isEditing ? 'Edit defect report' : 'Create defect report',
+                    _isEditing ? 'Edit Defect Report' : 'Create Defect Report',
                     style: const TextStyle(
                       color: AppColors.strongText,
-                      fontSize: 27,
+                      fontSize: 24,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.4,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   const Text(
-                    'Capture the issue details and let AI assess the quality risk.',
-                    style: TextStyle(color: AppColors.mutedText, fontSize: 14),
+                    'Record a manufacturing quality issue for investigation',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 13),
                   ),
-                  const SizedBox(height: 22),
-                  if (_error != null) _message(_error!, AppColors.errorText),
-                  if (_aiError != null)
-                    _message(_aiError!, AppColors.warningText),
-                  _FormSelect<String>(
-                    label: 'Inventory Roll',
-                    value: _skuCode,
-                    items: _createdMaterials
-                        .map(
-                          (material) => DropdownMenuItem<String>(
-                            value: material.skuCode,
-                            child: Text(material.skuCode),
+                  const SizedBox(height: 18),
+
+                  if (_error != null) _errorAlert(_error!),
+                  if (_aiError != null) _errorAlert(_aiError!),
+
+                  // Form Container
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: _cardBoxDecoration(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _FormSelect<String>(
+                          label: 'Inventory Roll',
+                          value: _skuCode,
+                          items: _createdMaterials
+                              .map(
+                                (material) => DropdownMenuItem<String>(
+                                  value: material.skuCode,
+                                  child: Text(
+                                    '${material.skuCode} (${material.name})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _selectSku,
+                          validator: (_) => _skuCode == null
+                              ? 'Inventory roll is required.'
+                              : null,
+                        ),
+                        const SizedBox(height: 14),
+
+                        _FormFieldShell(
+                          label: 'Raw Material',
+                          child: Text(
+                            selectedMaterial?.name ??
+                                'Determined from selected inventory',
+                            style: TextStyle(
+                              color: selectedMaterial == null
+                                  ? AppColors.mutedText
+                                  : AppColors.strongText,
+                              fontSize: 14,
+                            ),
                           ),
-                        )
-                        .toList(),
-                    onChanged: _selectSku,
-                    validator: (_) =>
-                        _skuCode == null ? 'Inventory roll is required.' : null,
-                  ),
-                  const SizedBox(height: 14),
-                  _FormFieldShell(
-                    label: 'Raw Material',
-                    child: Text(
-                      selectedMaterial?.name ??
-                          'Determined from selected inventory',
-                      style: TextStyle(
-                        color: selectedMaterial == null
-                            ? AppColors.mutedText
-                            : AppColors.strongText,
-                        fontSize: 14,
-                      ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _FormSelect<String>(
+                                label: 'Severity',
+                                value: _severity,
+                                items: _severities
+                                    .map(
+                                      (value) => DropdownMenuItem(
+                                        value: value,
+                                        child: Text(value),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) =>
+                                    setState(() => _severity = value!),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _FormSelect<String>(
+                                label: 'Status',
+                                value: _status,
+                                items: _statuses
+                                    .map(
+                                      (value) => DropdownMenuItem(
+                                        value: value,
+                                        child: Text(value),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) =>
+                                    setState(() => _status = value!),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        _DescriptionField(
+                          controller: _description,
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Description is required.'
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Rolls Selection Checkbox List
+                        if (_recommendation != null || _isEditing) ...[
+                          const Divider(height: 24, color: Color(0xFF1E293B)),
+                          const Text(
+                            'Select Inventory Rolls',
+                            style: TextStyle(
+                              color: AppColors.strongText,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (rolls.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0B0F19),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Text(
+                                'No current inventory rolls found for this SKU.',
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            )
+                          else
+                            ...rolls.map((roll) {
+                              final selected = _selectedRolls.contains(roll.rollIdentifier);
+                              return Material(
+                                color: Colors.transparent,
+                                child: CheckboxListTile(
+                                  value: selected,
+                                  activeColor: AppColors.primary,
+                                  onChanged: (val) => setState(() {
+                                    if (val == true) {
+                                      _selectedRolls.add(roll.rollIdentifier);
+                                    } else {
+                                      _selectedRolls.remove(roll.rollIdentifier);
+                                    }
+                                  }),
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    roll.rollIdentifier.isNotEmpty
+                                        ? roll.rollIdentifier
+                                        : roll.id,
+                                    style: const TextStyle(
+                                      color: Color(0xFF67E8F9),
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Raw Material: ${selectedMaterial?.name ?? ''} · ${roll.currentQuantity} / ${roll.initialQuantity} units — ${roll.status}',
+                                    style: const TextStyle(
+                                      color: AppColors.mutedText,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _FormSelect<String>(
-                          label: 'Severity',
-                          value: _severity,
-                          items: _severities
-                              .map(
-                                (value) => DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) =>
-                              setState(() => _severity = value!),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _FormSelect<String>(
-                          label: 'Status',
-                          value: _status,
-                          items: _statuses
-                              .map(
-                                (value) => DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) =>
-                              setState(() => _status = value!),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _DescriptionField(
-                    controller: _description,
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? 'Description is required.'
-                        : null,
-                  ),
+                  const SizedBox(height: 16),
+
+                  // Stepped Progress Indicator during Agent Activation
                   if (_analyzing) ...[
-                    const SizedBox(height: 20),
-                    _analysisPanel(),
-                  ] else if (_recommendation != null) ...[
-                    const SizedBox(height: 20),
-                    _rollSelection(rolls),
-                    const SizedBox(height: 20),
-                    _assessmentCard(),
+                    _buildAgentProgressSection(),
+                    const SizedBox(height: 16),
                   ],
-                  const SizedBox(height: 112),
+
+                  // AI Recommendation Box (Exact format from React reference)
+                  if (_recommendation != null && !_analyzing) ...[
+                    _buildAiRecommendationBox(),
+                    const SizedBox(height: 16),
+                  ],
                 ],
               ),
             ),
       bottomNavigationBar: _loadingInventory
           ? null
-          : _ActionBar(
-              analyzing: _analyzing,
-              saving: _saving,
-              canSave: _recommendation != null,
-              isEditing: _isEditing,
-              onAnalyze: _analyzeWithAi,
-              onSave: _save,
+          : Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+                border: Border(top: BorderSide(color: Color(0xFF1E293B))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _saving || _analyzing ? null : _activateAgent,
+                      icon: _analyzing
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primaryLight,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.auto_awesome_outlined,
+                              size: 18,
+                              color: Color(0xFF67E8F9),
+                            ),
+                      label: const Text('Activate Agent'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primaryLight,
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _saving || _analyzing ? null : _save,
+                      icon: _saving
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save_outlined, size: 18),
+                      label: Text(
+                        _isEditing
+                            ? 'Update Defect Report'
+                            : 'Create Defect Report',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
     );
   }
 
-  Widget _analysisPanel() => _AiAnalysisPanel(
-    statusIndex: _analysisStatusIndex,
-  );
-
-  Widget _rollSelection(List<InventoryRollModel> rolls) => Container(
-    padding: const EdgeInsets.all(16),
+  Widget _errorAlert(String message) => Container(
+    margin: const EdgeInsets.only(bottom: 14),
+    padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-      ),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.25),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
+      color: AppColors.error.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.error_outline_rounded,
+          color: AppColors.errorText,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(color: AppColors.errorText, fontSize: 12),
+          ),
         ),
       ],
+    ),
+  );
+
+  Widget _buildAgentProgressSection() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFF0F172A),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: AppColors.primary.withValues(alpha: 0.5),
+        width: 1.5,
+      ),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-          Text(
-            'Select Inventory Rolls',
-            style: Theme.of(context).textTheme.titleMedium,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Row(
+              children: [
+                Icon(
+                  Icons.smart_toy_rounded,
+                  color: AppColors.primaryLight,
+                  size: 18,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'AI Defect Assessment Pipeline',
+                  style: TextStyle(
+                    color: AppColors.strongText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Step ${_aiStepIndex + 1} of ${_agentProgressSteps.length}',
+              style: const TextStyle(
+                color: AppColors.primaryLight,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        LinearProgressIndicator(
+          value: (_aiStepIndex + 1) / _agentProgressSteps.length,
+          backgroundColor: const Color(0xFF1E293B),
+          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+          minHeight: 6,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _agentProgressSteps[_aiStepIndex],
+          style: const TextStyle(
+            color: AppColors.primaryLight,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 8),
-          if (rolls.isEmpty)
-            const Text('No current inventory rolls found.')
-          else
-            ...rolls.map((roll) {
-              final selected = _selectedRolls.contains(roll.id);
-              return CheckboxListTile(
-                value: selected,
-                onChanged: (value) => setState(() {
-                  final next = {..._selectedRolls};
-                  if (value == true) {
-                    next.add(roll.id);
-                  } else {
-                    next.remove(roll.id);
-                  }
-                  _selectedRolls = next;
-                }),
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  roll.rollIdentifier.isEmpty ? roll.id : roll.rollIdentifier,
-                ),
-                subtitle: Text(
-                  '${roll.currentQuantity} / ${roll.initialQuantity} units - ${roll.status}',
-                ),
-              );
-            }),
-          const SizedBox(height: 4),
-          const Text('Review or adjust the rolls selected for this defect.'),
+        ),
       ],
     ),
   );
 
-  Widget _message(String text, Color color) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Text(text, style: TextStyle(color: color)),
-  );
-
-  Widget _assessmentCard() {
-    final recommendation = _recommendation!;
-    final contextById = {
-      for (final item in recommendation.inventoryContext)
-        item['inventoryRollId']?.toString(): item,
-    };
-    final assessedIds = recommendation.affectedInventory;
-    final assessedRolls = assessedIds.map((id) {
-      final local = _rolls.where((roll) => roll.id == id).firstOrNull;
-      final context = contextById[id];
-      return (id: id, roll: local, context: context);
-    }).toList();
-    final status = recommendation.quarantineRequired ? 'Active' : 'Released';
-    final risk = recommendation.riskLevel.toUpperCase();
-    final summary = recommendation.reason?.trim().isNotEmpty == true
-        ? recommendation.reason!.trim()
-        : 'The AI assessment returned a $risk risk level and quarantine is '
-              '${recommendation.quarantineRequired ? 'required' : 'not required'}.';
+  Widget _buildAiRecommendationBox() {
+    final rec = _recommendation!;
+    final isQuarantine = rec.quarantineRequired;
 
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.4),
+          width: 1.2,
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Bar
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-            color: AppColors.violet.withValues(alpha: 0.1),
+            padding: const EdgeInsets.all(14),
+            color: AppColors.primary.withValues(alpha: 0.15),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.violet.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppColors.violet.withValues(alpha: 0.35),
-                    ),
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.smart_toy_outlined),
+                  child: const Icon(
+                    Icons.smart_toy_outlined,
+                    color: AppColors.primaryLight,
+                    size: 20,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,86 +697,276 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                       Text(
                         'AI Defect Assessment',
                         style: TextStyle(
-                          fontSize: 18,
+                          color: AppColors.strongText,
+                          fontSize: 15,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text('Analysis completed'),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            color: Color(0xFF10B981),
+                            size: 13,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'Analysis completed',
+                            style: TextStyle(
+                              color: Color(0xFF34D399),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                _AssessmentPill(label: status),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isQuarantine
+                        ? AppColors.error.withValues(alpha: 0.15)
+                        : const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isQuarantine
+                          ? AppColors.error.withValues(alpha: 0.4)
+                          : const Color(0xFF10B981).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    isQuarantine ? 'Active' : 'Released',
+                    style: TextStyle(
+                      color: isQuarantine
+                          ? AppColors.error
+                          : const Color(0xFF34D399),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 2 Metric Cards: Risk Level and Quarantine Required
                 Row(
                   children: [
                     Expanded(
-                      child: _AssessmentMetric(
-                        label: 'Risk Level',
-                        value: risk,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0F19),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF1E293B)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'RISK LEVEL',
+                              style: TextStyle(
+                                color: AppColors.mutedText,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              rec.riskLevel.toUpperCase(),
+                              style: TextStyle(
+                                color: rec.riskLevel.toUpperCase() == 'CRITICAL'
+                                    ? AppColors.error
+                                    : rec.riskLevel.toUpperCase() == 'HIGH'
+                                    ? const Color(0xFFFB923C)
+                                    : const Color(0xFFFBBF24),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: _AssessmentMetric(
-                        label: 'Quarantine Required',
-                        value: recommendation.quarantineRequired ? 'YES' : 'NO',
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B0F19),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF1E293B)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'QUARANTINE REQUIRED',
+                              style: TextStyle(
+                                color: AppColors.mutedText,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              isQuarantine ? 'YES' : 'NO',
+                              style: TextStyle(
+                                color: isQuarantine
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFF34D399),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
+
+                // Affected Inventory Rolls
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
                       'Affected Inventory Rolls',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        color: AppColors.strongText,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     Text(
-                      '${assessedRolls.length} roll${assessedRolls.length == 1 ? '' : 's'}',
+                      '${rec.affectedInventory.length} roll${rec.affectedInventory.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        color: Color(0xFF67E8F9),
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                const Text('Rolls returned by the AI assessment.'),
-                const SizedBox(height: 10),
-                if (assessedRolls.isEmpty)
-                  const Text('No affected rolls identified.')
-                else
-                  ...assessedRolls.map(
-                    (entry) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      title: Text(
-                        entry.roll?.rollIdentifier.isNotEmpty == true
-                            ? entry.roll!.rollIdentifier
-                            : entry.id,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(_contextLabel(entry.context, entry.roll)),
-                      trailing: _AssessmentPill(
-                        label:
-                            entry.context?['status']?.toString() ??
-                            entry.roll?.status ??
-                            'In Stock',
-                      ),
-                    ),
-                  ),
-                const Divider(height: 24),
                 const Text(
-                  'Assessment Summary',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                  'Rolls returned by the AI assessment.',
+                  style: TextStyle(color: AppColors.mutedText, fontSize: 11),
+                ),
+                const SizedBox(height: 8),
+
+                if (rec.affectedInventory.isEmpty)
+                  const Text(
+                    'No affected rolls identified.',
+                    style: TextStyle(color: AppColors.mutedText, fontSize: 12),
+                  )
+                else
+                  ...rec.affectedInventory.map((rollId) {
+                    final roll = _rolls
+                        .where((r) => r.rollIdentifier == rollId)
+                        .firstOrNull;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0B0F19),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF1E293B)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  roll?.rollIdentifier.isNotEmpty == true
+                                      ? roll!.rollIdentifier
+                                      : rollId,
+                                  style: const TextStyle(
+                                    color: Color(0xFF67E8F9),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                                Text(
+                                  'Raw Material: ${_selectedMaterial?.name ?? ''} · ${roll?.currentQuantity ?? 0} / ${roll?.initialQuantity ?? 0} units',
+                                  style: const TextStyle(
+                                    color: AppColors.mutedText,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF111827),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              roll?.status ?? 'In Stock',
+                              style: const TextStyle(
+                                color: AppColors.primaryLight,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                const Divider(height: 20, color: Color(0xFF1E293B)),
+
+                // Assessment Summary
+                const Text(
+                  'ASSESSMENT SUMMARY',
+                  style: TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
                 ),
                 const SizedBox(height: 6),
-                Text(summary),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B0F19),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF1E293B)),
+                  ),
+                  child: Text(
+                    rec.reason ??
+                        'The AI assessment returned a ${rec.riskLevel} risk level and quarantine is ${isQuarantine ? 'required' : 'not required'}.',
+                    style: const TextStyle(
+                      color: AppColors.primaryText,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -598,18 +975,18 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     );
   }
 
-  String _contextLabel(
-    Map<String, dynamic>? context,
-    InventoryRollModel? roll,
-  ) {
-    final material =
-        context?['rawMaterialName']?.toString() ??
-        _selectedMaterial?.name ??
-        'Raw material';
-    final current = context?['currentQuantity'] ?? roll?.currentQuantity ?? 0;
-    final initial = context?['initialQuantity'] ?? roll?.initialQuantity ?? 0;
-    return '$material · $current / $initial units';
-  }
+  BoxDecoration _cardBoxDecoration() => BoxDecoration(
+    color: const Color(0xFF0F172A),
+    borderRadius: BorderRadius.circular(18),
+    border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.3),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
 }
 
 class _FormFieldShell extends StatelessWidget {
@@ -621,7 +998,11 @@ class _FormFieldShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-    decoration: _fieldDecoration,
+    decoration: BoxDecoration(
+      color: const Color(0xFF0B1120),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFF1E293B), width: 1.2),
+    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -663,19 +1044,24 @@ class _FormSelect<T> extends StatelessWidget {
     onChanged: onChanged,
     validator: validator,
     style: const TextStyle(color: AppColors.strongText, fontSize: 14),
-    dropdownColor: AppColors.surface,
+    dropdownColor: const Color(0xFF0F172A),
     iconEnabledColor: AppColors.mutedText,
     decoration: InputDecoration(
       labelText: label,
       labelStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       filled: true,
-      fillColor: Colors.transparent,
-      enabledBorder: _fieldBorder,
-      focusedBorder: _fieldBorder.copyWith(
+      fillColor: const Color(0xFF0B1120),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
       ),
-      errorBorder: _fieldBorder.copyWith(
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.error),
       ),
     ),
@@ -691,323 +1077,29 @@ class _DescriptionField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextFormField(
     controller: controller,
-    maxLines: 5,
+    maxLines: 4,
     style: const TextStyle(color: AppColors.strongText, fontSize: 14),
     decoration: InputDecoration(
       labelText: 'Description',
-      hintText: 'Description',
-      hintStyle: const TextStyle(color: AppColors.mutedText),
+      hintText:
+          'Detail the observed imperfection, fabric distortion, batch anomalies...',
+      hintStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
       alignLabelWithHint: true,
       filled: true,
-      fillColor: Colors.transparent,
-      enabledBorder: _fieldBorder,
-      focusedBorder: _fieldBorder.copyWith(
+      fillColor: const Color(0xFF0B1120),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1E293B), width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
       ),
-      errorBorder: _fieldBorder.copyWith(
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.error),
       ),
     ),
     validator: validator,
   );
-}
-
-class _ActionBar extends StatelessWidget {
-  const _ActionBar({
-    required this.analyzing,
-    required this.saving,
-    required this.canSave,
-    required this.isEditing,
-    required this.onAnalyze,
-    required this.onSave,
-  });
-
-  final bool analyzing;
-  final bool saving;
-  final bool canSave;
-  final bool isEditing;
-  final VoidCallback onAnalyze;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-      decoration: BoxDecoration(
-        color: AppColors.background.withValues(alpha: 0.97),
-        border: Border(top: BorderSide(color: AppColors.border.withValues(alpha: 0.8))),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: saving || analyzing ? null : onAnalyze,
-              icon: const Icon(Icons.bolt_rounded, size: 18),
-              label: const Text('Analyze with AI'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primaryLight,
-                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.75)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: saving || analyzing || !canSave ? null : onSave,
-              icon: saving
-                  ? const SizedBox.square(
-                      dimension: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_outlined, size: 18),
-              label: Text(isEditing ? 'Update Defect' : 'Create Defect'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.strongText,
-                disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.25),
-                disabledForegroundColor: AppColors.mutedText,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _AiAnalysisPanel extends StatefulWidget {
-  const _AiAnalysisPanel({required this.statusIndex});
-
-  final int statusIndex;
-
-  @override
-  State<_AiAnalysisPanel> createState() => _AiAnalysisPanelState();
-}
-
-class _AiAnalysisPanelState extends State<_AiAnalysisPanel>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  )..repeat();
-
-  static const _statuses = [
-    'Agentic AI analyzing rolls...',
-    'Evaluating risk patterns...',
-    'Synthesizing quality data...',
-  ];
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-      ),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.25),
-          blurRadius: 10,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: SingleChildScrollView(
-      physics: const NeverScrollableScrollPhysics(),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: const Icon(
-                  Icons.smart_toy_outlined,
-                  color: AppColors.primaryLight,
-                  size: 21,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'AI Defect Assessment',
-                  softWrap: true,
-                  style: TextStyle(
-                    color: AppColors.strongText,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 22),
-          const Center(
-            child: SizedBox.square(
-              dimension: 52,
-              child: CircularProgressIndicator(
-                strokeWidth: 4,
-                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                backgroundColor: Color(0xFF2A3958),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              _statuses[widget.statusIndex % _statuses.length],
-              textAlign: TextAlign.center,
-              softWrap: true,
-              style: const TextStyle(
-                color: AppColors.primaryLight,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _statuses.length,
-            itemBuilder: (context, index) {
-              final isCurrent = index == widget.statusIndex % _statuses.length;
-              final isComplete = index < widget.statusIndex % _statuses.length;
-              final color = isCurrent || isComplete
-                  ? AppColors.primaryLight
-                  : AppColors.mutedText;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 9),
-                child: Row(
-                  children: [
-                    Icon(
-                      isComplete
-                          ? Icons.check_circle_rounded
-                          : isCurrent
-                          ? Icons.radio_button_checked_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      color: color,
-                      size: 17,
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        _statuses[index],
-                        softWrap: true,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 12,
-                          fontWeight: isCurrent
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-final _fieldBorder = OutlineInputBorder(
-  borderRadius: BorderRadius.circular(12),
-  borderSide: const BorderSide(color: Color(0xFF2A3958), width: 1.2),
-);
-
-final _fieldDecoration = BoxDecoration(
-  gradient: const LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF161B2E), Color(0xFF0F1523)],
-  ),
-  borderRadius: BorderRadius.circular(12),
-  border: Border.all(color: const Color(0xFF2A3958), width: 1.2),
-);
-
-class _AssessmentMetric extends StatelessWidget {
-  const _AssessmentMetric({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: AppColors.background.withValues(alpha: 0.45),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.strongText,
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _AssessmentPill extends StatelessWidget {
-  const _AssessmentPill({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final isReleased = label.toLowerCase() == 'released' ||
-        label.toLowerCase() == 'in stock';
-    final color = isReleased ? const Color(0xFF86EFAC) : AppColors.primaryLight;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
 }

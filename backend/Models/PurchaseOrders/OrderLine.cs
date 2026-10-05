@@ -41,7 +41,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         [Column(TypeName = "decimal(18,3)")]
         public decimal Quantity { get; set; }
 
-        /// <summary>Price per unit in USD.</summary>
+        /// <summary>Price per unit in LKR.</summary>
         [Required]
         [Column(TypeName = "decimal(18,2)")]
         public decimal UnitPrice { get; set; }

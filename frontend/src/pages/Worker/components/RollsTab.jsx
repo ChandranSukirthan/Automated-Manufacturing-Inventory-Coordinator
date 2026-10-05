@@ -1,5 +1,6 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React, { useState } from 'react';
-import { QrCode, Search, Trash2, Copy, Check, PlusCircle } from 'lucide-react';
+import { QrCode, Search, Trash2, Copy, Check, PlusCircle, Sparkles } from 'lucide-react';
 import EmptyState from './EmptyState';
 
 /* ── Status color helper ────────────────────────────────────── */
@@ -12,9 +13,10 @@ function statusBadge(status) {
 
 export default function RollsTab({
   rolls,
-  inventoryItems,
   rawMaterials,
   rollIdentifier,
+  rollBatchId,
+  setRollBatchId,
   setRollIdentifier,
   rollQuantity,
   setRollQuantity,
@@ -28,28 +30,19 @@ export default function RollsTab({
   qrSearchResult,
   qrSearching,
   onQrSearch,
-  loading,
 }) {
   const [rollSearch, setRollSearch] = useState('');
   const [rollMaterialFilter, setRollMaterialFilter] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const materialBySku = new Map(
-    rawMaterials
-      .filter((material) => material.skuCode?.trim())
-      .map((material) => [material.skuCode.trim().toLowerCase(), material])
-  );
-  const sourceItems = inventoryItems?.length ? inventoryItems : rawMaterials;
-  const uniqueRawMaterials = sourceItems.filter((item, index, materials) => {
-    const skuCode = (item.sku || item.skuCode)?.trim().toLowerCase();
-    return skuCode && materials.findIndex((candidate) => (candidate.sku || candidate.skuCode)?.trim().toLowerCase() === skuCode) === index;
-  }).map((item) => {
-    const skuCode = (item.sku || item.skuCode).trim();
-    const rawMaterial = materialBySku.get(skuCode.toLowerCase());
+  const uniqueRawMaterials = (rawMaterials || []).filter((material, index, materials) => {
+    const skuCode = material.skuCode?.trim().toLowerCase();
+    return skuCode && materials.findIndex((candidate) => candidate.skuCode?.trim().toLowerCase() === skuCode) === index;
+  }).map((material) => {
     return {
-      id: rawMaterial?.id,
-      skuCode,
-      name: item.name || rawMaterial?.name || 'Raw Material',
+      id: material.id,
+      skuCode: material.skuCode.trim(),
+      name: material.name || 'Raw Material',
     };
   });
 
@@ -68,6 +61,12 @@ export default function RollsTab({
     });
   };
 
+  const handleGenerateIdentifier = () => {
+    const ts = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    const rand = Math.floor(100 + Math.random() * 900);
+    setRollIdentifier(`ROLL-${ts}-${rand}`);
+  };
+
   return (
     <div className="space-y-6 tab-slide-in">
       {/* ── QR Scanner / Lookup ──────────────────────────── */}
@@ -84,7 +83,7 @@ export default function RollsTab({
           </div>
         </div>
 
-        <form onSubmit={onQrSearch} className="flex gap-3">
+        <form onSubmit={onQrSearch} className="flex flex-col sm:flex-row gap-3">
           <input
             type="text"
             placeholder="Enter QR barcode value (e.g. ROLL-001, ROLL-2026-STEEL-009)..."
@@ -152,9 +151,9 @@ export default function RollsTab({
       </div>
 
       {/* ── Roll Management ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* Register Roll Form */}
-        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
+        <div className="worker-panel min-w-0 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-4 h-4 text-cyan-400" />
             <h3 className="text-base font-bold text-white">Register New Roll</h3>
@@ -162,9 +161,18 @@ export default function RollsTab({
 
           <form onSubmit={onCreateRoll} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Roll Identifier
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Roll Identifier
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGenerateIdentifier}
+                  className="text-[11px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition font-medium"
+                >
+                  <Sparkles className="w-3 h-3" /> Auto-generate
+                </button>
+              </div>
               <input
                 type="text"
                 required
@@ -182,13 +190,17 @@ export default function RollsTab({
                 type="number"
                 required
                 min="1"
-                step="0.01"
+                step="1"
                 value={rollQuantity}
                 onChange={(e) => setRollQuantity(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
               />
-              <p className="mt-1 text-[11px] text-slate-500">Cannot exceed current stock.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Adds the physical quantity received to stock.</p>
             </div>
+            <label className="block text-xs font-semibold text-slate-300">Batch identifier
+              <input required maxLength={80} value={rollBatchId} onChange={e => setRollBatchId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white" />
+            </label>
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Raw Material
@@ -199,6 +211,7 @@ export default function RollsTab({
                   onChange={(e) => setRollRawMaterialId(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition"
                 >
+                  <option value="" disabled>Select Raw Material</option>
                   {uniqueRawMaterials.map((m) => (
                     <option key={m.skuCode} value={m.id} disabled={!m.id}>
                       {m.skuCode} — {m.name}
@@ -238,7 +251,7 @@ export default function RollsTab({
         </div>
 
         {/* Active Rolls List */}
-        <div className="lg:col-span-2 border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden flex flex-col">
+        <div className="xl:col-span-2 min-w-0 border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden flex flex-col">
           <div className="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
               <h3 className="text-sm font-bold text-white">Warehouse Inventory Rolls</h3>
@@ -310,7 +323,7 @@ export default function RollsTab({
                       {roll.status || 'In Stock'}
                     </span>
                     <span className="text-xs text-slate-500 hidden sm:inline">
-                      {new Date(roll.createdAt).toLocaleDateString()}
+                      {formatColomboDate(roll.createdAt, 'toLocaleDateString')}
                     </span>
                     <button
                       onClick={() => onDeleteRoll(roll.id)}

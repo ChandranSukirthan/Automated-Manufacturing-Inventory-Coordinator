@@ -1,0 +1,8 @@
+{
+  "environment": "Local ASP.NET TestServer, EF InMemory, 1000 suppliers; no network or PostgreSQL latency",
+  "requests": 50,
+  "meanMs": 3.94956,
+  "p95Ms": 9.4472,
+  "maxMs": 18.8078,
+  "measuredAt": "2026-10-05T09:03:32.5765439Z"
+}

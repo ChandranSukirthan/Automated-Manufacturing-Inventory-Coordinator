@@ -1,3 +1,5 @@
+> Updated integration and role guidance: see [README.md](README.md) and [Student components](docs/STUDENT_COMPONENTS.md).
+
 # How to Run the Full Stack
 
 > Run **3 terminals** at the same time — one for each service.
@@ -22,19 +24,19 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=inventory_coordinator
 DB_USER=postgres
-DB_PASSWORD=123456789
+DB_PASSWORD=<SET_LOCALLY_DO_NOT_COMMIT>
 
-EMAIL_USER=sukirsukirthan347@gmail.com
-EMAIL_PASS=nvle fujf mljh imny
+EMAIL_USER=<YOUR_SMTP_USER>
+EMAIL_PASS=<SET_LOCALLY_DO_NOT_COMMIT>
 
-JWT_SECRET_KEY=ManufacturingCoordinator_JWT_Secret_Key_2024_SEF_Project
+JWT_SECRET_KEY=<SET_LOCALLY_DO_NOT_COMMIT>
 JWT_ISSUER=InventoryCoordinatorAPI
 JWT_AUDIENCE=InventoryCoordinatorClient
 
-STRIPE_SECRET_KEY=sk_test_placeholder_key_replace_with_actual
+STRIPE_SECRET_KEY=<SET_LOCALLY_DO_NOT_COMMIT>
 
 # ⚠️ Replace with your actual OpenAI key for the AI agent to work
-OPENAI_API_KEY=sk-your-real-openai-key-here
+OPENAI_API_KEY=<SET_LOCALLY_DO_NOT_COMMIT>
 ```
 
 ---
@@ -67,19 +69,29 @@ npm run dev
 ## Terminal 3 — AI Agent (Python FastAPI)
 
 ```powershell
-cd ai
-# Activate virtual environment
-.\venv\Scripts\activate
+# Run from the repository root
+.\ai\venv\Scripts\activate
 
 # Install dependencies (only needed first time)
-pip install -r requirements.txt   # or: pip install fastapi uvicorn langgraph langchain-openai psycopg httpx scikit-learn numpy pydantic-settings
+pip install -r ai/requirements.txt   # or: pip install fastapi uvicorn langgraph langchain-openai psycopg httpx scikit-learn numpy pydantic-settings
 
 # Start the server
-uvicorn ai.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn ai.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 - Starts at: `http://localhost:8000`
 - Docs: `http://localhost:8000/docs`
+
+If replenishment reports **connection refused (localhost:8000)**, the Python AI
+service is not running. Start it with the command above and check it before retrying:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+```
+
+The response should contain `status: ONLINE`. Keep the AI terminal running alongside
+ASP.NET Core and React. Restart the backend and AI service after pulling changes to
+their workflow contracts; an old backend build may lack the workflow publication API.
 
 ---
 

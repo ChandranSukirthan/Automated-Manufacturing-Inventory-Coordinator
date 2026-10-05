@@ -27,7 +27,7 @@ def purchasing_node(state: AgentState) -> dict:
             f"Purchasing Agent Proposal:\n"
             f"• Sourced supplier: Apex Industrial Materials (Rank #1 SLA)\n"
             f"• Replenishment Quantity: {req_qty} units @ ${unit_price:.2f}/unit\n"
-            f"• Estimated Procurement Total: ${est_cost:,.2f} USD\n"
+            f"• Estimated Procurement Total: ${est_cost:,.2f} LKR\n"
             f"• Target Delivery Horizon: 3-5 business days"
         )
     else:

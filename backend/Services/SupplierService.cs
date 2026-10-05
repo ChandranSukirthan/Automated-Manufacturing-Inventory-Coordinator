@@ -134,10 +134,11 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var activeSuppliers = suppliers.Count(s => s.IsActive);
             var totalOrders = purchaseOrders.Count;
             var totalSpending = purchaseOrders
-                .Where(p => p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent)
+                .Where(p => p.Currency.ToUpper() == "LKR" && (p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent))
                 .Sum(p => p.TotalCost);
 
-            var avgOrderValue = totalOrders > 0 ? Math.Round(totalSpending / totalOrders, 2) : 0m;
+            var lkrOrders = purchaseOrders.Count(p => p.Currency.ToUpper() == "LKR");
+            var avgOrderValue = lkrOrders > 0 ? Math.Round(totalSpending / lkrOrders, 2) : 0m;
             var avgLeadTime = suppliers.Count > 0 ? (decimal)suppliers.Average(s => s.LeadTimeDays) : 0m;
 
             var supplierPerformances = suppliers.Select(s =>
@@ -145,9 +146,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 var pos = purchaseOrders.Where(p => p.SupplierId == s.Id).ToList();
                 var orderCount = pos.Count;
                 var spend = pos
-                    .Where(p => p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent)
+                    .Where(p => p.Currency.ToUpper() == "LKR" && (p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent))
                     .Sum(p => p.TotalCost);
-                var aov = orderCount > 0 ? Math.Round(spend / orderCount, 2) : 0m;
+                var lkrCount = pos.Count(p => p.Currency.ToUpper() == "LKR");
+                var aov = lkrCount > 0 ? Math.Round(spend / lkrCount, 2) : 0m;
                 var rejectedCount = pos.Count(p => p.Status == PurchaseOrderStatus.Rejected);
                 var rejectionRate = orderCount > 0 ? Math.Round((decimal)rejectedCount / orderCount * 100m, 2) : 0m;
                 var sentCount = pos.Count(p => p.Status == PurchaseOrderStatus.Sent);
@@ -190,9 +192,10 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             var orderCount = pos.Count;
             var spend = pos
-                .Where(p => p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent)
+                .Where(p => p.Currency.ToUpper() == "LKR" && (p.Status == PurchaseOrderStatus.Approved || p.Status == PurchaseOrderStatus.Payment || p.Status == PurchaseOrderStatus.Sent))
                 .Sum(p => p.TotalCost);
-            var aov = orderCount > 0 ? Math.Round(spend / orderCount, 2) : 0m;
+            var lkrCount = pos.Count(p => p.Currency.ToUpper() == "LKR");
+                var aov = lkrCount > 0 ? Math.Round(spend / lkrCount, 2) : 0m;
             var rejectedCount = pos.Count(p => p.Status == PurchaseOrderStatus.Rejected);
             var rejectionRate = orderCount > 0 ? Math.Round((decimal)rejectedCount / orderCount * 100m, 2) : 0m;
             var sentCount = pos.Count(p => p.Status == PurchaseOrderStatus.Sent);

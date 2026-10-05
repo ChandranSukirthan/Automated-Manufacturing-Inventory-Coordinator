@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
+import ModalOverlay from '../../components/Common/ModalOverlay';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -18,6 +20,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import StatusBadge from '../../components/Common/StatusBadge';
+import SupplierQuotesPanel from '../../components/Suppliers/SupplierQuotesPanel';
 import supplierService from '../../services/supplierService';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import { parseErrorMessage } from '../../utils/errorHandler';
@@ -42,7 +45,7 @@ export default function SupplierDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const loadSupplierData = async () => {
+  const loadSupplierData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -69,11 +72,12 @@ export default function SupplierDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   useEffect(() => {
-    loadSupplierData();
-  }, [id]);
+    const initialLoad = setTimeout(loadSupplierData, 0);
+    return () => clearTimeout(initialLoad);
+  }, [loadSupplierData]);
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -188,7 +192,7 @@ export default function SupplierDetail() {
               </div>
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Partner Since {new Date(supplier.createdAt || Date.now()).toLocaleDateString()}</span>
+                <span>Partner Since {supplier.createdAt ? formatColomboDate(supplier.createdAt, 'toLocaleDateString') : 'Not recorded'}</span>
               </p>
             </div>
           </div>
@@ -252,7 +256,7 @@ export default function SupplierDetail() {
             <DollarSign className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-emerald-400 mt-2">
-            ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
         </div>
 
@@ -265,7 +269,8 @@ export default function SupplierDetail() {
         </div>
       </div>
 
-      {/* Associated Purchase Orders Section */}
+      <SupplierQuotesPanel supplierId={id} />
+        {/* Associated Purchase Orders Section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -310,17 +315,17 @@ export default function SupplierDetail() {
                         <StatusBadge status={po.status} />
                       </td>
                       <td className="py-3.5 px-4 font-bold text-white">
-                        ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                       </td>
                       <td className="py-3.5 px-4 text-xs">
                         {po.requiresApproval ? (
-                          <span className="text-amber-400 font-semibold">Yes (&gt; $5,000)</span>
+                          <span className="text-amber-400 font-semibold">Yes (&gt; LKR 1,500,000)</span>
                         ) : (
                           <span className="text-slate-400">No</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-xs text-slate-400">
-                        {new Date(po.createdAt).toLocaleDateString()}
+                        {formatColomboDate(po.createdAt, 'toLocaleDateString')}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <Link
@@ -342,7 +347,7 @@ export default function SupplierDetail() {
 
       {/* Edit Supplier Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="text-lg font-bold text-white">Edit Supplier — {supplier.name}</h3>
 
@@ -437,7 +442,7 @@ export default function SupplierDetail() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AppLayout>
   );

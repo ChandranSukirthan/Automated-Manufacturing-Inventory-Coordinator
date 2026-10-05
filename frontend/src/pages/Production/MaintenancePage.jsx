@@ -1,3 +1,5 @@
+import { formatColomboDate } from '../../utils/locale.js';
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -12,7 +14,7 @@ import {
   X,
   ExternalLink
 } from 'lucide-react';
-import AdminLayout from '../../components/Layout/AdminLayout';
+import AdminLayout from '../../components/Layout/RoleLayout';
 import machineService from '../../services/machineService';
 import maintenanceService from '../../services/maintenanceService';
 
@@ -303,7 +305,7 @@ export default function MaintenancePage() {
                       {getMaintenanceTypeBadge(log.type)}
                       <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
-                        {new Date(log.performedAt).toLocaleDateString()} at {new Date(log.performedAt).toLocaleTimeString()}
+                        {formatColomboDate(log.performedAt, 'toLocaleDateString')} at {formatColomboDate(log.performedAt, 'toLocaleTimeString')}
                       </span>
                     </div>
                     <p className="text-sm text-slate-200 font-medium">{log.description}</p>
@@ -322,7 +324,7 @@ export default function MaintenancePage() {
 
       {/* Log Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -353,7 +355,7 @@ export default function MaintenancePage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Service Type *</label>
                   <select
@@ -410,7 +412,7 @@ export default function MaintenancePage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

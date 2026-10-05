@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React from 'react';
 import { ArrowDownRight, ArrowUpRight, Clock } from 'lucide-react';
 import { TableSkeleton } from './SkeletonLoader';
@@ -27,7 +28,7 @@ export default function HistoryTab({
       {/* Material selector chips */}
       <div className="space-y-2">
         <label className="text-xs text-slate-400 font-medium">Select Material:</label>
-        <div className="flex flex-wrap gap-2">
+        <div className="worker-material-selector flex flex-wrap gap-2 pr-1">
           {rawMaterials.map((m) => {
             const isActive = selectedHistoryMaterialId === m.id;
             return (
@@ -61,7 +62,7 @@ export default function HistoryTab({
           />
         </div>
       ) : (
-        <div className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
+        <div className="worker-table-scroll border border-slate-800 rounded-2xl bg-slate-900/60 overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-950/80 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
               <tr>
@@ -89,7 +90,7 @@ export default function HistoryTab({
                     <td className="px-6 py-3">
                       <div className="flex flex-col">
                         <span className="text-xs text-slate-300">
-                          {new Date(h.date).toLocaleDateString()}
+                          {formatColomboDate(h.date, 'toLocaleDateString')}
                         </span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <Clock className="w-2.5 h-2.5" />

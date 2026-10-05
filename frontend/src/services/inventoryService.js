@@ -30,7 +30,7 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Raw Materials CRUD
+  // Raw material CRUD
   // =========================================================================
   getRawMaterials: async () => {
     const response = await api.get('/inventory/rawmaterials');
@@ -58,7 +58,7 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Inventory Rolls & QR Code Lookup
+  // Inventory rolls and QR code lookup
   // =========================================================================
   getRolls: async () => {
     const response = await api.get('/inventory/rolls');
@@ -91,7 +91,7 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Stock Levels & Calculations
+  // Stock levels and calculations
   // =========================================================================
   getStockLevels: async () => {
     const response = await api.get('/inventory/stock-levels');
@@ -104,7 +104,7 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Low Stock & Alerts
+  // Low stock and alerts
   // =========================================================================
   getLowStock: async () => {
     const response = await api.get('/inventory/low-stock');
@@ -132,7 +132,7 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Inventory History
+  // Inventory history
   // =========================================================================
   getHistory: async (materialId) => {
     const response = await api.get(`/inventory/${materialId}/history`);
@@ -140,26 +140,28 @@ const inventoryService = {
   },
 
   // =========================================================================
-  // Student 1: Multi-Agent Replenishment via ASP.NET Core
+  // Multi-agent replenishment via ASP.NET Core
   // (Zero direct calls to FastAPI - ASP.NET Core serves as the public gateway)
   // =========================================================================
-  triggerWorkflow: async (objective, materialId = 'RM-STEEL-001', requiredQty = 2000) => {
+  triggerWorkflow: async (objective, materialId, requiredQty, workflowId) => {
+    if (!materialId || !Number.isFinite(Number(requiredQty)) || !(Number(requiredQty) > 0)) {
+      throw new Error('An exact material and positive required quantity are required.');
+    }
     const response = await api.post('/inventory/trigger-replenishment', {
       objective: objective || `Floor Worker Stock Replenishment: Reorder ${requiredQty} units of ${materialId}`,
       materialId: materialId,
-      requiredQuantity: Number(requiredQty)
+      requiredQuantity: Number(requiredQty),
+      triggerType: 'Manual',
+      ...(workflowId ? { workflowId } : {}),
     });
     return response.data;
   },
 
   getActiveWorkflows: async () => {
-    try {
-      const response = await api.get('/agentworkflow/workflows');
-      return response.data;
-    } catch {
-      return [];
-    }
+    const response = await api.get('/agentworkflow/workflows');
+    return response.data;
   }
+
 };
 
 export default inventoryService;

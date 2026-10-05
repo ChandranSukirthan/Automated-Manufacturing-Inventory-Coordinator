@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { formatColomboDate } from '../../utils/locale.js';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   Edit2,
@@ -9,7 +10,9 @@ import {
   Package,
   Layers,
   Calendar,
-  User
+  User,
+  ClipboardList,
+  CheckCircle2
 } from 'lucide-react';
 import defectService from '../../services/defectService';
 import quarantineService from '../../services/quarantineService';
@@ -36,9 +39,9 @@ export default function DefectDetailPage() {
       try {
         const [data, quarantineData, rolls, materials] = await Promise.all([
           defectService.getById(id),
-          quarantineService.getAll(),
-          inventoryService.getRolls(),
-          inventoryService.getRawMaterials()
+          quarantineService.getAll().catch(() => []),
+          inventoryService.getRolls().catch(() => []),
+          inventoryService.getRawMaterials().catch(() => [])
         ]);
         const savedInventory = data.affectedInventory?.length
           ? data.affectedInventory
@@ -48,7 +51,11 @@ export default function DefectDetailPage() {
         setDefect(data);
         setAffectedInventory(savedInventory);
         const selectedRoll = rolls.find((roll) => savedInventory.includes(roll.id));
-        setSkuCode(materials.find((material) => material.id === selectedRoll?.rawMaterialId)?.skuCode || 'Unavailable');
+        setSkuCode(
+          materials.find((material) => material.id === selectedRoll?.rawMaterialId)?.skuCode ||
+            data.skuCode ||
+            'Unavailable'
+        );
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load defect.'));
       } finally {
@@ -79,9 +86,9 @@ export default function DefectDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-slate-400 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-        <p className="text-sm font-medium">Loading defect telemetry...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+        <p className="text-sm font-medium">Loading defect profile...</p>
       </div>
     );
   }
@@ -125,7 +132,7 @@ export default function DefectDetailPage() {
             </button>
             <button
               onClick={() => navigate(`/quality/defects/${defect.id}/edit`)}
-              className="px-4 py-2.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 text-sm font-semibold hover:bg-cyan-500/20 transition-all shadow-sm flex items-center gap-2"
+              className="px-4 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all shadow-sm flex items-center gap-2"
             >
               <Edit2 className="w-4 h-4" />
               <span>Edit</span>
@@ -134,7 +141,6 @@ export default function DefectDetailPage() {
         }
       />
 
-      {/* Error alert if quarantine fails */}
       {error && (
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-200 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
@@ -143,120 +149,108 @@ export default function DefectDetailPage() {
       )}
 
       {/* Primary Details Card */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-8 space-y-8 shadow-sm">
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm p-6 sm:p-8 space-y-8 shadow-sm">
         {/* Metric Attributes Grid */}
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 border-b border-slate-800/80 pb-8">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 border-b border-slate-800/80 pb-6">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              SKU Code
-            </span>
-            <div className="mt-1 text-xl font-bold font-mono text-white tracking-tight">
-              {skuCode}
-            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">SKU Code</span>
+            <div className="mt-1 text-xl font-bold font-mono text-cyan-300">{skuCode}</div>
           </div>
 
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Severity
-            </span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Severity</span>
             <div className="mt-1">
               <SeverityBadge severity={defect.severity} />
             </div>
           </div>
 
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Status
-            </span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Inspection Status</span>
             <div className="mt-1">
               <StatusBadge status={defect.status} />
             </div>
           </div>
 
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Reported By
-            </span>
-            <div className="mt-1 text-sm font-mono text-slate-300">
-              {defect.reportedByUserId || 'Unavailable'}
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Logged Timestamp</span>
+            <div className="mt-1 text-sm text-slate-200">
+              {defect.createdAt ? formatColomboDate(defect.createdAt, 'toLocaleString') : 'N/A'}
             </div>
           </div>
 
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Created Timestamp
-            </span>
-            <div className="mt-1 text-xs text-slate-400">
-              {new Date(defect.createdAt).toLocaleString()}
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Defect Reference ID</span>
+            <div className="mt-1 text-sm font-mono text-blue-400">#{defect.id}</div>
+          </div>
+        </div>
+
+        {/* Description */}
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Defect Description &amp; Notes</span>
+          <p className="text-sm text-slate-200 leading-relaxed bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+            {defect.description || 'No detailed observations recorded.'}
+          </p>
+        </div>
+
+        {/* Affected Rolls */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Linked Warehouse Rolls</span>
+            <span className="text-xs font-mono text-cyan-400">{invList?.length || 0} Rolls</span>
+          </div>
+
+          {invList && invList.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {invList.map((rollId) => (
+                <div
+                  key={rollId}
+                  className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between"
+                >
+                  <span className="font-mono text-xs text-cyan-300">{rollId}</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
+                    Linked
+                  </span>
+                </div>
+              ))}
             </div>
-          </div>
+          ) : (
+            <p className="text-xs text-slate-400 italic">No specific inventory rolls attached to this defect report.</p>
+          )}
         </div>
 
-        {/* Description Section */}
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Defect Description
-          </span>
-          <div className="mt-2 p-5 rounded-2xl bg-slate-950 border border-slate-800 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
-            {defect.description}
-          </div>
-        </div>
-
-        {/* Affected Inventory */}
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            Affected Inventory Rolls
-          </span>
-          <div className="mt-2 p-4 rounded-2xl bg-slate-950 border border-slate-800 text-sm font-mono text-cyan-200">
-            {invList.length ? invList.join(', ') : 'No specific rolls linked'}
-          </div>
-        </div>
-      </div>
-
-      {/* Quarantine Action Card */}
-      <div className="rounded-3xl border border-amber-500/30 bg-amber-500/5 backdrop-blur-sm p-8 space-y-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300">
-            <ShieldAlert className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white tracking-tight">
-              Quarantine Inventory Hold
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Affected inventory rolls will automatically be flagged and segregated under quarantine.
+        {/* Immediate Quarantine Containment Station */}
+        {defect.status !== 'Resolved' && defect.status !== 'Closed' && (
+          <div className="pt-6 border-t border-slate-800/80 space-y-4">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-rose-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Immediate Quarantine Containment</h3>
+            </div>
+            <p className="text-xs text-slate-400">
+              Apply a factory-wide quality hold on all inventory rolls linked to this defect report.
             </p>
-          </div>
-        </div>
 
-        <form onSubmit={handleQuarantine} className="space-y-4 pt-2">
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Specify reason for quarantine hold (e.g. Seal burst failure rate exceeded 2% threshold)..."
-            rows="3"
-            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-amber-500 transition-colors"
-          />
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={quarantining}
-              className="px-6 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-sm hover:bg-amber-300 disabled:opacity-60 transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
-            >
-              {quarantining ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Initiating Hold...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldAlert className="w-4 h-4 stroke-[2.5]" />
-                  <span>Quarantine Inventory</span>
-                </>
-              )}
-            </button>
+            <form onSubmit={handleQuarantine} className="space-y-3">
+              <textarea
+                rows={2}
+                required
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Enter mandatory quarantine justification (e.g. Critical tensile failure detected)..."
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-rose-500 transition-colors"
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={quarantining}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md shadow-rose-600/20 flex items-center gap-2 disabled:opacity-50 transition-all"
+                >
+                  {quarantining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                  <span>Enforce Quarantine Hold</span>
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );

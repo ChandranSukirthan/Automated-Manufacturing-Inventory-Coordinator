@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React, { useState, useMemo } from 'react';
 import {
   Clock,
@@ -7,6 +8,7 @@ import {
   XCircle,
   Eye,
   PlusCircle,
+  Bot,
 } from 'lucide-react';
 import { CardSkeleton } from './SkeletonLoader';
 import EmptyState from './EmptyState';
@@ -72,6 +74,8 @@ export default function AlertsTab({
   alerts,
   onUpdateAlertStatus,
   onShowAddModal,
+  onTriggerAi,
+  triggeringAi,
 }) {
   const [filter, setFilter] = useState('all');
 
@@ -154,12 +158,17 @@ export default function AlertsTab({
                 alert.status
               )} hover:bg-slate-900/80 transition`}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono font-bold text-amber-400 text-sm">
                       {alert.sku}
                     </span>
+                    {alert.materialName && (
+                      <span className="text-white font-medium text-xs bg-slate-800 px-2 py-0.5 rounded-md">
+                        {alert.materialName}
+                      </span>
+                    )}
                     <span
                       className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${statusBadgeClass(
                         alert.status
@@ -169,11 +178,29 @@ export default function AlertsTab({
                       {alert.status}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    {alert.packagingType} • Requested:{' '}
-                    <span className="text-slate-200 font-semibold">
-                      {alert.quantityRequested} units
+                  <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-3 flex-wrap">
+                    <span>
+                      {alert.packagingType} • Requested:{' '}
+                      <span className="text-slate-200 font-semibold">
+                        {alert.quantityRequested} units
+                      </span>
                     </span>
+                    {alert.currentStock !== undefined && alert.currentStock !== null && (
+                      <span>
+                        • Current Stock:{' '}
+                        <span className="text-amber-300 font-semibold">
+                          {alert.currentStock} units
+                        </span>
+                      </span>
+                    )}
+                    {alert.safetyStock !== undefined && alert.safetyStock !== null && alert.safetyStock > 0 && (
+                      <span>
+                        • Reorder Level:{' '}
+                        <span className="text-slate-300 font-semibold">
+                          {alert.safetyStock} units
+                        </span>
+                      </span>
+                    )}
                   </p>
                 </div>
 
@@ -183,33 +210,46 @@ export default function AlertsTab({
                     {relativeTime(alert.timestamp)}
                   </span>
                   <span className="text-[10px] text-slate-600 block mt-0.5">
-                    {new Date(alert.timestamp).toLocaleDateString()}
+                    {formatColomboDate(alert.timestamp, 'toLocaleDateString')}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80">
+              <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80 flex-wrap gap-2">
                 <span className="text-xs text-slate-500">
                   By: <span className="text-slate-300">{alert.workerId || 'Floor Worker'}</span>
                 </span>
-                <div className="flex gap-1.5">
-                  {['Acknowledged', 'Resolved', 'Dismissed'].map((status) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  {onTriggerAi && !['Resolved', 'Dismissed'].includes(alert.status) && (
                     <button
-                      key={status}
-                      onClick={() => onUpdateAlertStatus(alert.id, status)}
-                      disabled={alert.status === status}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
-                        alert.status === status
-                          ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                      }`}
+                      onClick={() => onTriggerAi(alert.sku, alert.quantityRequested ?? alert.netDeficit)}
+                      disabled={triggeringAi || !(Number(alert.quantityRequested ?? alert.netDeficit) > 0)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-semibold transition disabled:opacity-50"
+                      title="Trigger autonomous replenishment AI workflow"
                     >
-                      {status === 'Acknowledged' && <Eye className="w-3 h-3" />}
-                      {status === 'Resolved' && <CheckCircle2 className="w-3 h-3" />}
-                      {status === 'Dismissed' && <XCircle className="w-3 h-3" />}
-                      {status}
+                      <Bot className="w-3.5 h-3.5" />
+                      Reorder via AI
                     </button>
-                  ))}
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {['Acknowledged', 'Resolved', 'Dismissed'].map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => onUpdateAlertStatus(alert.id, status)}
+                        disabled={alert.status === status}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                          alert.status === status
+                            ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                        }`}
+                      >
+                        {status === 'Acknowledged' && <Eye className="w-3 h-3" />}
+                        {status === 'Resolved' && <CheckCircle2 className="w-3 h-3" />}
+                        {status === 'Dismissed' && <XCircle className="w-3 h-3" />}
+                        {status}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

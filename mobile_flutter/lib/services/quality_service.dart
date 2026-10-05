@@ -124,13 +124,49 @@ class QualityService {
     QuarantineRecord.fromJson,
   );
 
-  Future<QuarantineRecord> releaseQuarantine(String id) async =>
-      QuarantineRecord.fromJson(
-        await api.post('/quarantine/$id/release') as Map<String, dynamic>,
-      );
+  Future<QuarantineRecord> releaseQuarantine(
+    String id, {
+    String? resolutionNote,
+  }) async {
+    final body = resolutionNote != null && resolutionNote.trim().isNotEmpty
+        ? {'resolutionNote': resolutionNote.trim()}
+        : null;
+    final res = await api.post('/quarantine/$id/release', body);
+    return QuarantineRecord.fromJson(res as Map<String, dynamic>);
+  }
 
-  List<T> _list<T>(dynamic value, T Function(Map<String, dynamic>) parser) =>
-      (value as List<dynamic>)
-          .map((item) => parser(item as Map<String, dynamic>))
-          .toList();
+  /// AI Validation & Safety API Endpoints
+  Future<AiValidationData?> getAiValidation({String? workflowId}) async {
+    final query = workflowId != null && workflowId.trim().isNotEmpty
+        ? '?workflowId=${Uri.encodeComponent(workflowId.trim())}'
+        : '';
+    final res = await api.get('/quality/ai-validation$query');
+    if (res == null) return null;
+    return AiValidationData.fromJson(res as Map<String, dynamic>);
+  }
+
+  Future<List<AiValidationData>> getAiValidationHistory() async {
+    final res = await api.get('/quality/ai-validation/history');
+    if (res == null) return [];
+    return _list(res, AiValidationData.fromJson);
+  }
+
+  Future<AiValidationData> resolveAiValidation(
+    String workflowId, {
+    required String note,
+    bool releaseQuarantine = true,
+  }) async {
+    final res = await api.post('/quality/ai-validation/$workflowId/resolve', {
+      'note': note.trim(),
+      'releaseQuarantine': releaseQuarantine,
+    });
+    return AiValidationData.fromJson(res as Map<String, dynamic>);
+  }
+
+  List<T> _list<T>(dynamic value, T Function(Map<String, dynamic>) parser) {
+    if (value is! List) return [];
+    return value
+        .map((item) => parser(item as Map<String, dynamic>))
+        .toList();
+  }
 }

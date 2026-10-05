@@ -10,7 +10,7 @@ namespace ManufacturingCoordinator.Api.Controllers
 {
     [ApiController]
     [Route("api/batches")]
-    [Authorize(Roles = "QualityInspector")]
+    [Authorize(Roles = "QualityInspector,SupplyChainManager,ITAdmin")]
     public class BatchController : ControllerBase
     {
         private readonly ApplicationDbContext _db;
@@ -42,6 +42,9 @@ namespace ManufacturingCoordinator.Api.Controllers
                 }
             }
 
+            var physicalBatch = await _db.StockRolls.AsNoTracking().Where(r => r.RollIdentifier == value)
+                .Select(r => r.BatchId).FirstOrDefaultAsync();
+            if (batch == null && physicalBatch != null) batch = await _db.Batches.AsNoTracking().FirstOrDefaultAsync(b => b.Id == physicalBatch);
             if (batch == null) return NotFound(new { message = "Batch was not found." });
 
             var inventoryRolls = await _db.InventoryRolls
@@ -49,16 +52,16 @@ namespace ManufacturingCoordinator.Api.Controllers
                 .Where(item => item.BatchId == batch.Id)
                 .ToListAsync();
 
+            var physicalRolls = await _db.StockRolls.AsNoTracking().Where(r => r.BatchId == batch.Id).ToListAsync();
+            var canonicalIds = physicalRolls.Select(r => r.RollIdentifier).ToHashSet();
+            var rollDtos = physicalRolls.Select(r => new InventoryRollDto { Id = r.RollIdentifier, BatchId = batch.Id,
+                Status = r.Status == "Quarantined" || r.Status == "On Hold" || r.Status == "Locked" ? ManufacturingCoordinator.Enums.InventoryStatus.Quarantined : ManufacturingCoordinator.Enums.InventoryStatus.Available }).ToList();
+            rollDtos.AddRange(inventoryRolls.Where(r => !canonicalIds.Contains(r.Id)).Select(r => new InventoryRollDto { Id = r.Id, BatchId = r.BatchId, Status = r.Status }));
             return Ok(new BatchDetailsDto
             {
                 Id = batch.Id,
                 ProductType = batch.ProductType,
-                InventoryRolls = inventoryRolls.Select(roll => new InventoryRollDto
-                {
-                    Id = roll.Id,
-                    BatchId = roll.BatchId,
-                    Status = roll.Status
-                }).ToList()
+                InventoryRolls = rollDtos
             });
         }
     }

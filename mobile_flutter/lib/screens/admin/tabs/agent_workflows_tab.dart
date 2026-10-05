@@ -34,10 +34,13 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
   }
 
   Future<void> _showTriggerDialog() async {
-    _objectiveController.text = 'Rebalance production output between Line 1 and CNC machines';
+    _objectiveController.text = 'Schedule preventive maintenance';
+    final machines = await widget.service.getMachines();
+    if (!mounted) return;
+    String? machineId;
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, updateDialog) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: const Row(
           children: [
@@ -51,10 +54,13 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter the objective for the multi-agent Planner pipeline:',
+              'Select the exact machine for IT Admin maintenance authorization:',
               style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
             ),
             const SizedBox(height: 12),
+            DropdownButtonFormField<String>(decoration: const InputDecoration(labelText: 'Machine'),
+              items: machines.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
+              onChanged: (value) => updateDialog(() => machineId = value)),
             TextField(
               controller: _objectiveController,
               maxLines: 3,
@@ -82,11 +88,11 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                 ? null
                 : () async {
                     final obj = _objectiveController.text.trim();
-                    if (obj.isEmpty) return;
+                    if (obj.isEmpty || machineId == null) return;
                     Navigator.pop(ctx);
                     setState(() => _triggering = true);
                     try {
-                      await widget.service.triggerWorkflow(obj);
+                      await widget.service.triggerWorkflow("$obj [MachineID: $machineId]");
                       await widget.onRefresh();
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +122,7 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
             child: const Text('Dispatch Pipeline'),
           ),
         ],
-      ),
+      )),
     );
   }
 
@@ -247,7 +253,7 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                               ],
                             ),
                             Text(
-                              wf.createdAt.toLocal().toString().split('.')[0],
+                              wf.createdAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0],
                               style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                             ),
                           ],

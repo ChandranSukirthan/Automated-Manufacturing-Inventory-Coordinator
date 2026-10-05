@@ -6,6 +6,10 @@ namespace ManufacturingCoordinator.Api.DTOs.Production
 {
     public class UpdateShiftDto
     {
+        public string? MaterialSku { get; set; }
+        public Guid? MachineId { get; set; }
+        public decimal? MaterialPerUnit { get; set; }
+
         [Required, MaxLength(100)]
         public string Name { get; set; } = string.Empty;
 

@@ -1,16 +1,28 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
-from tools.production_tools import (
-    calculate_production_impact,
-    check_maintenance_requirement,
-    calculate_machine_uptime,
-    query_production_schedule,
-)
-from agents.planner import planner_node
-from graph.workflow import run_workflow, approve_and_resume
-from core.state import WorkflowStatus, ApprovalStatus
+try:
+    from ai.main import app
+    from ai.tools.production_tools import (
+        calculate_production_impact,
+        check_maintenance_requirement,
+        calculate_machine_uptime,
+        query_production_schedule,
+    )
+    from ai.agents.planner import planner_node
+    from ai.graph.workflow import run_workflow, approve_and_resume
+    from ai.core.state import WorkflowStatus, ApprovalStatus
+except ModuleNotFoundError:
+    from main import app
+    from tools.production_tools import (
+        calculate_production_impact,
+        check_maintenance_requirement,
+        calculate_machine_uptime,
+        query_production_schedule,
+    )
+    from agents.planner import planner_node
+    from graph.workflow import run_workflow, approve_and_resume
+    from core.state import WorkflowStatus, ApprovalStatus
 
 
 client = TestClient(app)
@@ -104,7 +116,12 @@ def test_end_to_end_workflow_with_human_approval():
     objective = "Replenish BoxPouch film because inventory is low."
 
     # Step 1: Run workflow up to human approval gate
-    state = run_workflow(objective=objective, workflow_id=wf_id)
+    state = run_workflow(
+        objective=objective,
+        workflow_id=wf_id,
+        material_id="CR-001",
+        required_quantity=2000.0,
+    )
 
     assert state["workflow_id"] == wf_id
     assert state["status"] == WorkflowStatus.WaitingForApproval
@@ -118,9 +135,9 @@ def test_end_to_end_workflow_with_human_approval():
     resumed = approve_and_resume(wf_id)
 
     assert resumed is not None
-    assert resumed["status"] == WorkflowStatus.Completed
+    assert resumed["status"] == WorkflowStatus.WaitingForApproval
     assert resumed["approval_status"] == ApprovalStatus.Approved
-    assert resumed["current_agent"] == "Execution"
+    assert resumed["current_agent"] == "Payment / Dispatch"
     assert resumed["final_outcome"] is not None
 
 
@@ -134,73 +151,64 @@ def test_api_health_endpoint():
     assert data["status"] == "ONLINE"
 
 
-def test_api_tool_production_impact():
+def test_api_tool_production_impact(auth_headers):
     payload = {"target": 10000, "availableMaterial": 6000}
-    response = client.post("/api/tools/production-impact", json=payload)
+    response = client.post("/api/tools/production-impact", json=payload, headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert data["adjustedOutput"] == 6000
 
 
-def test_api_trigger_and_approve_workflow():
+def test_api_trigger_and_approve_workflow(auth_headers):
     payload = {
         "objective": "Replenish BoxPouch film because inventory is low.",
-        "workflowId": "WF-API-TEST"
+        "workflowId": "WF-API-TEST",
+        "material_id": "CR-001",
+        "required_quantity": 2000.0,
     }
-    response = client.post("/api/workflows/run", json=payload)
+    response = client.post("/api/workflows/run", json=payload, headers=auth_headers)
     assert response.status_code == 201
     data = response.json()
     assert data["workflow_id"] == "WF-API-TEST"
     assert data["status"] == "WaitingForApproval"
 
     # Approve
-    approve_resp = client.post("/api/workflows/WF-API-TEST/approve")
+    approve_resp = client.post("/api/workflows/WF-API-TEST/approve", headers=auth_headers)
     assert approve_resp.status_code == 200
     approved_data = approve_resp.json()
-    assert approved_data["status"] == "Completed"
+    assert approved_data["status"] == "WaitingForApproval"
 
 
 # =======================================================
 # 6. Cross-Agent Quality & Coordinator Validation Test
 # =======================================================
-def test_cross_agent_quality_and_planner_coordination():
-    """
-    Cross-Agent Collaboration Test:
-    Verifies that Agent 4 (Validation/Safety) integrates Nithushan's Quality Agent.
-    When a defect is attached to the state, the Validation Agent runs
-    the Quality Agent validation and requires quarantine approval.
-    """
-    from agents.validation import validation_node
-
-    state = {
-        "purchasing_data": {
-            "draft_po": {
-                "poNumber": "PO-DRAFT-2026-004",
-                "supplier": "Apex Polymer Solutions Ltd",
-                "quantity": 4000,
-                "estimatedCostUsd": 5800.0,
-            }
-        },
-        "production_data": {"impact": {"adjustedOutput": 6000, "plannedOutput": 10000}},
-        "quality_data": {
-            "defect": {
-                "batchId": "BATCH-QA-01",
-                "productType": "BoxPouch",
-                "severity": "High",
-                "description": "Contaminated seal defect",
-            }
-        },
-        "completed_steps": [],
-        "errors": []
-    }
-
-    result = validation_node(state)
-
-    # Must require approval due to High severity defect quarantine recommendation
-    assert result["requires_approval"] is True
-    assert result["status"] == WorkflowStatus.WaitingForApproval
-    assert "quality_data" in result
-    assert result["validation_results"]["qualitySafetyStatus"] == "QUARANTINE_REQUIRED"
-    assert any("Quality Agent: Quarantine required" in step for step in result["completed_steps"])
+def test_cross_agent_quality_and_planner_coordination(monkeypatch):
+    from ai.agents.validation import validation_node
+    from ai.agents.supervisor import supervisor_node
+    import ai.agents.validation as validation
+    monkeypatch.setattr(validation, "run_quality_validation", lambda state: {**state,
+        "quality_data": {**state["quality_data"], "validation": {"valid": False, "quarantineRequired": True, "affectedInventory": ["R1"]}}})
+    state = {"purchasing_data": {"draft_po": {"quantity": 4000, "unitPrice": 1.45, "estimatedCost": 5800}},
+        "material_id": "RM001", "quality_data": {"defect": {"severity": "High", "description": "Contamination"}},
+        "completed_steps": [], "errors": []}
+    evidence = validation_node(state)
+    assert "status" not in evidence and "requires_approval" not in evidence
+    result = supervisor_node({**state, **evidence})
+    assert result["requires_approval"] is False
+    assert result["status"] == WorkflowStatus.Failed
+    assert not result["automatic_retry_required"]
+    assert result["required_action"] == "QA_REVIEW"
+    assert evidence["validation_results"]["quarantinedRollsCount"] == 0
+    assert evidence["validation_results"]["recommendedQuarantineRollsCount"] == 1
 
 
+def test_validation_stops_after_third_rejected_supplier():
+    from ai.agents.supervisor import supervisor_node
+    from ai.core.validation_contract import NON_QUALITY_CHECKS
+    result = supervisor_node({"supplier_selection_attempt": 3,
+        "validation_results": {**{key: "PASSED" for key in NON_QUALITY_CHECKS}, "qualitySafetyStatus": "CLEAR", "isValid": False, "failedChecks": ["budgetCheck"], "budgetCheck": "BUDGET_EXCEEDED"}})
+    assert result["requires_approval"] is False
+    assert result["status"] == WorkflowStatus.Failed
+    assert result["automatic_retry_required"] is False
+    assert result["required_action"] == "REVIEW_SUPPLIER_QUOTES"
+    assert "Payment approval is blocked" in result["final_outcome"]

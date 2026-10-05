@@ -1,3 +1,4 @@
+import ModalOverlay from './ModalOverlay';
 import React, { useState } from 'react';
 import { AlertTriangle, Info, CheckCircle2, Loader2, X } from 'lucide-react';
 
@@ -50,7 +51,7 @@ export default function ConfirmModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+    <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
       <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -110,7 +111,7 @@ export default function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

@@ -129,7 +129,7 @@ def test_validation_safety_rejects_already_quarantined_inventory() -> None:
         FakeConnection(quarantined_inventory=True),
     )
 
-    assert result["quality_data"]["validation"] == {
+    assert {key: result["quality_data"]["validation"][key] for key in ("valid", "riskLevel", "reason")} == {
         "valid": False,
         "riskLevel": "HIGH",
         "reason": "Associated inventory is quarantined",
@@ -150,7 +150,7 @@ def test_backend_state_overrides_safe_ai_recommendation() -> None:
         FakeConnection(quarantined_inventory=True),
     )
 
-    assert result["quality_data"]["validation"] == {
+    assert {key: result["quality_data"]["validation"][key] for key in ("valid", "riskLevel", "reason")} == {
         "valid": False,
         "riskLevel": "HIGH",
         "reason": "Associated inventory is quarantined",
@@ -174,7 +174,7 @@ def test_validation_safety_rejects_invalid_purchase_order() -> None:
         FakeConnection(),
     )
 
-    assert result["quality_data"]["validation"] == {
+    assert {key: result["quality_data"]["validation"][key] for key in ("valid", "riskLevel", "reason")} == {
         "valid": False,
         "riskLevel": "HIGH",
         "reason": "Quantity exceeds the business rule limit",
@@ -198,9 +198,12 @@ def test_quality_route_returns_recommendation_without_mutation(monkeypatch: pyte
             },
         }
 
+    from ai.security import require_actor
+    app.dependency_overrides[require_actor] = lambda: {"role": "QualityInspector"}
     monkeypatch.setattr(quality_routes, "run_quality_validation", fake_validation)
     response = TestClient(app).post("/quality/recommendation", json=HIGH_DEFECT)
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["affectedInventory"] == ["ROLL001", "ROLL002"]
 
@@ -224,6 +227,8 @@ def test_quality_route_accepts_defect_without_product_type(
             },
         }
 
+    from ai.security import require_actor
+    app.dependency_overrides[require_actor] = lambda: {"role": "QualityInspector"}
     monkeypatch.setattr(quality_routes, "run_quality_validation", fake_validation)
     response = TestClient(app).post(
         "/quality/recommendation",
@@ -235,6 +240,7 @@ def test_quality_route_accepts_defect_without_product_type(
         },
     )
 
+    app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["riskLevel"] == "LOW"
 
@@ -258,3 +264,32 @@ def test_exactly_four_mandatory_agents_and_three_quality_tools() -> None:
         "check_related_inventory",
         "recommend_quarantine",
     ]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf"), True])
+def test_individual_purchase_order_rejects_nonfinite_numbers(value):
+    from ai.agents.quality_agent import _validate_purchase_order
+    assert _validate_purchase_order({"supplier": "Supplier A", "quantity": value, "budget": 100}, {}) == "Quantity must be greater than zero"
+
+
+def test_individual_history_is_checked_with_one_owned_connection(monkeypatch):
+    import psycopg
+    connection = FakeConnection(previous_severe_defect=True)
+    class Owned:
+        def __enter__(self): return connection
+        def __exit__(self, *_): return False
+    calls = []
+    monkeypatch.setattr(psycopg, "connect", lambda *a, **kw: calls.append(1) or Owned())
+    result = run_quality_validation({"quality_data": {"defect": {**HIGH_DEFECT, "severity": "Medium", "description": "Cosmetic issue"}}})
+    assessment = result["quality_data"]["validation"]
+    assert assessment["quarantineRequired"] is True
+    assert assessment["valid"] is assessment["isValid"] is False
+    assert assessment["requiredAction"] == "QA_REVIEW"
+    assert len(calls) == 1
+
+
+def test_canonical_draft_order_is_validated():
+    result = run_quality_validation({"quality_data": {"defect": {**HIGH_DEFECT, "severity": "Low"}},
+        "draft_po": {"supplierId": "SUP-A", "quantity": float("nan"), "budgetLimit": 100}}, FakeConnection())
+    assert result["quality_data"]["validation"]["isValid"] is False
+    assert result["quality_data"]["validation"]["reason"] == "Quantity must be greater than zero"

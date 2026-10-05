@@ -1,6 +1,26 @@
 # mobile_flutter
 
-A new Flutter project.
+Mobile application for the Automated Manufacturing Inventory Coordinator.
+
+## Test a roll QR code
+
+1. Start the backend and sign in to the mobile app as a Floor Worker, Supply
+   Chain Manager, or IT Admin.
+2. In **Items**, choose **Register New Roll**. Select the packaging type, raw
+   material, and an in-stock SKU number. Enter only the final roll number
+   (for example, `01`) and a quantity greater than zero and no greater than
+   the shown available amount.
+3. The app creates the full roll reference from those choices (for example,
+   `ROLL-BP-LAM-001-01`) and the server generates its QR code. The QR image
+   opens immediately after registration. You can open it later with
+   **Items** → the eye icon on the SKU → the QR icon on the roll.
+4. Put that QR image on a different screen (or print it), then open the
+   scanner in the app and scan it. A phone cannot normally scan a QR image
+   displayed on its own screen.
+
+The QR stores an internal roll reference, not the SKU. This allows the system
+to distinguish two physical rolls that contain the same SKU and report the
+correct remaining quantity for the scanned roll.
 
 ## Getting Started
 

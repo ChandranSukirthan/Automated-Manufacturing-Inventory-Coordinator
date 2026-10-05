@@ -57,6 +57,24 @@ function DaysChip({ days }) {
   );
 }
 
+function SortHeader({ field, children, toggleSort, sortField }) {
+  return (
+    <th
+      className="px-6 py-3.5 cursor-pointer select-none hover:text-slate-200 transition group"
+      onClick={() => toggleSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        <ArrowUpDown
+          className={`w-3 h-3 transition ${
+            sortField === field ? 'text-cyan-400' : 'text-slate-600 group-hover:text-slate-400'
+          }`}
+        />
+      </div>
+    </th>
+  );
+}
+
 export default function StockLevelsTab({
   loading,
   stockLevels,
@@ -85,21 +103,7 @@ export default function StockLevelsTab({
     });
   }, [stockLevels, sortField, sortDir]);
 
-  const SortHeader = ({ field, children }) => (
-    <th
-      className="px-6 py-3.5 cursor-pointer select-none hover:text-slate-200 transition group"
-      onClick={() => toggleSort(field)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        <ArrowUpDown
-          className={`w-3 h-3 transition ${
-            sortField === field ? 'text-cyan-400' : 'text-slate-600 group-hover:text-slate-400'
-          }`}
-        />
-      </div>
-    </th>
-  );
+
 
   if (loading) {
     return (
@@ -123,7 +127,7 @@ export default function StockLevelsTab({
 
   return (
     <div className="space-y-4 tab-slide-in">
-      <div className="border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden">
+      <div className="worker-table-scroll border border-slate-800 rounded-2xl bg-slate-900/60 overflow-x-auto">
         <div className="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
             <h3 className="text-base font-bold text-white">Stock Levels & Daily Burn Rate</h3>
@@ -149,10 +153,10 @@ export default function StockLevelsTab({
             <tr>
               <th className="px-6 py-3.5">SKU</th>
               <th className="px-6 py-3.5">Material</th>
-              <SortHeader field="currentStock">Stock</SortHeader>
+              <SortHeader toggleSort={toggleSort} sortField={sortField} field="currentStock">Stock</SortHeader>
               <th className="px-6 py-3.5">Gauge</th>
-              <SortHeader field="burnRate">Burn Rate</SortHeader>
-              <SortHeader field="daysRemaining">Days Left</SortHeader>
+              <SortHeader toggleSort={toggleSort} sortField={sortField} field="burnRate">Burn Rate</SortHeader>
+              <SortHeader toggleSort={toggleSort} sortField={sortField} field="daysRemaining">Days Left</SortHeader>
               <th className="px-6 py-3.5">Status</th>
               <th className="px-6 py-3.5 text-right">Action</th>
             </tr>
@@ -222,8 +226,10 @@ export default function StockLevelsTab({
                         </span>
                       ) : (
                         <button
-                          onClick={() => onTriggerAi(lvl.skuCode, 2000)}
-                          disabled={triggeringAi}
+                          onClick={() => onTriggerAi(lvl.skuCode, Math.max(0,
+                            Number(lvl.requiredQuantity ?? lvl.minimumStock ?? 0) - Number(lvl.currentStock ?? 0)))}
+                          disabled={triggeringAi || !(Math.max(0,
+                            Number(lvl.requiredQuantity ?? lvl.minimumStock ?? 0) - Number(lvl.currentStock ?? 0)) > 0)}
                           className="px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-semibold transition disabled:opacity-50"
                         >
                           Reorder via AI

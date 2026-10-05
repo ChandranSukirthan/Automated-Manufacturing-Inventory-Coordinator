@@ -6,8 +6,10 @@ import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/purchase_order_service.dart';
 import 'services/quality_service.dart';
 import 'services/session_storage.dart';
+import 'services/admin_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +19,12 @@ Future<void> main() async {
   api.onSessionExpired = appState.expireSession;
   await appState.restore();
   runApp(
-    ManufacturingApp(appState: appState, qualityService: QualityService(api)),
+    ManufacturingApp(
+      appState: appState,
+      qualityService: QualityService(api),
+      poService: PurchaseOrderService(api),
+      adminService: AdminService(api),
+    ),
   );
 }
 
@@ -25,11 +32,15 @@ class ManufacturingApp extends StatelessWidget {
   const ManufacturingApp({
     required this.appState,
     required this.qualityService,
+    required this.poService,
+    required this.adminService,
     super.key,
   });
 
   final AppState appState;
   final QualityService qualityService;
+  final PurchaseOrderService poService;
+  final AdminService adminService;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -55,37 +66,61 @@ class ManufacturingApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
         navigationBarTheme: NavigationBarThemeData(
-          indicatorColor: AppColors.violet,
+          backgroundColor: const Color(0xFF070B14),
+          indicatorColor: AppColors.primary.withValues(alpha: 0.2),
           iconTheme: WidgetStateProperty.resolveWith(
             (states) => IconThemeData(
               color: states.contains(WidgetState.selected)
-                  ? AppColors.strongText
+                  ? AppColors.primaryLight
                   : AppColors.mutedText,
             ),
           ),
           labelTextStyle: WidgetStateProperty.resolveWith(
             (states) => TextStyle(
               color: states.contains(WidgetState.selected)
-                  ? AppColors.violet
+                  ? AppColors.primaryLight
                   : AppColors.mutedText,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w500,
             ),
           ),
         ),
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
+        inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.background,
+          fillColor: AppColors.surface,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: AppColors.primaryLight, width: 1.5),
+          ),
         ),
-        cardTheme: const CardThemeData(
-          margin: EdgeInsets.only(bottom: 12),
+        cardTheme: CardThemeData(
+          margin: const EdgeInsets.only(bottom: 12),
           elevation: 0,
           color: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border),
+          ),
         ),
       ),
       home: appState.isLoading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : appState.isAuthenticated
-          ? HomeShell(appState: appState, qualityService: qualityService)
+          ? HomeShell(
+              appState: appState,
+              qualityService: qualityService,
+              poService: poService,
+              adminService: adminService,
+            )
           : LoginScreen(appState: appState),
     ),
   );

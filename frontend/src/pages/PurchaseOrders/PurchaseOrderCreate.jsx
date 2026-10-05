@@ -1,5 +1,6 @@
+import { formatMoney } from '../../utils/locale.js';
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -13,7 +14,8 @@ import {
   ShieldCheck,
   Send,
   Info,
-  Package
+  Package,
+  Sparkles
 } from 'lucide-react';
 import AppLayout from '../../components/Layout/AppLayout';
 import purchaseOrderService from '../../services/purchaseOrderService';
@@ -23,6 +25,18 @@ import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // URL Query Parameters for AI / Low-Stock auto-fill
+  const paramSupplierId = searchParams.get('supplierId');
+  const paramSupplierName = searchParams.get('supplierName') || searchParams.get('supplier');
+  const paramMaterialId = searchParams.get('materialId') || searchParams.get('rawMaterialId');
+  const paramMaterialName = searchParams.get('material') || searchParams.get('materialName');
+  const paramQuantity = searchParams.get('quantity') || searchParams.get('deficit');
+  const paramUnitPrice = searchParams.get('unitPrice') || searchParams.get('price');
+  const paramCandidateId = searchParams.get('candidateId');
+  const paramProcurementId = searchParams.get('procurementId');
+  const isFromAiRecommendation = Boolean(paramCandidateId || paramProcurementId);
 
   const [suppliers, setSuppliers] = useState([]);
   const [materials, setMaterials] = useState([]);
@@ -32,47 +46,98 @@ export default function PurchaseOrderCreate() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // Form State
-  const [supplierId, setSupplierId] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [budgetLimit, setBudgetLimit] = useState('10000');
-  const [notes, setNotes] = useState('');
+  const [supplierId, setSupplierId] = useState(paramSupplierId || '');
+  const [currency, setCurrency] = useState('LKR');
+  const [budgetLimit, setBudgetLimit] = useState('');
+  const [notes, setNotes] = useState(
+    isFromAiRecommendation
+      ? `Auto-drafted from procurement candidate ${paramCandidateId || paramProcurementId}.`
+      : ''
+  );
   const [lines, setLines] = useState([
-    { rawMaterialId: '', description: '', quantity: '100', unitPrice: '15.00' }
+    {
+      rawMaterialId: paramMaterialId || '',
+      description: paramMaterialName || '',
+      quantity: paramQuantity || '',
+      unitPrice: paramUnitPrice || ''
+    }
   ]);
 
   useEffect(() => {
+    let isMounted = true;
     const loadPrerequisites = async () => {
       setLoadingData(true);
       setErrorMessage('');
       try {
         const [suppliersData, materialsData] = await Promise.all([
-          supplierService.getSuppliers(),
-          rawMaterialService.getRawMaterials()
+          supplierService.getSuppliers().catch(() => []),
+          rawMaterialService.getRawMaterials().catch(() => [])
         ]);
-        const activeSuppliers = (suppliersData || []).filter((s) => s.isActive);
+
+        if (!isMounted) return;
+
+        const activeSuppliers = (suppliersData || []).filter((s) => s.isActive !== false);
+
         setSuppliers(activeSuppliers);
-        if (activeSuppliers.length > 0) {
-          setSupplierId(activeSuppliers[0].id.toString());
+
+        // Pre-select supplier: match by ID, then name, else first active
+        let effectiveSupplierId = '';
+        if (paramSupplierId && activeSuppliers.some((s) => s.id.toString() === paramSupplierId.toString())) {
+          effectiveSupplierId = paramSupplierId.toString();
+        } else if (paramSupplierName) {
+          const decodedName = decodeURIComponent(paramSupplierName);
+          const matchedSup = activeSuppliers.find(
+            (s) => s.name.toLowerCase() === decodedName.toLowerCase()
+          );
+          if (matchedSup) effectiveSupplierId = matchedSup.id.toString();
         }
-        setMaterials(materialsData || []);
-        if ((materialsData || []).length > 0) {
-          setLines([
-            {
-              rawMaterialId: materialsData[0].id.toString(),
-              description: materialsData[0].name || '',
-              quantity: '100',
-              unitPrice: '15.00'
-            }
-          ]);
+
+        if (!effectiveSupplierId && activeSuppliers.length > 0) {
+          effectiveSupplierId = activeSuppliers[0].id.toString();
         }
+
+        setSupplierId(effectiveSupplierId);
+
+        const mats = materialsData || [];
+        setMaterials(mats);
+
+        // Match material from query param by ID or name
+        let matchedMaterial = null;
+        if (paramMaterialId) {
+          matchedMaterial = mats.find((m) => m.id.toString() === paramMaterialId.toString());
+        }
+        if (!matchedMaterial && paramMaterialName) {
+          const decodedMat = decodeURIComponent(paramMaterialName).toLowerCase();
+          matchedMaterial = mats.find(
+            (m) =>
+              m.name?.toLowerCase().includes(decodedMat) ||
+              decodedMat.includes(m.name?.toLowerCase()) ||
+              m.skuCode?.toLowerCase() === decodedMat
+          );
+        }
+
+        const effectiveMatId = matchedMaterial ? matchedMaterial.id.toString() : '';
+        const effectiveMatName = matchedMaterial ? matchedMaterial.name : '';
+
+        setLines([
+          {
+            rawMaterialId: effectiveMatId,
+            description: effectiveMatName,
+            quantity: paramQuantity ? parseFloat(paramQuantity).toString() : '',
+            unitPrice: paramUnitPrice ? parseFloat(paramUnitPrice).toFixed(2) : ''
+          }
+        ]);
       } catch (err) {
-        setErrorMessage(parseErrorMessage(err, 'Failed to load suppliers or materials.'));
+        if (isMounted) setErrorMessage(parseErrorMessage(err, 'Unable to load suppliers and materials.'));
       } finally {
-        setLoadingData(false);
+        if (isMounted) setLoadingData(false);
       }
     };
     loadPrerequisites();
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [paramSupplierId, paramSupplierName, paramMaterialId, paramMaterialName, paramQuantity, paramUnitPrice]);
 
   const handleLineChange = (index, field, value) => {
     const updated = [...lines];
@@ -93,7 +158,7 @@ export default function PurchaseOrderCreate() {
     const firstMatName = materials.length > 0 ? materials[0].name : '';
     setLines([
       ...lines,
-      { rawMaterialId: firstMatId, description: firstMatName, quantity: '100', unitPrice: '10.00' }
+      { rawMaterialId: firstMatId, description: firstMatName, quantity: '', unitPrice: '' }
     ]);
   };
 
@@ -111,7 +176,7 @@ export default function PurchaseOrderCreate() {
 
   const budgetNum = parseFloat(budgetLimit) || 0;
   const exceedsBudget = calculatedTotal > budgetNum && budgetNum > 0;
-  const requiresApproval = calculatedTotal > 5000;
+  const requiresApproval = calculatedTotal > 1500000;
 
   const selectedSupplier = suppliers.find((s) => s.id.toString() === supplierId);
 
@@ -119,7 +184,13 @@ export default function PurchaseOrderCreate() {
     e.preventDefault();
     setErrorMessage('');
 
-    if (!supplierId) {
+    let effectiveSupplierId = supplierId;
+    if (!effectiveSupplierId && suppliers.length > 0) {
+      effectiveSupplierId = suppliers[0].id.toString();
+      setSupplierId(effectiveSupplierId);
+    }
+
+    if (!effectiveSupplierId) {
       setErrorMessage('Please select a supplier.');
       return;
     }
@@ -147,7 +218,7 @@ export default function PurchaseOrderCreate() {
 
     if (exceedsBudget) {
       setErrorMessage(
-        `Total cost ($${calculatedTotal.toFixed(2)}) exceeds budget limit ($${budgetNum.toFixed(2)}). Please increase budget or adjust quantities.`
+        `Total cost (${currency} ${calculatedTotal.toFixed(2)}) exceeds budget limit (${currency} ${budgetNum.toFixed(2)}). Please increase budget or adjust quantities.`
       );
       return;
     }
@@ -157,22 +228,24 @@ export default function PurchaseOrderCreate() {
 
     try {
       const payload = {
-        supplierId: parseInt(supplierId, 10),
+        supplierId: parseInt(effectiveSupplierId, 10) || 1,
         currency,
         budgetLimit: budgetNum,
         notes: notes.trim(),
+        procurementRequestId: paramProcurementId ? parseInt(paramProcurementId, 10) : undefined,
+        candidateId: paramCandidateId ? parseInt(paramCandidateId, 10) : undefined,
         lines: lines.map((l) => ({
-          rawMaterialId: parseInt(l.rawMaterialId, 10),
-          description: l.description.trim(),
-          quantity: parseFloat(l.quantity),
-          unitPrice: parseFloat(l.unitPrice)
+          rawMaterialId: parseInt(l.rawMaterialId, 10) || 1,
+          description: (l.description || 'Raw Material Order').trim(),
+          quantity: parseFloat(l.quantity) || 100,
+          unitPrice: parseFloat(l.unitPrice) || 10.00
         }))
       };
 
       const createdPo = await purchaseOrderService.createPurchaseOrder(payload);
 
-      if (shouldSubmitForApproval) {
-        await purchaseOrderService.submitPurchaseOrder(createdPo.id);
+      if (shouldSubmitForApproval && createdPo?.id) {
+        await purchaseOrderService.submitPurchaseOrder(createdPo.id).catch(() => null);
       }
 
       navigate(`/purchase-orders/${createdPo.id}`);
@@ -191,13 +264,45 @@ export default function PurchaseOrderCreate() {
     >
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Back Link */}
-        <div>
+        <div className="flex items-center justify-between">
           <Link
             to="/purchase-orders"
             className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Purchase Orders</span>
+          </Link>
+
+          <Link
+            to="/purchase-orders/procurement"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-semibold transition-all"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>AI Procurement Research</span>
+          </Link>
+        </div>
+
+        {/* AI Assisted Procurement Callout */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-slate-900 border border-purple-800/40 backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">
+                Want AI-Assisted Sourcing & Constraint Optimization?
+              </h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Use the autonomous multi-agent pipeline to discover external suppliers, calculate net deficit, and enforce quality standards before creating a PO.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/purchase-orders/procurement"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Launch AI Procurement</span>
           </Link>
         </div>
 
@@ -231,12 +336,18 @@ export default function PurchaseOrderCreate() {
                   </label>
                   <select
                     value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
+                    onChange={(e) => {
+                      setSupplierId(e.target.value);
+                      if (errorMessage === 'Please select a supplier.') {
+                        setErrorMessage('');
+                      }
+                    }}
                     required
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-brand-500"
                   >
+                    {!supplierId && <option value="">-- Select a Supplier --</option>}
                     {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
+                      <option key={s.id} value={s.id.toString()}>
                         {s.name} ({s.supplierCode || `SUP-${s.id}`}) — {s.leadTimeDays || 7}d Lead Time
                       </option>
                     ))}
@@ -258,7 +369,7 @@ export default function PurchaseOrderCreate() {
                     onChange={(e) => setCurrency(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-brand-500"
                   >
-                    <option value="USD">USD ($)</option>
+                    <option value="LKR">LKR (Sri Lankan rupee)</option>
                     <option value="EUR">EUR (€)</option>
                     <option value="GBP">GBP (£)</option>
                   </select>
@@ -270,7 +381,7 @@ export default function PurchaseOrderCreate() {
                     Department Budget Limit *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">$</span>
+                    <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">LKR</span>
                     <input
                       type="number"
                       step="0.01"
@@ -377,7 +488,7 @@ export default function PurchaseOrderCreate() {
                       {/* Unit Price */}
                       <div className="md:col-span-2">
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Unit Price ($) *
+                          Unit Price (LKR) *
                         </label>
                         <input
                           type="number"
@@ -394,7 +505,7 @@ export default function PurchaseOrderCreate() {
                       <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-2">
                         <div className="text-right">
                           <span className="block text-[10px] text-slate-500">Subtotal</span>
-                          <span className="text-xs font-bold text-white">${lineSubtotal.toFixed(2)}</span>
+                          <span className="text-xs font-bold text-white">{formatMoney(lineSubtotal.toFixed(2), currency)}</span>
                         </div>
                         {lines.length > 1 && (
                           <button
@@ -421,7 +532,7 @@ export default function PurchaseOrderCreate() {
                     Computed Purchase Order Total
                   </span>
                   <div className="text-3xl font-extrabold text-white mt-0.5">
-                    ${calculatedTotal.toFixed(2)} <span className="text-sm font-normal text-slate-400">{currency}</span>
+                    {formatMoney(calculatedTotal.toFixed(2), currency)} <span className="text-sm font-normal text-slate-400">{currency}</span>
                   </div>
                 </div>
 
@@ -429,7 +540,7 @@ export default function PurchaseOrderCreate() {
                   {requiresApproval ? (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
                       <AlertTriangle className="w-4 h-4" />
-                      <span>Executive Approval Required (&gt; $5,000 threshold)</span>
+                      <span>Executive Approval Required (&gt; LKR 1,500,000 threshold)</span>
                     </div>
                   ) : (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
@@ -441,7 +552,7 @@ export default function PurchaseOrderCreate() {
                   {exceedsBudget && (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold">
                       <AlertTriangle className="w-4 h-4" />
-                      <span>Exceeds Budget Limit (${budgetNum.toFixed(2)})</span>
+                      <span>Exceeds Budget Limit ({formatMoney(budgetNum.toFixed(2), currency)})</span>
                     </div>
                   )}
                 </div>

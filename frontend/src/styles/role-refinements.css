@@ -1,0 +1,61 @@
+/* Role-specific presentation. No request, permission or workflow behaviour belongs here. */
+.role-shell {
+  --role-focus: #60a5fa;
+  color-scheme: dark;
+  background-image: radial-gradient(ellipse at 80% 0%, rgba(37, 99, 235, .045), transparent 50%);
+}
+.role-worker { --role-focus: #22d3ee; }
+.role-shell aside { box-shadow: 8px 0 32px rgba(0, 0, 0, .08); }
+.role-shell aside a { min-height: 44px; }
+.role-shell aside nav, .role-content [class*="overflow"], .role-modal-overlay { scrollbar-width: thin; scrollbar-color: #475569 #0f172a; }
+.role-topbar { box-shadow: 0 4px 20px rgba(0, 0, 0, .08); }
+.role-topbar h1 { line-height: 1.35; }
+.role-topbar :is(button, a) { min-height: 36px; }
+.role-content { min-width: 0; }
+.role-content :is(.grid, .flex) > * { min-width: 0; }
+.role-content :is(h1, h2, h3, p) { overflow-wrap: break-word; }
+.role-content :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) {
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+  border-color: #334155;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .12);
+}
+.role-content textarea { line-height: 1.65; }
+.role-content input::placeholder, .role-content textarea::placeholder { color: #64748b; }
+.role-shell :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--role-focus);
+  outline-offset: 3px;
+}
+.role-content :is(input, select, textarea):focus { border-color: var(--role-focus); }
+.role-content label { line-height: 1.5; }
+.role-content :is(div, section):has(> table) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #0f172a;
+}
+.role-content table { min-width: 640px; width: 100%; border-collapse: collapse; }
+.role-content table:has(th:nth-child(7)) { min-width: 900px; }
+.role-content :is(th, td) { vertical-align: middle; line-height: 1.5; }
+.role-content th { white-space: nowrap; font-size: 10px; letter-spacing: .065em; }
+.role-content tbody tr { transition: background-color .15s ease; }
+.role-content tbody tr:hover { background-color: rgba(30, 41, 59, .4); }
+.role-content td :is(button, a) { min-height: 32px; }
+.role-content article { overflow-wrap: anywhere; }
+.role-modal-overlay { padding: 16px; overflow-y: auto; }
+.role-modal-overlay > div { max-height: calc(100dvh - 32px); overflow-y: auto; scrollbar-width: thin; }
+.role-modal-overlay :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { min-height: 44px; }
+.role-modal-overlay :is(button, input, select, textarea):focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .role-content [class~="text-4xl"], .role-content [class~="text-3xl"] { font-size: 1.65rem; line-height: 1.3; }
+  .role-content [class~="p-8"] { padding: 20px; }
+  .role-topbar > div:has(> div > h1) { flex-basis: 100%; }
+  .role-content table { min-width: 640px; }
+  .role-content td { padding-top: 14px; padding-bottom: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .role-shell *, .role-modal-overlay * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

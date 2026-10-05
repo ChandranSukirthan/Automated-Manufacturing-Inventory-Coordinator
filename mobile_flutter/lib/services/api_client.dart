@@ -2,8 +2,19 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'package:flutter/foundation.dart';
+
 import '../models/auth_models.dart';
 import 'session_storage.dart';
+
+String get _defaultApiBaseUrl {
+  const envUrl = String.fromEnvironment('API_BASE_URL');
+  if (envUrl.isNotEmpty) return envUrl;
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:5070/api';
+  }
+  return 'http://localhost:5070/api';
+}
 
 class ApiException implements Exception {
   const ApiException(this.message, {this.statusCode});
@@ -18,25 +29,63 @@ class ApiException implements Exception {
 class ApiClient {
   static const requestTimeout = Duration(seconds: 15);
 
-  ApiClient({required this.storage, String? baseUrl, this.onSessionExpired})
-    : baseUrl =
-          (baseUrl ??
-                  const String.fromEnvironment(
-                    'API_BASE_URL',
-                    defaultValue: 'http://10.0.2.2:5070/api',
-                  ))
-              .replaceAll(RegExp(r'/$'), '');
+  ApiClient({SessionStorage? storage, String? baseUrl, this.onSessionExpired})
+      : storage = storage ?? SessionStorage(),
+        baseUrl = (baseUrl ?? _defaultApiBaseUrl).replaceAll(RegExp(r'/$'), '');
 
   final SessionStorage storage;
   final String baseUrl;
   Future<void> Function()? onSessionExpired;
 
   Future<dynamic> get(String path) => _request('GET', path);
+  Future<Uint8List> getBytes(String path) => _getBytes(path);
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _request('POST', path, body);
   Future<dynamic> put(String path, Map<String, dynamic> body) =>
       _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);
+
+  Future<dynamic> postMultipart(
+    String path,
+    Map<String, String> fields, {
+    List<int>? fileBytes,
+    String? fileName,
+    String fieldName = 'bankSlipFile',
+  }) async {
+    final session = await storage.read();
+    final uri = Uri.parse('$baseUrl$path');
+    final request = http.MultipartRequest('POST', uri);
+
+    if (session != null && session.accessToken.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer ${session.accessToken}';
+    }
+
+    request.fields.addAll(fields);
+
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          fieldName,
+          fileBytes,
+          filename: fileName ?? 'bank_slip.png',
+        ),
+      );
+    }
+
+    try {
+      final streamed = await request.send().timeout(requestTimeout);
+      final response = await http.Response.fromStream(streamed);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(_message(response), statusCode: response.statusCode);
+      }
+      if (response.body.isEmpty) return null;
+      return jsonDecode(response.body);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw const ApiException('Could not connect to the server for upload.');
+    }
+  }
 
   Future<dynamic> _request(
     String method,
@@ -86,6 +135,35 @@ class ApiClient {
     return jsonDecode(response.body);
   }
 
+  Future<Uint8List> _getBytes(String path, [bool retry = true]) async {
+    final session = await storage.read();
+    final headers = <String, String>{};
+    if (session != null && session.accessToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${session.accessToken}';
+    }
+
+    http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse('$baseUrl$path'), headers: headers)
+          .timeout(requestTimeout);
+    } catch (_) {
+      throw const ApiException(
+        'Could not connect to the server. Check the API URL and network.',
+      );
+    }
+
+    if (response.statusCode == 401 && retry && session != null) {
+      final refreshed = await _refresh(session.refreshToken);
+      if (refreshed) return _getBytes(path, false);
+      await onSessionExpired?.call();
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_message(response), statusCode: response.statusCode);
+    }
+    return response.bodyBytes;
+  }
+
   Future<bool> _refresh(String refreshToken) async {
     try {
       final response = await http.post(
@@ -105,6 +183,7 @@ class ApiClient {
           ...data,
           'user': {
             'id': oldSession.user.id,
+            'employeeId': oldSession.user.employeeId,
             'fullName': oldSession.user.fullName,
             'email': oldSession.user.email,
             'role': oldSession.user.role,

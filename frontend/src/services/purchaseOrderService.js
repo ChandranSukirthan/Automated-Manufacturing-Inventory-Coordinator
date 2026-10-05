@@ -1,6 +1,10 @@
 import api from './api';
 
 export const purchaseOrderService = {
+  async getReceipts(id) { return (await api.get(`/purchase-orders/${id}/receipts`)).data; },
+  async receiveGoods(id, data) { return (await api.post(`/purchase-orders/${id}/receipts`, data)).data; },
+  async verifyBankSlip(id) { return (await api.post(`/purchase-orders/${id}/verify-bank-slip`)).data; },
+  async confirmCheckout(id, sessionId) { return (await api.post(`/purchase-orders/${id}/confirm-checkout`, null, { params: { sessionId } })).data; },
   async getPurchaseOrders() {
     const response = await api.get('/purchase-orders');
     return response.data;
@@ -41,8 +45,60 @@ export const purchaseOrderService = {
     return response.data;
   },
 
-  async processPayment(id, forceDispatch = true) {
+  async requestRevision(id, notes = '') {
+    const response = await api.post(`/purchase-orders/${id}/request-revision`, { notes });
+    return response.data;
+  },
+
+  async processPayment(id, forceDispatch = false) {
     const response = await api.post(`/purchase-orders/${id}/process-payment?forceDispatch=${forceDispatch}`);
+    return response.data;
+  },
+
+  async createCheckoutSession(id) {
+    const response = await api.post(`/purchase-orders/${id}/create-checkout-session`);
+    return response.data;
+  },
+
+  async uploadBankSlip(id, formData) {
+    const response = await api.post(`/purchase-orders/${id}/bank-slip`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  async uploadBankSlipJson(id, data) {
+    const response = await api.post(`/purchase-orders/${id}/bank-slip-json`, data);
+    return response.data;
+  },
+
+  async getTracking(id) {
+    const response = await api.get(`/purchase-orders/${id}/tracking`);
+    return response.data;
+  },
+
+  async deletePurchaseOrder(id) {
+    const response = await api.delete(`/purchase-orders/${id}`);
+    return response.data;
+  },
+
+  async getOrderLines(id) {
+    const response = await api.get(`/purchase-orders/${id}/lines`);
+    return response.data;
+  },
+
+  async addOrderLine(id, lineData) {
+    const response = await api.post(`/purchase-orders/${id}/lines`, lineData);
+    return response.data;
+  },
+
+  async updateOrderLine(id, lineId, lineData) {
+    const response = await api.put(`/purchase-orders/${id}/lines/${lineId}`, lineData);
+    return response.data;
+  },
+
+  async deleteOrderLine(id, lineId) {
+    const response = await api.delete(`/purchase-orders/${id}/lines/${lineId}`);
     return response.data;
   },
 

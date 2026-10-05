@@ -32,11 +32,7 @@ def data_extraction_node(state: AgentState) -> dict:
     try:
         # Tool 1: Fetch inventory levels
         t1_start = datetime.datetime.now(datetime.timezone.utc)
-        # Call tool safely (LangChain tools can be called via .invoke or directly)
-        try:
-            levels = get_inventory_levels.invoke({"materialId": mat_id})
-        except Exception:
-            levels = get_inventory_levels(materialId=mat_id)
+        levels = get_inventory_levels.invoke({"materialId": mat_id})
 
         tool_summary.append({
             "tool": "get_inventory_levels",
@@ -52,10 +48,7 @@ def data_extraction_node(state: AgentState) -> dict:
 
         # Tool 2: Query historical consumption (7-day default)
         t2_start = datetime.datetime.now(datetime.timezone.utc)
-        try:
-            history = query_inventory_history.invoke({"materialId": mat_id, "periodDays": 7})
-        except Exception:
-            history = query_inventory_history(materialId=mat_id, periodDays=7)
+        history = query_inventory_history.invoke({"materialId": mat_id, "periodDays": 7})
 
         tool_summary.append({
             "tool": "query_inventory_history",
@@ -70,18 +63,11 @@ def data_extraction_node(state: AgentState) -> dict:
 
         # Tool 3: Calculate daily burn rate
         t3_start = datetime.datetime.now(datetime.timezone.utc)
-        try:
-            burn_result = calculate_burn_rate.invoke({
-                "consumption": consumption,
-                "periodDays": period_days,
-                "materialId": mat_id
-            })
-        except Exception:
-            burn_result = calculate_burn_rate(
-                consumption=consumption,
-                periodDays=period_days,
-                materialId=mat_id
-            )
+        burn_result = calculate_burn_rate.invoke({
+            "consumption": consumption,
+            "periodDays": period_days,
+            "materialId": mat_id
+        })
 
         tool_summary.append({
             "tool": "calculate_burn_rate",
@@ -95,22 +81,13 @@ def data_extraction_node(state: AgentState) -> dict:
 
         # Tool 4: Detect low stock and days remaining
         t4_start = datetime.datetime.now(datetime.timezone.utc)
-        try:
-            low_stock_result = detect_low_stock.invoke({
-                "currentStock": current_stock,
-                "minimumStock": min_stock,
-                "burnRate": burn_rate,
-                "supplierLeadTime": 3.0,
-                "materialId": mat_id
-            })
-        except Exception:
-            low_stock_result = detect_low_stock(
-                currentStock=current_stock,
-                minimumStock=min_stock,
-                burnRate=burn_rate,
-                supplierLeadTime=3.0,
-                materialId=mat_id
-            )
+        low_stock_result = detect_low_stock.invoke({
+            "currentStock": current_stock,
+            "minimumStock": min_stock,
+            "burnRate": burn_rate,
+            "supplierLeadTime": 3.0,
+            "materialId": mat_id
+        })
 
         tool_summary.append({
             "tool": "detect_low_stock",
@@ -176,14 +153,16 @@ def data_extraction_node(state: AgentState) -> dict:
         logger.error(f"[Data Extraction Agent] Error processing tools for {mat_id}: {ex}")
         errors.append(f"Data extraction error: {str(ex)}")
         
-        # Safe fallback output
+        # Safe failure output: do not fabricate a stock level when the source
+        # data cannot be read. The caller can surface the supplied error.
         safe_result = {
             "materialId": mat_id,
-            "currentStock": 350.0,
-            "burnRate": 80.0,
-            "daysRemaining": 4.37,
-            "lowStock": True,
-            "requiredQuantity": 2000.0
+            "currentStock": 0.0,
+            "burnRate": 0.0,
+            "daysRemaining": 0.0,
+            "lowStock": False,
+            "requiredQuantity": 0.0,
+            "safeFailure": True,
         }
         
         return {

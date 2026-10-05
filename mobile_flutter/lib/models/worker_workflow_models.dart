@@ -13,6 +13,7 @@ class WorkerWorkflowResult {
     this.quantity,
     this.unitPrice,
     this.totalAmount,
+    this.currency = 'LKR',
     this.agentResult,
     this.objective,
   });
@@ -30,6 +31,7 @@ class WorkerWorkflowResult {
   final num? quantity;
   final num? unitPrice;
   final num? totalAmount;
+  final String currency;
   final dynamic agentResult;
   final String? objective;
 
@@ -48,6 +50,7 @@ class WorkerWorkflowResult {
         quantity: _toNum(json['quantity']),
         unitPrice: _toNum(json['unit_price']),
         totalAmount: _toNum(json['total_amount']),
+        currency: json['currency']?.toString().toUpperCase() ?? 'LKR',
         agentResult: json['agent_result'],
         objective: json['objective']?.toString(),
       );

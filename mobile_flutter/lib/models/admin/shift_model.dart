@@ -7,6 +7,9 @@ class ShiftModel {
   final double adjustedOutput;
   final String status;
   final String? notes;
+  final String? materialSku;
+  final String? machineId;
+  final double? materialPerUnit;
 
   ShiftModel({
     required this.id,
@@ -17,6 +20,7 @@ class ShiftModel {
     required this.adjustedOutput,
     required this.status,
     this.notes,
+    this.materialSku, this.machineId, this.materialPerUnit,
   });
 
   factory ShiftModel.fromJson(Map<String, dynamic> json) {
@@ -51,7 +55,9 @@ class ShiftModel {
       endTime: json['endTime'] != null
           ? DateTime.tryParse(json['endTime'].toString()) ?? DateTime.now()
           : DateTime.now().add(const Duration(hours: 8)),
-      targetOutput: (json['targetOutput'] as num?)?.toDouble() ?? 0.0,
+      targetOutput: ((json['productionTarget'] ?? json['targetOutput']) as num?)?.toDouble() ?? 0.0,
+      materialSku: json['materialSku'] as String?, machineId: json['machineId'] as String?,
+      materialPerUnit: (json['materialPerUnit'] as num?)?.toDouble(),
       adjustedOutput: (json['adjustedOutput'] as num?)?.toDouble() ?? 0.0,
       status: parsedStatus,
       notes: json['notes']?.toString(),
@@ -63,7 +69,9 @@ class ShiftModel {
         'name': name,
         'startTime': startTime.toIso8601String(),
         'endTime': endTime.toIso8601String(),
+        'productionTarget': targetOutput,
         'targetOutput': targetOutput,
+        'materialSku': materialSku, 'machineId': machineId, 'materialPerUnit': materialPerUnit,
         'adjustedOutput': adjustedOutput,
         'status': status,
         'notes': notes,

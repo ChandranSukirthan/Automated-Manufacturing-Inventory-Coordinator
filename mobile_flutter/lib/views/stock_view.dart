@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -5,6 +7,7 @@ import '../controllers/inventory_controller.dart';
 import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../widgets/app_widgets.dart';
+import '../widgets/catalog_sku_fields.dart';
 
 class StockView extends StatefulWidget {
   final InventoryController controller;
@@ -15,10 +18,8 @@ class StockView extends StatefulWidget {
     required this.controller,
     this.onBack,
     this.onTriggerAi,
-    this.triggeringAi = false,
   });
   final Future<void> Function(String sku, num quantity)? onTriggerAi;
-  final bool triggeringAi;
 
   @override
   State<StockView> createState() => _StockViewState();
@@ -33,6 +34,7 @@ class _StockViewState extends State<StockView> {
   List<InventoryItemModel> _inventoryItems = [];
   List<StockAlertModel> _alerts = [];
   List<RawMaterialModel> _rawMaterials = [];
+  List<PackagingTypeModel> _packagingTypes = [];
   List<InventoryRollModel> _rolls = [];
   bool _isLoading = true;
   String? _error;
@@ -59,6 +61,7 @@ class _StockViewState extends State<StockView> {
         _apiService.fetchAlerts(),
         _apiService.fetchRawMaterials(),
         _apiService.fetchOwnedRolls(),
+        _apiService.fetchPackagingTypes(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -66,6 +69,7 @@ class _StockViewState extends State<StockView> {
         _alerts = results[1] as List<StockAlertModel>;
         _rawMaterials = results[2] as List<RawMaterialModel>;
         _rolls = results[3] as List<InventoryRollModel>;
+        _packagingTypes = results[4] as List<PackagingTypeModel>;
         _isLoading = false;
       });
     } on ApiException catch (exception) {
@@ -84,117 +88,349 @@ class _StockViewState extends State<StockView> {
   }
 
   Future<void> _showRegisterRollForm() async {
-    final identifier = TextEditingController();
-    final quantity = TextEditingController(text: '1');
+    final identifierNumber = TextEditingController();
+    final quantity = TextEditingController();
+    final batch = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final ownedSkus = _inventoryItems
-        .map((item) => item.sku.toLowerCase())
-        .toSet();
-    final availableMaterials = _rawMaterials
-        .where((material) => ownedSkus.contains(material.skuCode.toLowerCase()))
-        .toList();
-    int? selectedMaterial = availableMaterials.isEmpty
-        ? null
-        : availableMaterials.first.id;
+    int? packagingTypeId = _packagingTypes
+        .where((type) => _firstRollMaterialId(type.id) != null)
+        .firstOrNull
+        ?.id;
+    int? rawMaterialId = _firstRollMaterialId(packagingTypeId);
+    String? sku = _rollSkuOptionsFor(packagingTypeId, rawMaterialId)
+        .firstOrNull
+        ?.sku;
+    String? submissionError;
 
     try {
-      final saved = await showDialog<bool>(
+      final createdRoll = await showDialog<InventoryRollModel>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: const Text('Register New Roll'),
-            content: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * .48,
-                maxWidth: 420,
+          builder: (context, setDialogState) {
+            final materialOptions = materialOptionsFor(
+              packagingTypeId,
+              _rawMaterials,
+            );
+            final skuOptions = _rollSkuOptionsFor(
+              packagingTypeId,
+              rawMaterialId,
+            );
+            final selectedItem = _inventoryItems
+                .where((item) => item.sku == sku)
+                .firstOrNull;
+            final selectedMaterial = selectedItem == null
+                ? null
+                : materialById(_rawMaterials, selectedItem.rawMaterialId);
+            final currentStock = selectedItem?.stockLevel ?? 0;
+            final enteredQuantity = int.tryParse(quantity.text.trim()) ?? 0;
+            final rollIdentifier = _buildRollIdentifier(
+              selectedItem?.sku,
+              identifierNumber.text,
+            );
+            return AlertDialog(
+              scrollable: true,
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
               ),
-              child: Form(
-                key: formKey,
-                child: SingleChildScrollView(
+              title: const Text('Register New Roll'),
+              content: SizedBox(
+                width: 360,
+                child: Form(
+                  key: formKey,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _textField(identifier, 'Roll Identifier', required: true),
-                      _numberField(quantity, 'Roll Quantity', decimal: true),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: EdgeInsets.only(bottom: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: packagingTypeId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Packaging Type',
+                        ),
+                        items: _packagingTypes
+                            .map(
+                              (packaging) => DropdownMenuItem<int>(
+                                value: packaging.id,
+                                child: Text(
+                                  packaging.name,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) => setDialogState(() {
+                          packagingTypeId = value;
+                          rawMaterialId = _firstRollMaterialId(value);
+                          sku = _rollSkuOptionsFor(value, rawMaterialId)
+                              .firstOrNull
+                              ?.sku;
+                          identifierNumber.clear();
+                          submissionError = null;
+                        }),
+                        validator: (value) => value == null
+                            ? 'Select a packaging type.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: rawMaterialId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Raw Material',
+                        ),
+                        items: materialOptions
+                            .map(
+                              (material) => DropdownMenuItem<int>(
+                                value: material.id,
+                                child: Text(
+                                  '${material.name} (${material.materialCode})',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: packagingTypeId == null
+                            ? null
+                            : (value) => setDialogState(() {
+                                rawMaterialId = value;
+                                sku = _rollSkuOptionsFor(
+                                  packagingTypeId,
+                                  value,
+                                ).firstOrNull?.sku;
+                                identifierNumber.clear();
+                                submissionError = null;
+                              }),
+                        validator: (value) => value == null
+                            ? 'Select a raw material.'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: skuOptions.any((item) => item.sku == sku)
+                            ? sku
+                            : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(labelText: 'SKU Number'),
+                        items: skuOptions
+                            .map(
+                              (item) => DropdownMenuItem<String>(
+                                value: item.sku,
+                                child: Text(
+                                  '${_skuNumberLabel(item)} '
+                                  '(${item.stockLevel} units in stock)',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: skuOptions.isEmpty
+                            ? null
+                            : (value) => setDialogState(() {
+                                sku = value;
+                                identifierNumber.clear();
+                                submissionError = null;
+                              }),
+                        validator: (value) => value == null
+                            ? 'Select an SKU number in stock.'
+                            : null,
+                      ),
+                      if (selectedItem != null) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
                           child: Text(
-                            'Cannot exceed current stock.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                            'SKU preview: ${selectedItem.sku}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.mutedText,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: identifierNumber,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setDialogState(() {
+                          submissionError = null;
+                        }),
+                        decoration: InputDecoration(
+                          labelText: 'Roll Identifier',
+                          hintText: 'e.g. 01',
+                          prefixText: selectedItem == null
+                              ? null
+                              : 'ROLL-${selectedItem.sku}-',
+                        ),
+                        validator: (value) {
+                          final number = value?.trim() ?? '';
+                          final parsed = int.tryParse(number);
+                          if (!RegExp(r'^\d{1,6}$').hasMatch(number) ||
+                              parsed == null ||
+                              parsed <= 0) {
+                            return 'Enter a roll number greater than zero.';
+                          }
+                          if (_rolls.any(
+                            (roll) =>
+                                roll.rollIdentifier.toUpperCase() ==
+                                rollIdentifier.toUpperCase(),
+                          )) {
+                            return 'This roll number is already registered for this SKU.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: quantity,
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => setDialogState(() {
+                            submissionError = null;
+                          }),
+                          decoration: const InputDecoration(
+                            labelText: 'Roll Quantity',
+                            hintText: 'Enter quantity',
+                          ),
+                          validator: (value) {
+                            final parsed = int.tryParse(value?.trim() ?? '');
+                            if (parsed == null || parsed <= 0) {
+                              return 'Roll quantity must be greater than zero.';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          selectedMaterial == null
+                              ? 'Select an SKU in stock.'
+                              : enteredQuantity > 0
+                              ? 'Stock after registration: '
+                                  '${currentStock + enteredQuantity} units '
+                                  '(currently $currentStock)'
+                              : 'Current stock: $currentStock units. '
+                                  'Registering this roll adds to stock.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.mutedText,
                           ),
                         ),
                       ),
-                      if (availableMaterials.isEmpty)
-                        const Align(
+                        TextFormField(controller: batch, maxLength: 80,
+                          decoration: const InputDecoration(labelText: 'Batch identifier'),
+                          validator: (value) => (value ?? '').trim().isEmpty ? 'Enter the batch identifier.' : null),
+                        if (submissionError != null) ...[
+                        const SizedBox(height: 12),
+                        Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'Create stock for this account before registering a roll.',
+                            submissionError!,
+                            style: const TextStyle(color: Colors.redAccent),
                           ),
-                        )
-                      else
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedMaterial,
-                          decoration: const InputDecoration(
-                            labelText: 'Raw Material',
-                          ),
-                          items: availableMaterials
-                              .map(
-                                (material) => DropdownMenuItem<int>(
-                                  value: material.id,
-                                  child: Text(
-                                    '${material.skuCode} - ${material.name}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) =>
-                              setDialogState(() => selectedMaterial = value),
-                          validator: (value) =>
-                              value == null ? 'Select a raw material.' : null,
                         ),
+                      ],
                     ],
                   ),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  if (!formKey.currentState!.validate()) return;
-                  try {
-                    await _apiService.createRoll(
-                      rollIdentifier: identifier.text.trim(),
-                      quantity: double.parse(quantity.text),
-                      rawMaterialId: selectedMaterial!,
-                    );
-                    if (dialogContext.mounted) {
-                      Navigator.pop(dialogContext, true);
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    if (selectedMaterial == null) {
+                      setDialogState(() => submissionError =
+                          'Select an inventory SKU before registering a roll.');
+                      return;
                     }
-                  } on ApiException catch (exception) {
-                    if (dialogContext.mounted) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text(exception.message)),
+                    try {
+                      final roll = await _apiService.createRoll(
+                        rollIdentifier: rollIdentifier,
+                        batchId: batch.text.trim(),
+                        quantity: double.parse(quantity.text),
+                        rawMaterialId: selectedMaterial.id,
                       );
+                      if (dialogContext.mounted) {
+                        Navigator.pop(dialogContext, roll);
+                      }
+                    } on ApiException catch (exception) {
+                      if (dialogContext.mounted) {
+                        setDialogState(() => submissionError = exception.message);
+                      }
                     }
-                  }
-                },
-                child: const Text('Register Roll'),
-              ),
-            ],
-          ),
+                  },
+                  child: const Text('Register Roll'),
+                ),
+              ],
+            );
+          },
         ),
       );
-      if (saved == true && mounted) await _fetchData();
+      if (createdRoll != null && mounted) {
+        await _fetchData();
+        if (mounted) await _showRollQr(createdRoll);
+      }
     } finally {
-      identifier.dispose();
-      quantity.dispose();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        identifierNumber.dispose();
+        quantity.dispose();
+        batch.dispose();
+      });
     }
+  }
+
+  List<RawMaterialModel> _rollRegistrableMaterials() {
+    return _rawMaterials
+        .where(
+          (material) => _inventoryItems.any(
+            (item) =>
+                item.sku.toLowerCase() == material.skuCode.toLowerCase() &&
+                item.stockLevel > 0,
+          ),
+        )
+        .toList();
+  }
+
+  int? _firstRollMaterialId(int? packagingTypeId) => materialOptionsFor(
+    packagingTypeId,
+    _rawMaterials,
+  ).where((material) => _rollSkuOptionsFor(packagingTypeId, material.id).isNotEmpty)
+      .firstOrNull
+      ?.id;
+
+  List<InventoryItemModel> _rollSkuOptionsFor(
+    int? packagingTypeId,
+    int? rawMaterialId,
+  ) {
+    final selectedMaterial = materialById(_rawMaterials, rawMaterialId);
+    if (packagingTypeId == null || selectedMaterial == null) return const [];
+
+    final options = _inventoryItems.where((item) {
+      final itemMaterial = materialById(_rawMaterials, item.rawMaterialId);
+      return item.stockLevel > 0 &&
+          item.packagingTypeId == packagingTypeId &&
+          itemMaterial?.materialCode == selectedMaterial.materialCode &&
+          itemMaterial != null;
+    }).toList();
+    options.sort((left, right) => (left.skuNumber ?? 0).compareTo(right.skuNumber ?? 0));
+    return options;
+  }
+
+  String _skuNumberLabel(InventoryItemModel item) {
+    final number = item.skuNumber;
+    if (number != null) return number.toString().padLeft(3, '0');
+    return item.sku.split('-').last;
+  }
+
+  String _buildRollIdentifier(String? selectedSku, String numberText) {
+    final parsed = int.tryParse(numberText.trim());
+    final suffix = parsed == null ? '??' : parsed.toString().padLeft(2, '0');
+    return 'ROLL-${selectedSku ?? 'SKU'}-$suffix';
   }
 
   Future<void> _showItemRolls(InventoryItemModel item) async {
@@ -225,7 +461,7 @@ class _StockViewState extends State<StockView> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Created Rolls • ${item.sku}',
+                        'Created Rolls â€¢ ${item.sku}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -257,11 +493,21 @@ class _StockViewState extends State<StockView> {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.inventory_2_outlined),
-                          title: Text(roll.rollIdentifier),
+                          title: Text('${roll.currentQuantity} units'),
                           subtitle: Text(
-                            'Quantity ${roll.currentQuantity} / ${roll.initialQuantity}',
+                            'Original quantity: ${roll.initialQuantity} units',
                           ),
-                          trailing: Text(roll.status),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(roll.status),
+                              IconButton(
+                                tooltip: 'Show QR code',
+                                icon: const Icon(Icons.qr_code_2),
+                                onPressed: () => _showRollQr(roll),
+                              ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -274,123 +520,222 @@ class _StockViewState extends State<StockView> {
     );
   }
 
+  Future<void> _showRollQr(InventoryRollModel roll) {
+    final material = materialById(_rawMaterials, roll.rawMaterialId);
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Roll QR code'),
+        content: SizedBox(
+          width: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This QR code is created automatically for this physical roll. '
+                'Scan it to load this roll and its remaining quantity.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FutureBuilder<Uint8List>(
+                future: _apiService.fetchRollQr(roll.rollIdentifier),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const SizedBox.square(
+                      dimension: 220,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'The QR code could not be loaded. Check the server connection and try again.',
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+                  return Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(12),
+                    child: Image.memory(
+                      snapshot.data!,
+                      width: 220,
+                      height: 220,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'QR code for this inventory roll',
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${material?.skuCode ?? 'Selected SKU'} â€¢ '
+                '${roll.currentQuantity} units remaining',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.mutedText,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showItemForm([InventoryItemModel? item]) async {
-    final sku = TextEditingController(text: item?.sku ?? '');
-    final name = TextEditingController(text: item?.name ?? '');
-    final category = TextEditingController(text: item?.category ?? 'Metal');
-    final stock = TextEditingController(text: '${item?.stockLevel ?? 100}');
+    final skuNumber = TextEditingController(
+      text: item?.skuNumber?.toString() ?? '',
+    );
+    final stock = TextEditingController(
+      text: item == null ? '' : item.stockLevel.toString(),
+    );
     final reorder = TextEditingController(
-      text: '${item?.reorderThreshold ?? 50}',
+      text: item == null ? '' : item.reorderThreshold.toString(),
     );
     final formKey = GlobalKey<FormState>();
+    int? packagingTypeId = item?.packagingTypeId;
+    int? rawMaterialId = item?.rawMaterialId;
 
     try {
       final saved = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(item == null ? 'Add Stock Item' : 'Edit Stock Item'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            scrollable: true,
+            title: Text(item == null ? 'Add Stock Item' : 'Edit Stock Item'),
+            content: Form(
+              key: formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _textField(sku, 'SKU Code', required: true),
-                  _textField(name, 'Item Name', required: true),
-                  _textField(category, 'Category'),
-                  _numberField(stock, 'Current Stock'),
-                  _numberField(reorder, 'Reorder Level'),
+                  if (item == null)
+                    CatalogSkuFields(
+                      packagingTypes: _packagingTypes,
+                      rawMaterials: _rawMaterials,
+                      packagingTypeId: packagingTypeId,
+                      rawMaterialId: rawMaterialId,
+                      skuNumberController: skuNumber,
+                      onPackagingTypeChanged: (value) => setDialogState(() {
+                        packagingTypeId = value;
+                        rawMaterialId = null;
+                        skuNumber.clear();
+                      }),
+                      onRawMaterialChanged: (value) => setDialogState(() {
+                        rawMaterialId = value;
+                        skuNumber.clear();
+                      }),
+                      onSkuNumberChanged: (_) => setDialogState(() {}),
+                    )
+                  else
+                    _catalogueSummary(item),
+                  const SizedBox(height: 12),
+                  _numberField(
+                    stock,
+                    'Current Stock',
+                    hintText: 'Enter current stock',
+                  ),
+                  _numberField(
+                    reorder,
+                    'Reorder Level',
+                    hintText: 'Enter reorder level',
+                  ),
                 ],
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (!formKey.currentState!.validate()) return;
+                  try {
+                    if (item == null) {
+                      await _apiService.createItem(
+                        packagingTypeId: packagingTypeId!,
+                        rawMaterialId: rawMaterialId!,
+                        skuNumber: int.parse(skuNumber.text.trim()),
+                        stockLevel: int.parse(stock.text),
+                        reorderThreshold: int.parse(reorder.text),
+                      );
+                    } else {
+                      await _apiService.updateItem(
+                        InventoryItemModel(
+                          id: item.id,
+                          sku: item.sku,
+                          name: item.name,
+                          category: item.category,
+                          packagingTypeId: item.packagingTypeId,
+                          rawMaterialId: item.rawMaterialId,
+                          skuNumber: item.skuNumber,
+                          stockLevel: int.parse(stock.text),
+                          reorderThreshold: int.parse(reorder.text),
+                        ),
+                      );
+                    }
+                    if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                  } on ApiException catch (exception) {
+                    if (dialogContext.mounted) {
+                      ScaffoldMessenger.of(
+                        dialogContext,
+                      ).showSnackBar(SnackBar(content: Text(exception.message)));
+                    }
+                  }
+                },
+                child: Text(item == null ? 'Create Item' : 'Save Changes'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                try {
-                  final values = (
-                    sku: sku.text.trim(),
-                    name: name.text.trim(),
-                    category: category.text.trim(),
-                    stock: int.parse(stock.text),
-                    reorder: int.parse(reorder.text),
-                  );
-                  if (item == null) {
-                    await _apiService.createItem(
-                      sku: values.sku,
-                      name: values.name,
-                      category: values.category,
-                      stockLevel: values.stock,
-                      reorderThreshold: values.reorder,
-                    );
-                  } else {
-                    await _apiService.updateItem(
-                      InventoryItemModel(
-                        id: item.id,
-                        sku: values.sku,
-                        name: values.name,
-                        category: values.category,
-                        stockLevel: values.stock,
-                        reorderThreshold: values.reorder,
-                      ),
-                    );
-                  }
-                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
-                } on ApiException catch (exception) {
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(
-                      dialogContext,
-                    ).showSnackBar(SnackBar(content: Text(exception.message)));
-                  }
-                }
-              },
-              child: Text(item == null ? 'Create Item' : 'Save Changes'),
-            ),
-          ],
         ),
       );
       if (saved == true && mounted) await _fetchData();
     } finally {
-      sku.dispose();
-      name.dispose();
-      category.dispose();
-      stock.dispose();
-      reorder.dispose();
+      // AlertDialog removes its text fields on the next frame. Disposing the
+      // controllers now causes Flutter to rebuild those fields with disposed
+      // controllers when the dialog is dismissed (including via Cancel).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        skuNumber.dispose();
+        stock.dispose();
+        reorder.dispose();
+      });
     }
   }
 
-  Widget _textField(
-    TextEditingController controller,
-    String label, {
-    bool required = false,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: TextFormField(
-      controller: controller,
-      decoration: InputDecoration(labelText: label),
-      validator: required
-          ? (value) => value == null || value.trim().isEmpty
-                ? '$label is required.'
-                : null
-          : null,
-    ),
-  );
+  Widget _catalogueSummary(InventoryItemModel item) {
+    final packaging = packagingById(_packagingTypes, item.packagingTypeId);
+    final material = materialById(_rawMaterials, item.rawMaterialId);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.inventory_2_outlined),
+      title: Text(item.sku),
+      subtitle: Text(
+        '${packaging?.name ?? item.category} â€¢ ${material?.name ?? item.name}',
+      ),
+    );
+  }
 
   Widget _numberField(
     TextEditingController controller,
     String label, {
     bool decimal = false,
+    String? hintText,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: TextFormField(
       controller: controller,
       keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: label, hintText: hintText),
       validator: (value) {
         final parsed = decimal
             ? double.tryParse(value ?? '')
@@ -428,8 +773,9 @@ class _StockViewState extends State<StockView> {
       if (mounted) await _fetchData();
     } on ApiException catch (exception) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(exception.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.message)));
       }
     }
   }
@@ -440,18 +786,6 @@ class _StockViewState extends State<StockView> {
           alert.sku == sku &&
           alert.workerId.contains('Predictive') &&
           alert.status != 'Resolved',
-    );
-  }
-
-  bool _hasActiveAlert(String sku) {
-    return _alerts.any(
-      (alert) =>
-          alert.sku.toLowerCase() == sku.toLowerCase() &&
-          const [
-            'Pending',
-            'Processing',
-            'Acknowledged',
-          ].contains(alert.status),
     );
   }
 
@@ -481,20 +815,7 @@ class _StockViewState extends State<StockView> {
           appBar: AppBar(
             backgroundColor: darkBg,
             elevation: 0,
-            leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back,
-                color: AppColors.secondaryText,
-                size: 24,
-              ),
-              onPressed: () {
-                if (widget.onBack != null) {
-                  widget.onBack!();
-                } else if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                }
-              },
-            ),
+            automaticallyImplyLeading: false,
             centerTitle: true,
             title: const Text(
               'RAW MATERIALS & ITEMS',
@@ -530,12 +851,14 @@ class _StockViewState extends State<StockView> {
                       'Register New Roll',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    subtitle: const Text(
-                      'Create a roll from available stock',
-                      style: TextStyle(color: AppColors.mutedText),
+                    subtitle: Text(
+                      _rollRegistrableMaterials().isEmpty
+                          ? 'Add an inventory SKU before registering a roll'
+                          : 'Receive a physical roll into stock',
+                      style: const TextStyle(color: AppColors.mutedText),
                     ),
                     trailing: FilledButton.icon(
-                      onPressed: _inventoryItems.isEmpty
+                      onPressed: _rollRegistrableMaterials().isEmpty
                           ? null
                           : _showRegisterRollForm,
                       icon: const Icon(Icons.add),
@@ -584,10 +907,7 @@ class _StockViewState extends State<StockView> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: accent,
-                        width: 1.5,
-                      ),
+                      borderSide: const BorderSide(color: accent, width: 1.5),
                     ),
                   ),
                 ),
@@ -810,31 +1130,15 @@ class _StockViewState extends State<StockView> {
                 runSpacing: 2,
                 children: [
                   if (isLowStock && widget.onTriggerAi != null)
-                    _hasActiveAlert(item.sku)
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 8),
-                            child: Text(
-                              'In Progress',
-                              style: TextStyle(
-                                color: predictiveWarningColor,
-                                fontSize: 11,
-                              ),
-                            ),
-                          )
-                        : IconButton(
-                            tooltip: 'Reorder via AI',
-                            onPressed: widget.triggeringAi
-                                ? null
-                                : () async {
-                                    await widget.onTriggerAi!(item.sku, 2000);
-                                    if (mounted) await _fetchData();
-                                  },
-                            icon: const Icon(
-                              Icons.auto_awesome,
-                              color: AppColors.violet,
-                              size: 18,
-                            ),
-                          ),
+                    IconButton(
+                      tooltip: 'Analyze low-stock data',
+                      onPressed: () => widget.onTriggerAi!(item.sku, 0),
+                      icon: const Icon(
+                        Icons.auto_awesome,
+                        color: AppColors.violet,
+                        size: 18,
+                      ),
+                    ),
                   IconButton(
                     tooltip: 'View created rolls',
                     onPressed: () => _showItemRolls(item),

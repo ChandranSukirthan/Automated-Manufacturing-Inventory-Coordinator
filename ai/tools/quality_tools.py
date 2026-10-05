@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ai.schemas.tool_contracts import QuarantineRecommendation, checked_output
 
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Protocol
@@ -69,23 +70,29 @@ def check_related_inventory(
         from ai.core.config import settings
         from psycopg import connect
 
-        with connect(settings.database_url) as owned_connection:
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
             return _check_related_inventory(normalized_batch_id, owned_connection)
     return _check_related_inventory(normalized_batch_id, connection)
 
 
+@checked_output(QuarantineRecommendation)
 def recommend_quarantine(
     defect: Mapping[str, Any],
     connection: Connection[Any] | None = None,
     related_inventory: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combine defect and inventory facts into a read-only recommendation."""
+    if connection is None and related_inventory is None:
+        from ai.core.config import settings
+        from psycopg import connect
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
+            return recommend_quarantine(defect, owned_connection)
     context = analyze_defect_context(defect, connection)
     inventory = related_inventory or _inventory_for_defect(defect, context, connection)
     if not context["batchId"]:
         context["batchId"] = inventory["batchId"]
         if connection is not None and context["severity"].upper() == "MEDIUM":
-            context["quarantineRequired"] = _has_previous_severe_defect(connection, context["batchId"]) or _contains_serious_term(str(defect.get("description", "")))
+            context["quarantineRequired"] = any(_has_previous_severe_defect(connection, batch) for batch in (inventory.get("batchIds") or [context["batchId"]])) or _contains_serious_term(str(defect.get("description", "")))
     result = {
         "batchId": context["batchId"],
         "quarantineRequired": context["quarantineRequired"],
@@ -123,7 +130,7 @@ def _inventory_by_sku(
         from ai.core.config import settings
         from psycopg import connect
 
-        with connect(settings.database_url) as owned_connection:
+        with connect(settings.database_url, connect_timeout=3, options="-c statement_timeout=5000 -c default_transaction_read_only=on") as owned_connection:
             return _query_inventory_by_sku(sku_code, selected_inventory, owned_connection)
     return _query_inventory_by_sku(sku_code, selected_inventory, connection)
 
@@ -143,7 +150,7 @@ def _query_inventory_by_sku(
         )
         params: tuple[Any, ...] = (sku_code,)
         if selected_inventory:
-            query += ' AND i."Id" = ANY(%s)'
+            query += ' AND i."RollIdentifier" = ANY(%s)'
             params += (selected_inventory,)
         query += ' ORDER BY i."Id"'
         cursor.execute(query, params)
@@ -151,12 +158,19 @@ def _query_inventory_by_sku(
 
     if not rows:
         raise ValueError("No inventory rolls were found for the selected SKU")
+    if selected_inventory and len(rows) != len(set(selected_inventory)):
+        raise ValueError("Some selected physical roll identifiers do not belong to this SKU")
+    batches = sorted({str(row[5]).strip() for row in rows if row[5]})
+    if not batches:
+        raise ValueError("The inventory rolls have no batch identity; reconcile missing batches first")
+    batch_id = batches[0] if len(batches) == 1 else f"MULTI-{sku_code.upper()}"
     return {
-        "batchId": rows[0][5],
-        "affectedInventory": [str(row[0]) for row in rows],
+        "batchId": batch_id,
+        "batchIds": batches,
+        "affectedInventory": [str(row[1]) for row in rows],
         "inventoryContext": [
             {
-                "inventoryRollId": str(row[0]),
+                "inventoryRollId": str(row[1]),
                 "rollIdentifier": row[1] or str(row[0]),
                 "rawMaterialId": row[2],
                 "rawMaterialSku": row[3],
@@ -180,7 +194,7 @@ def _check_related_inventory(
             raise ValueError(f"Batch was not found: {batch_id}")
 
         cursor.execute(
-            'SELECT "Id" FROM "InventoryRolls" WHERE "BatchId" = %s ORDER BY "Id"',
+            'SELECT "RollIdentifier" FROM "InventoryRolls" WHERE "BatchId" = %s ORDER BY "Id"',
             (batch_id,),
         )
         affected_inventory = [str(row[0]) for row in cursor.fetchall() if row[0] is not None]

@@ -1,58 +1,63 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import RoleHomeRedirect from './components/Auth/RoleHomeRedirect';
 
-import Landing from './pages/Landing';
-import Login from './pages/Auth/Login';
-import Signup from './pages/Auth/Signup';
-import OTPVerification from './pages/Auth/OTPVerification';
-import ForgotPassword from './pages/Auth/ForgotPassword';
-import ProfilePage from './pages/Profile/ProfilePage';
+const Landing = lazy(() => import('./pages/Landing'));
+const Login = lazy(() => import('./pages/Auth/Login'));
+const Signup = lazy(() => import('./pages/Auth/Signup'));
+const OTPVerification = lazy(() => import('./pages/Auth/OTPVerification'));
+const ForgotPassword = lazy(() => import('./pages/Auth/ForgotPassword'));
+const ProfilePage = lazy(() => import('./pages/Profile/ProfilePage'));
 
-// Student 2: Supply Chain Manager Pages
-import SupplyChainDashboard from './pages/Dashboard/AdminDashboard';
-import SupplierList from './pages/Suppliers/SupplierList';
-import SupplierDetail from './pages/Suppliers/SupplierDetail';
-import PurchaseOrderList from './pages/PurchaseOrders/PurchaseOrderList';
-import PurchaseOrderCreate from './pages/PurchaseOrders/PurchaseOrderCreate';
-import PurchaseOrderDetail from './pages/PurchaseOrders/PurchaseOrderDetail';
-import AiApprovals from './pages/PurchaseOrders/AiApprovals';
-import SupplierAnalytics from './pages/PurchaseOrders/SupplierAnalytics';
-import AgentWorkflowMonitor from './pages/AgentWorkflows/AgentWorkflowMonitor';
+// Supply Chain Manager pages
+const SupplyChainDashboard = lazy(() => import('./pages/Dashboard/AdminDashboard'));
+const SupplierList = lazy(() => import('./pages/Suppliers/SupplierList'));
+const SupplierDetail = lazy(() => import('./pages/Suppliers/SupplierDetail'));
+const PurchaseOrderList = lazy(() => import('./pages/PurchaseOrders/PurchaseOrderList'));
+const PurchaseOrderCreate = lazy(() => import('./pages/PurchaseOrders/PurchaseOrderCreate'));
+const PurchaseOrderDetail = lazy(() => import('./pages/PurchaseOrders/PurchaseOrderDetail'));
+const ProcurementResearch = lazy(() => import('./pages/PurchaseOrders/ProcurementResearch'));
+const AiApprovals = lazy(() => import('./pages/PurchaseOrders/AiApprovals'));
+const SupplierAnalytics = lazy(() => import('./pages/PurchaseOrders/SupplierAnalytics'));
+const AgentWorkflowMonitor = lazy(() => import('./pages/AgentWorkflows/AgentWorkflowMonitor'));
 
-// Student 3: Quality & Defect Pages
-import QualityDashboard from './pages/Dashboard/QualityDashboard';
-import DefectReportsPage from './pages/Dashboard/DefectReportsPage';
-import DefectFormPage from './pages/Dashboard/DefectFormPage';
-import DefectDetailPage from './pages/Dashboard/DefectDetailPage';
-import QuarantineManagementPage from './pages/Dashboard/QuarantineManagementPage';
-import QuarantineDetailPage from './pages/Dashboard/QuarantineDetailPage';
-import QuarantineHistoryPage from './pages/Dashboard/QuarantineHistoryPage';
-import QALayout from './components/Layout/QALayout';
+// Quality and defect pages
+const QualityDashboard = lazy(() => import('./pages/Dashboard/QualityDashboard'));
+const AiValidationPage = lazy(() => import('./pages/Dashboard/AiValidationPage'));
+const DefectReportsPage = lazy(() => import('./pages/Dashboard/DefectReportsPage'));
+const DefectFormPage = lazy(() => import('./pages/Dashboard/DefectFormPage'));
+const DefectDetailPage = lazy(() => import('./pages/Dashboard/DefectDetailPage'));
+const QuarantineManagementPage = lazy(() => import('./pages/Dashboard/QuarantineManagementPage'));
+const QuarantineDetailPage = lazy(() => import('./pages/Dashboard/QuarantineDetailPage'));
+const QuarantineHistoryPage = lazy(() => import('./pages/Dashboard/QuarantineHistoryPage'));
+import RoleLayout from './components/Layout/RoleLayout';
 
-// Student 4: Production & Equipment Pages
-import ProductionDashboard from './pages/Production/ProductionDashboard';
-import MachineList from './pages/Production/MachineList';
-import MachineDetail from './pages/Production/MachineDetail';
-import MaintenancePage from './pages/Production/MaintenancePage';
-import ShiftPage from './pages/Production/ShiftPage';
+// Production and equipment pages
+const ProductionDashboard = lazy(() => import('./pages/Production/ProductionDashboard'));
+const MachineList = lazy(() => import('./pages/Production/MachineList'));
+const MachineDetail = lazy(() => import('./pages/Production/MachineDetail'));
+const MaintenancePage = lazy(() => import('./pages/Production/MaintenancePage'));
+const ShiftPage = lazy(() => import('./pages/Production/ShiftPage'));
 
-// Student 4: System Administration Pages (ITAdmin)
-import ITAdminDashboard from './pages/Admin/AdminDashboard';
-import UsersPage from './pages/Admin/UsersPage';
-import RolesPage from './pages/Admin/RolesPage';
-import AuditLogsPage from './pages/Admin/AuditLogsPage';
-import AgentWorkflowsPage from './pages/Admin/AgentWorkflowsPage';
-import SystemHealthPage from './pages/Admin/SystemHealthPage';
+// System administration pages
+const ITAdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
+const UsersPage = lazy(() => import('./pages/Admin/UsersPage'));
+const RolesPage = lazy(() => import('./pages/Admin/RolesPage'));
+const AuditLogsPage = lazy(() => import('./pages/Admin/AuditLogsPage'));
+const AgentWorkflowsPage = lazy(() => import('./pages/Admin/AgentWorkflowsPage'));
+const SystemHealthPage = lazy(() => import('./pages/Admin/SystemHealthPage'));
 
 // Floor Worker Dashboard
-import WorkerDashboard from './pages/Dashboard/WorkerDashboard';
+const WorkerDashboard = lazy(() => import('./pages/Dashboard/WorkerDashboard'));
+const ReplenishmentRequestPage = lazy(() => import('./pages/Worker/ReplenishmentRequestPage'));
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <Suspense fallback={<div role="status" className="p-6 text-center">Loading page…</div>}>
         <Routes>
           {/* Public Authentication & Landing Routes */}
           <Route path="/" element={<Landing />} />
@@ -70,11 +75,11 @@ function App() {
             }
           />
 
-          {/* Student 2: Supply Chain Manager Routes */}
+          {/* Supply Chain Manager routes */}
           <Route
             path="/dashboard/manager"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
                 <SupplyChainDashboard />
               </ProtectedRoute>
             }
@@ -82,15 +87,15 @@ function App() {
           <Route
             path="/dashboard/admin"
             element={
-              <ProtectedRoute>
-                <SupplyChainDashboard />
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
+                <RoleHomeRedirect />
               </ProtectedRoute>
             }
           />
           <Route
             path="/purchase-orders"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
                 <PurchaseOrderList />
               </ProtectedRoute>
             }
@@ -98,15 +103,31 @@ function App() {
           <Route
             path="/purchase-orders/create"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager']}>
                 <PurchaseOrderCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/purchase-orders/procurement"
+            element={
+              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin', 3]}>
+                <ProcurementResearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/procurement-research"
+            element={
+              <ProtectedRoute allowedRoles={[1, 'SupplyChainManager', 'ITAdmin', 3]}>
+                <ProcurementResearch />
               </ProtectedRoute>
             }
           />
           <Route
             path="/purchase-orders/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
                 <PurchaseOrderDetail />
               </ProtectedRoute>
             }
@@ -114,7 +135,7 @@ function App() {
           <Route
             path="/suppliers"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
                 <SupplierList />
               </ProtectedRoute>
             }
@@ -122,7 +143,7 @@ function App() {
           <Route
             path="/suppliers/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
                 <SupplierDetail />
               </ProtectedRoute>
             }
@@ -146,7 +167,7 @@ function App() {
           <Route
             path="/purchase-orders/analytics"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
                 <SupplierAnalytics />
               </ProtectedRoute>
             }
@@ -154,7 +175,7 @@ function App() {
           <Route
             path="/supplier-analytics"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['SupplyChainManager', 'ITAdmin']}>
                 <SupplierAnalytics />
               </ProtectedRoute>
             }
@@ -162,13 +183,13 @@ function App() {
           <Route
             path="/agent-workflows"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
                 <AgentWorkflowMonitor />
               </ProtectedRoute>
             }
           />
 
-          {/* Student 1: Floor Worker Inventory & Stock Tracking Routes */}
+          {/* Floor Worker inventory and stock-tracking routes */}
           <Route
             path="/dashboard/worker"
             element={
@@ -225,34 +246,44 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/worker/replenishment"
+            element={
+              <ProtectedRoute allowedRoles={[0, 'FloorWorker', 'ITAdmin']}>
+                <ReplenishmentRequestPage />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Student 3: Quality & Defect Routes */}
+          {/* Quality and defect routes */}
           <Route element={<ProtectedRoute allowedRoles={[2, 'QualityInspector', 'ITAdmin']} />}>
-            <Route element={<QALayout />}>
+            <Route element={<RoleLayout />}>
               <Route path="/quality" element={<QualityDashboard />} />
+              <Route path="/quality/ai-validation" element={<AiValidationPage />} />
               <Route path="/quality/defects" element={<DefectReportsPage />} />
               <Route path="/quality/defects/new" element={<DefectFormPage />} />
               <Route path="/quality/defects/:id" element={<DefectDetailPage />} />
               <Route path="/quality/defects/:id/edit" element={<DefectFormPage />} />
               <Route path="/quality/quarantine" element={<QuarantineManagementPage />} />
-              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/quality/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/quality/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/dashboard/quality" element={<QualityDashboard />} />
+              <Route path="/dashboard/ai-validation" element={<AiValidationPage />} />
               <Route path="/dashboard/defects" element={<DefectReportsPage />} />
               <Route path="/dashboard/defects/new" element={<DefectFormPage />} />
               <Route path="/dashboard/defects/:id" element={<DefectDetailPage />} />
               <Route path="/dashboard/defects/:id/edit" element={<DefectFormPage />} />
               <Route path="/dashboard/quarantine" element={<QuarantineManagementPage />} />
-              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
               <Route path="/dashboard/quarantine/history" element={<QuarantineHistoryPage />} />
+              <Route path="/dashboard/quarantine/:id" element={<QuarantineDetailPage />} />
             </Route>
           </Route>
 
-          {/* Student 4: Production & Equipment Routes */}
+          {/* Production and equipment routes */}
           <Route
             path="/production"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
                 <ProductionDashboard />
               </ProtectedRoute>
             }
@@ -260,7 +291,7 @@ function App() {
           <Route
             path="/machines"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'QualityInspector', 'ITAdmin']}>
                 <MachineList />
               </ProtectedRoute>
             }
@@ -268,7 +299,7 @@ function App() {
           <Route
             path="/machines/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'QualityInspector', 'ITAdmin']}>
                 <MachineDetail />
               </ProtectedRoute>
             }
@@ -276,7 +307,7 @@ function App() {
           <Route
             path="/maintenance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'QualityInspector', 'ITAdmin']}>
                 <MaintenancePage />
               </ProtectedRoute>
             }
@@ -284,13 +315,13 @@ function App() {
           <Route
             path="/shifts"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
                 <ShiftPage />
               </ProtectedRoute>
             }
           />
 
-          {/* Student 4: System Administration Routes (Strictly ITAdmin only: role 3) */}
+          {/* System administration routes (ITAdmin only) */}
           <Route
             path="/admin"
             element={
@@ -343,6 +374,7 @@ function App() {
           {/* Catch-all fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

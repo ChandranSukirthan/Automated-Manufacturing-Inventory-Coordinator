@@ -70,7 +70,7 @@ class _ManagerDashboardViewState extends State<ManagerDashboardView> {
               children: [
                 _buildMetricCard(
                   title: 'Total Material Value',
-                  value: '\$1.2M',
+                  value: 'LKR 1.2M',
                   valueColor: Colors.white,
                   cardBg: cardBg,
                 ),

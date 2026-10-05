@@ -1,3 +1,5 @@
+import { formatColomboDate, toColomboInput, fromColomboInput } from '../../utils/locale.js';
+import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
   Clock, 
@@ -9,11 +11,15 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import AdminLayout from '../../components/Layout/AdminLayout';
+import AdminLayout from '../../components/Layout/RoleLayout';
 import shiftService from '../../services/shiftService';
+import inventoryService from '../../services/inventoryService';
+import machineService from '../../services/machineService';
 
 export default function ShiftPage() {
   const [shifts, setShifts] = useState([]);
+  const [materials, setMaterials] = useState([]);
+  const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adjustingId, setAdjustingId] = useState(null);
   const [adjustmentMessage, setAdjustmentMessage] = useState('');
@@ -25,6 +31,7 @@ export default function ShiftPage() {
   const [editingShift, setEditingShift] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
+    materialSku: '', machineId: '', materialPerUnit: '',
     name: '',
     productionTarget: 10000,
     availableMaterial: 6000,
@@ -54,19 +61,28 @@ export default function ShiftPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([inventoryService.getRawMaterials(), machineService.getAll()])
+      .then(([materialData, machineData]) => { if (active) { setMaterials(materialData); setMachines(machineData); } })
+      .catch(() => { if (active) setError('Material and machine lists could not be loaded.'); });
+    return () => { active = false; };
+  }, []);
+
   const openCreateModal = () => {
     setEditingShift(null);
     const now = new Date();
     const end = new Date(now.getTime() + 8 * 60 * 60 * 1000);
 
     setFormData({
+      materialSku: '', machineId: '', materialPerUnit: '',
       name: '',
       productionTarget: 10000,
       availableMaterial: 6000,
       actualOutput: 0,
       status: 0,
-      startTime: now.toISOString().slice(0, 16),
-      endTime: end.toISOString().slice(0, 16)
+      startTime: toColomboInput(now),
+      endTime: toColomboInput(end)
     });
     setIsModalOpen(true);
   };
@@ -81,13 +97,14 @@ export default function ShiftPage() {
   const openEditModal = (shift) => {
     setEditingShift(shift);
     setFormData({
+      materialSku: shift.materialSku || '', machineId: shift.machineId || '', materialPerUnit: shift.materialPerUnit ?? '',
       name: shift.name,
       productionTarget: shift.productionTarget,
       availableMaterial: shift.availableMaterial,
       actualOutput: shift.actualOutput,
       status: parseShiftStatus(shift.status),
-      startTime: new Date(shift.startTime).toISOString().slice(0, 16),
-      endTime: new Date(shift.endTime).toISOString().slice(0, 16)
+      startTime: toColomboInput(shift.startTime),
+      endTime: toColomboInput(shift.endTime)
     });
     setIsModalOpen(true);
   };
@@ -100,13 +117,14 @@ export default function ShiftPage() {
 
     try {
       const payload = {
+        materialSku: formData.materialSku || null, machineId: formData.machineId || null, materialPerUnit: formData.materialPerUnit === '' ? null : Number(formData.materialPerUnit),
         name: formData.name,
         productionTarget: parseInt(formData.productionTarget, 10),
         availableMaterial: parseInt(formData.availableMaterial, 10),
         actualOutput: parseInt(formData.actualOutput, 10),
         status: parseInt(formData.status, 10),
-        startTime: new Date(formData.startTime).toISOString(),
-        endTime: new Date(formData.endTime).toISOString()
+        startTime: fromColomboInput(formData.startTime),
+        endTime: fromColomboInput(formData.endTime)
       };
 
       if (editingShift) {
@@ -251,7 +269,7 @@ export default function ShiftPage() {
                           <span>{shift.name}</span>
                         </div>
                         <span className="block text-xs text-slate-400 font-normal mt-0.5">
-                          {new Date(shift.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(shift.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatColomboDate(shift.startTime, 'toLocaleTimeString')} - {formatColomboDate(shift.endTime, 'toLocaleTimeString')}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">{getStatusBadge(shift.status)}</td>
@@ -312,7 +330,7 @@ export default function ShiftPage() {
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <ModalOverlay className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -328,6 +346,23 @@ export default function ShiftPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+              <div className="grid grid-cols-1 gap-3">
+                <label className="text-sm text-slate-300">Production material
+                  <select aria-label="Production material" className="w-full bg-slate-950 p-2 rounded" value={formData.materialSku} onChange={e => setFormData({ ...formData, materialSku: e.target.value })}>
+                    <option value="">Legacy capacity only</option>
+                    {materials.map(m => <option key={m.id} value={m.skuCode}>{m.name} ({m.skuCode})</option>)}
+                  </select>
+                </label>
+                <label className="text-sm text-slate-300">Material used per finished unit
+                  <input aria-label="Material used per finished unit" type="number" min="0.000001" step="any" required={!!formData.materialSku} className="w-full bg-slate-950 p-2 rounded" value={formData.materialPerUnit} onChange={e => setFormData({ ...formData, materialPerUnit: e.target.value })} />
+                </label>
+                <label className="text-sm text-slate-300">Production machine
+                  <select aria-label="Production machine" className="w-full bg-slate-950 p-2 rounded" value={formData.machineId} onChange={e => setFormData({ ...formData, machineId: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </label>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Shift Name *</label>
                 <input
@@ -340,7 +375,7 @@ export default function ShiftPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Production Target *</label>
                   <input
@@ -366,7 +401,7 @@ export default function ShiftPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Actual Output</label>
                   <input
@@ -392,7 +427,7 @@ export default function ShiftPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Start Time *</label>
                   <input
@@ -418,7 +453,7 @@ export default function ShiftPage() {
 
               <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-xs text-slate-400">
                 <span className="font-semibold text-white block mb-0.5">Automated Production Adjustment Rule:</span>
-                If Available Material &lt; Target, the backend will automatically constrain Adjusted Output to the available material.
+                With a material conversion, adjusted output is limited by available material divided by material used per finished unit. Legacy capacity records use the existing unit-based calculation.
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
@@ -439,7 +474,7 @@ export default function ShiftPage() {
               </div>
             </form>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </AdminLayout>
   );

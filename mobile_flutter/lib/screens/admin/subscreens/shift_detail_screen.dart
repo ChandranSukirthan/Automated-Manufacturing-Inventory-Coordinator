@@ -99,9 +99,7 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
                 const SizedBox(height: 16),
                 MetricGauge(
                   label: 'Shift Target Quota',
-                  value: _currentShift.adjustedOutput > 0
-                      ? _currentShift.adjustedOutput
-                      : _currentShift.targetOutput,
+                  value: _currentShift.adjustedOutput,
                   maxValue: _currentShift.targetOutput > 0 ? _currentShift.targetOutput : 100,
                   unit: ' units',
                 ),
@@ -123,8 +121,8 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 _specRow('Shift ID', _currentShift.id),
-                _specRow('Scheduled Start', _currentShift.startTime.toLocal().toString().split('.')[0]),
-                _specRow('Scheduled End', _currentShift.endTime.toLocal().toString().split('.')[0]),
+                _specRow('Scheduled Start', _currentShift.startTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]),
+                _specRow('Scheduled End', _currentShift.endTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]),
                 _specRow('Base Quota', '${_currentShift.targetOutput.toInt()} units'),
                 _specRow('Adjusted Quota', '${_currentShift.adjustedOutput.toInt()} units'),
                 if (_currentShift.notes != null && _currentShift.notes!.isNotEmpty)

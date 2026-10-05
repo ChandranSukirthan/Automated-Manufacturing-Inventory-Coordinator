@@ -1,8 +1,10 @@
 import logging
 import httpx
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
 from ai.config import INVENTORY_API_URL, API_TIMEOUT_SECONDS
+from ai.core.request_context import inventory_api_headers
 from ai.schemas.inventory_schemas import (
     InventoryLevelsInput,
     InventoryLevelsOutput,
@@ -16,54 +18,16 @@ from ai.schemas.inventory_schemas import (
 
 logger = logging.getLogger("amic_agentic_ai.inventory_tools")
 
-# Deterministic reference catalog for testing & offline resilience
-STATIC_CATALOG: Dict[str, Dict[str, Any]] = {
-    "RM001": {
-        "currentStock": 350.0,
-        "minimumStock": 200.0,
-        "maximumStock": 1000.0,
-        "dailyBurn": 80.0,
-        "leadTime": 3.0,
-    },
-    "RM-STEEL-001": {
-        "currentStock": 350.0,
-        "minimumStock": 200.0,
-        "maximumStock": 1000.0,
-        "dailyBurn": 80.0,
-        "leadTime": 3.0,
-    },
-    "RM-ALUM-002": {
-        "currentStock": 150.0,
-        "minimumStock": 100.0,
-        "maximumStock": 800.0,
-        "dailyBurn": 25.0,
-        "leadTime": 5.0,
-    },
-    "RM-POLY-003": {
-        "currentStock": 850.0,
-        "minimumStock": 1000.0,
-        "maximumStock": 5000.0,
-        "dailyBurn": 180.0,
-        "leadTime": 4.0,
-    },
-    "LOW_STOCK_TEST": {
-        "currentStock": 50.0,
-        "minimumStock": 200.0,
-        "maximumStock": 1000.0,
-        "dailyBurn": 80.0,
-        "leadTime": 3.0,
-    }
-}
-
-
 def _normalize_material_id(raw_id: str) -> str:
     """Sanitize and normalize material identifier against injection and formatting bugs."""
     if not raw_id:
-        return "RM001"
+        raise ValueError("A material ID is required.")
     cleaned = str(raw_id).strip().upper()
-    # Remove potentially dangerous characters
-    cleaned = "".join(c for c in cleaned if c.isalnum() or c in ("-", "_"))
-    return cleaned if cleaned else "RM001"
+    if len(cleaned) > 100 or any(not (c.isascii() and (c.isalnum() or c in ("-", "_"))) for c in cleaned):
+        raise ValueError("Invalid material identifier.")
+    if not cleaned:
+        raise ValueError("A material ID is required.")
+    return cleaned
 
 
 # ── TOOL 1: get_inventory_levels() ─────────────────────────────────────────
@@ -78,68 +42,36 @@ def get_inventory_levels(materialId: str) -> Dict[str, Any]:
     safe_id = _normalize_material_id(materialId)
     logger.info(f"[TOOL 1] Executing get_inventory_levels for: {safe_id}")
 
-    # 1. Attempt live query to ASP.NET Core Web API
-    try:
-        with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
-            resp = client.get(INVENTORY_API_URL)
-            if resp.status_code == 200:
-                items = resp.json()
-                for item in items:
-                    sku = str(item.get("sku", "")).upper()
-                    item_id = str(item.get("id", ""))
-                    if safe_id in (sku, item_id) or safe_id.replace("-", "") in sku.replace("-", ""):
-                        stock = float(item.get("stockLevel", 350))
-                        min_stock = float(item.get("reorderThreshold", 200))
-                        max_stock = float(item.get("maximumStock", min_stock * 5))
-                        
-                        out = InventoryLevelsOutput(
-                            materialId=safe_id,
-                            currentStock=stock,
-                            minimumStock=min_stock,
-                            maximumStock=max_stock,
-                        )
-                        return out.model_dump()
-    except Exception as ex:
-        logger.warning(f"[TOOL 1] Backend API unreachable ({ex}). Checking direct database.")
-
-    # 2. Attempt direct query to PostgreSQL RawMaterials table
-    try:
-        import psycopg
-        from ai.core.config import settings
-        with psycopg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            dbname=settings.DB_NAME,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            connect_timeout=2
-        ) as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT "SkuCode", "Name", "ReorderThreshold" FROM "RawMaterials" WHERE UPPER("SkuCode") = %s OR UPPER("SkuCode") LIKE %s', (safe_id, f"%{safe_id}%"))
-                row = cur.fetchone()
-                if row:
-                    sku_code, name, threshold = row[0], row[1], float(row[2] or 200.0)
-                    cur.execute('SELECT COUNT(*) FROM "InventoryRolls" WHERE UPPER("Status") = \'AVAILABLE\';')
-                    r_count = cur.fetchone()
-                    stock = float(r_count[0] * 100.0) if (r_count and r_count[0] > 0) else float(threshold * 1.75)
-                    return InventoryLevelsOutput(
-                        materialId=sku_code,
-                        currentStock=stock,
-                        minimumStock=threshold,
-                        maximumStock=threshold * 5,
-                    ).model_dump()
-    except Exception as db_ex:
-        logger.warning(f"[TOOL 1] Direct DB query note: {db_ex}")
-
-    # 3. Resilient Deterministic Fallback (enables golden test cases and offline sandbox)
-    catalog_entry = STATIC_CATALOG.get(safe_id, STATIC_CATALOG["RM001"])
+    level = _get_live_stock_level(safe_id)
     out = InventoryLevelsOutput(
-        materialId=safe_id,
-        currentStock=catalog_entry["currentStock"],
-        minimumStock=catalog_entry["minimumStock"],
-        maximumStock=catalog_entry["maximumStock"],
+        materialId=level["skuCode"],
+        currentStock=float(level["currentStock"]),
+        minimumStock=float(level["minimumStock"]),
+        maximumStock=float(level["maximumStock"]),
     )
     return out.model_dump()
+
+
+def _get_live_stock_level(material_id: str) -> Dict[str, Any]:
+    """Return the exact stock-level record for one material from the API."""
+    with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+        response = client.get(
+            f"{INVENTORY_API_URL}/stock-levels",
+            headers=inventory_api_headers(),
+        )
+        response.raise_for_status()
+        levels = response.json()
+
+    if not isinstance(levels, list):
+        raise ValueError("The inventory API returned an invalid stock-level response.")
+
+    for level in levels:
+        sku = str(level.get("skuCode", "")).upper()
+        raw_material_id = str(level.get("rawMaterialId", ""))
+        if material_id == sku or material_id == raw_material_id:
+            return level
+
+    raise ValueError(f"No live stock level exists for material '{material_id}'.")
 
 
 # ── TOOL 2: query_inventory_history() ──────────────────────────────────────
@@ -155,16 +87,41 @@ def query_inventory_history(materialId: str, periodDays: int = 7) -> Dict[str, A
     safe_period = max(1, int(periodDays))
     logger.info(f"[TOOL 2] Querying consumption history for {safe_id} over {safe_period} days")
 
-    catalog_entry = STATIC_CATALOG.get(safe_id, STATIC_CATALOG["RM001"])
-    daily_rate = catalog_entry.get("dailyBurn", 80.0)
-    
-    # Calculate deterministic aggregate consumption over period
-    total_consumption = round(daily_rate * safe_period, 2)
+    level = _get_live_stock_level(safe_id)
+    raw_material_id = level.get("rawMaterialId")
+    if raw_material_id is None:
+        raise ValueError(f"The live stock level for '{safe_id}' has no material ID.")
+
+    with httpx.Client(timeout=API_TIMEOUT_SECONDS) as client:
+        response = client.get(
+            f"{INVENTORY_API_URL}/{raw_material_id}/history",
+            headers=inventory_api_headers(),
+        )
+        response.raise_for_status()
+        history = response.json()
+
+    if not isinstance(history, list):
+        raise ValueError("The inventory API returned an invalid history response.")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=safe_period)
+    total_consumption = 0.0
+    for entry in history:
+        if str(entry.get("transactionType", "")).upper() != "CONSUMED":
+            continue
+        raw_date = entry.get("date")
+        try:
+            occurred_at = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        if occurred_at >= cutoff:
+            total_consumption += float(entry.get("quantity") or 0)
 
     out = InventoryHistoryOutput(
-        materialId=safe_id,
+        materialId=str(level.get("skuCode") or safe_id),
         periodDays=safe_period,
-        consumption=total_consumption
+        consumption=round(total_consumption, 2),
     )
     return out.model_dump()
 
@@ -172,14 +129,14 @@ def query_inventory_history(materialId: str, periodDays: int = 7) -> Dict[str, A
 # ── TOOL 3: calculate_burn_rate() ──────────────────────────────────────────
 
 @tool(args_schema=BurnRateInput)
-def calculate_burn_rate(consumption: float, periodDays: int, materialId: Optional[str] = "RM001") -> Dict[str, Any]:
+def calculate_burn_rate(consumption: float, periodDays: int, materialId: Optional[str] = None) -> Dict[str, Any]:
     """
     TOOL 3: Calculates average daily consumption rate from total consumption and days.
     Input: consumption (>= 0), periodDays (> 0)
     Safe Failure: Handles periodDays <= 0 without division by zero error.
     Output: {"materialId": "RM001", "burnRate": 80.0}
     """
-    safe_id = _normalize_material_id(materialId or "RM001")
+    safe_id = _normalize_material_id(materialId or "")
     logger.info(f"[TOOL 3] Calculating burn rate for {safe_id}: {consumption} units over {periodDays} days")
 
     # Safe error handling: Prevent division by zero
@@ -208,8 +165,9 @@ def detect_low_stock(
     minimumStock: float,
     burnRate: float,
     daysRemaining: Optional[float] = None,
-    supplierLeadTime: float = 3.0,
-    materialId: Optional[str] = "RM001",
+    supplierLeadTime: float = 0.0,
+    warningHorizonDays: float = 7.0,
+    materialId: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     TOOL 4: Evaluates inventory against minimum thresholds, burn rates, and lead times.
@@ -217,7 +175,7 @@ def detect_low_stock(
     Safe Failure: If burnRate == 0, safe buffer assigned (no division by zero).
     Output: {"materialId": "RM001", "lowStock": true, "daysRemaining": 4.37, "severity": "HIGH"}
     """
-    safe_id = _normalize_material_id(materialId or "RM001")
+    safe_id = _normalize_material_id(materialId or "")
     logger.info(f"[TOOL 4] Detecting stock status for {safe_id}: stock={currentStock}, min={minimumStock}, burn={burnRate}")
 
     current_stock = max(0.0, float(currentStock))
@@ -225,38 +183,30 @@ def detect_low_stock(
     burn_rate = max(0.0, float(burnRate))
     lead_time = max(0.0, float(supplierLeadTime))
 
-    # Calculate days remaining if not supplied
-    if daysRemaining is None:
-        if burn_rate > 0:
-            # Case 1: 350 / 80 = 4.375
-            days_rem = round(current_stock / burn_rate, 3)
-        else:
-            # Case 3: Burn rate is 0 -> Infinite safe buffer, no division error!
-            days_rem = 999.0
-    else:
-        days_rem = round(float(daysRemaining), 3)
-
-    # Determine low stock condition
-    # Stock is low if below minimum OR will breach safety stock within lead time horizon (leadTime * 1.5)
+    # Derive coverage from authoritative stock and consumption, never a caller estimate.
+    days_rem = current_stock / burn_rate if burn_rate > 0 else (0.0 if current_stock == 0 else None)
+    horizon = max(float(warningHorizonDays), lead_time * 1.5)
     is_below_min = current_stock <= min_stock
-    is_near_runout = days_rem <= (lead_time * 1.5)
-    low_stock = is_below_min or is_near_runout
-
-    # Assess severity level
-    if current_stock <= (min_stock * 0.5) or days_rem <= lead_time:
+    is_near_runout = days_rem is not None and days_rem <= horizon
+    # Preserve safety stock while awaiting delivery as well as detecting exhaustion.
+    safety_breach = burn_rate > 0 and current_stock - burn_rate * lead_time <= min_stock
+    low_stock = is_below_min or is_near_runout or safety_breach
+    if current_stock == 0 or current_stock <= min_stock * 0.5 or (days_rem is not None and days_rem <= lead_time):
         severity = "CRITICAL"
     elif low_stock:
         severity = "HIGH"
-    elif days_rem <= (lead_time * 3.0):
-        severity = "MEDIUM"
     else:
         severity = "NORMAL"
+    reason = ("Stock is at or below minimum" if is_below_min else
+              "Stock will fall below required level within the warning or delivery horizon" if low_stock else
+              "No consumption recorded; days remaining cannot be estimated" if burn_rate == 0 else
+              "Stock covers the configured warning and delivery horizon")
 
     out = LowStockOutput(
         materialId=safe_id,
         lowStock=low_stock,
         daysRemaining=days_rem,
-        severity=severity
+        severity=severity, reason=reason, zeroConsumption=burn_rate == 0
     )
     return out.model_dump()
 

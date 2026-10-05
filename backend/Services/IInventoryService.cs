@@ -13,11 +13,16 @@ namespace backend.Services
         Task<InventoryItem> CreateInventoryItemAsync(InventoryItem item);
         Task<bool> UpdateInventoryItemAsync(int id, InventoryItem item);
         Task<bool> DeleteInventoryItemAsync(int id);
+        Task<InventoryItem> CreateInventoryItemFromSkuAsync(CreateInventoryItemRequest request);
 
         // Stock Alerts
         Task<IEnumerable<StockAlertResponseDto>> GetStockAlertsAsync();
+        Task<StockAlertResponseDto?> GetStockAlertByIdAsync(int id);
+        Task<IEnumerable<StockAlertResponseDto>> GetUnreadStockAlertsAsync();
+        Task<bool> MarkStockAlertAsReadAsync(int id);
         Task<StockAlertResponseDto> CreateStockAlertAsync(CreateStockAlertDto alertDto);
         Task<bool> UpdateAlertStatusAsync(int id, string newStatus);
+        Task ResolveAlertsForMaterialsAsync(IEnumerable<int> materialIds);
 
         // Student 1: Raw Material CRUD
         Task<IEnumerable<RawMaterial>> GetRawMaterialsAsync();
@@ -25,14 +30,16 @@ namespace backend.Services
         Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material);
         Task<bool> UpdateRawMaterialAsync(int id, RawMaterial material);
         Task<bool> DeleteRawMaterialAsync(int id);
+        Task<IEnumerable<PackagingType>> GetPackagingTypesAsync();
 
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();
-        Task<InventoryRoll?> GetInventoryRollByIdAsync(string id);
+        Task<InventoryRoll?> GetInventoryRollByIdAsync(int id);
+        Task<InventoryRoll?> GetInventoryRollByIdentifierAsync(string rollIdentifier);
         Task<QrLookupResultDto?> GetInventoryRollByQrAsync(string qrCode);
         Task<InventoryRoll> CreateInventoryRollAsync(InventoryRoll roll);
-        Task<bool> UpdateInventoryRollAsync(string id, InventoryRoll roll);
-        Task<bool> DeleteInventoryRollAsync(string id);
+        Task<bool> UpdateInventoryRollAsync(int id, InventoryRoll roll);
+        Task<bool> DeleteInventoryRollAsync(int id);
 
         // Student 1: Stock Levels & Business Calculations
         Task<IEnumerable<StockLevelDetailDto>> GetStockLevelsAsync();
@@ -44,6 +51,6 @@ namespace backend.Services
         Task<IEnumerable<InventoryHistoryItemDto>> GetInventoryHistoryAsync(int rawMaterialId);
 
         // Student 1: Proxy AI Trigger via ASP.NET Core
-        Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto);
+        Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto, string? authorizationHeader);
     }
 }

@@ -70,6 +70,9 @@ namespace ManufacturingCoordinator.Api.Services
                 Email = emailNormalized,
                 PasswordHash = _passwordHasher.HashPassword(request.Password),
                 Role = request.Role,
+                EmployeeId = request.Role == UserRole.FloorWorker
+                    ? await FloorWorkerEmployeeIdGenerator.GetNextAsync(_db)
+                    : null,
                 IsEmailVerified = false,
                 IsActive = true
             };
@@ -394,6 +397,9 @@ namespace ManufacturingCoordinator.Api.Services
                 Email = payload.Email,
                 FullName = payload.Name ?? "Google User",
                 Role = request.Role,
+                EmployeeId = request.Role == UserRole.FloorWorker
+                    ? await FloorWorkerEmployeeIdGenerator.GetNextAsync(_db)
+                    : null,
                 IsEmailVerified = true,
                 IsActive = true,
                 PasswordHash = "GOOGLE_AUTH" // Or some random hash, since they login via Google
@@ -415,7 +421,7 @@ namespace ManufacturingCoordinator.Api.Services
                 var payload = await GoogleJsonWebSignature.ValidateAsync(tokenId, settings);
                 return payload;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 throw new AuthException("Invalid Google token.", HttpStatusCode.Unauthorized);
             }
@@ -480,6 +486,7 @@ namespace ManufacturingCoordinator.Api.Services
             return new UserSummaryDto
             {
                 Id = user.Id,
+                EmployeeId = user.EmployeeId,
                 FullName = user.FullName,
                 Email = user.Email,
                 Role = user.Role

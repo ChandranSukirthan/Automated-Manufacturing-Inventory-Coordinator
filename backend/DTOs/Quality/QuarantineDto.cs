@@ -21,4 +21,18 @@ namespace ManufacturingCoordinator.Api.DTOs.Quality
         public DateTime CreatedAt { get; set; }
         public DateTime? ReleasedAt { get; set; }
     }
+
+    public class ReleaseQuarantineDto
+    {
+        public string? ResolutionNote { get; set; }
+    }
+
+    public class ResolveValidationRequestDto
+    {
+        [Required]
+        public string Note { get; set; } = string.Empty;
+        public string Decision { get; set; } = "Clear";
+        public bool ReleaseQuarantine { get; set; } = true;
+    }
 }
+

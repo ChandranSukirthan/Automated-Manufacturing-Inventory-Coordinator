@@ -60,7 +60,7 @@ export default function KpiCards({
 }) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <StatSkeleton key={i} />
         ))}
@@ -76,7 +76,7 @@ export default function KpiCards({
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {cards.map((card) => {
         const Icon = card.icon;
         const value = values[card.key];
@@ -86,7 +86,7 @@ export default function KpiCards({
           <button
             key={card.key}
             onClick={() => onTabChange(card.tab)}
-            className={`p-5 rounded-2xl bg-slate-900/60 border border-slate-800 border-l-4 ${card.accentBorder} flex items-center justify-between text-left transition hover:bg-slate-900/80 hover:border-slate-700 group cursor-pointer`}
+            className={`worker-kpi-card min-w-0 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 border-l-4 ${card.accentBorder} flex items-center justify-between gap-3 text-left transition hover:bg-slate-900/80 hover:border-slate-700 group cursor-pointer`}
           >
             <div>
               <p className="text-xs text-slate-400 font-medium">{card.label}</p>
@@ -99,7 +99,7 @@ export default function KpiCards({
                   : card.sub}
               </p>
             </div>
-            <div className={`relative w-12 h-12 rounded-xl ${card.iconBg} border flex items-center justify-center ${card.iconColor} transition group-hover:scale-105`}>
+            <div className={`relative w-11 h-11 shrink-0 rounded-xl ${card.iconBg} border flex items-center justify-center ${card.iconColor} transition group-hover:scale-105`}>
               <Icon className="w-6 h-6" />
               {showPulse && (
                 <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 pulse-dot" />

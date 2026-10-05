@@ -103,7 +103,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Created: ${_currentWorkflow.createdAt.toLocal().toString().split('.')[0]}',
+                  'Created: ${_currentWorkflow.createdAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]}',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
               ],
@@ -111,7 +111,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
           ),
           const SizedBox(height: 16),
 
-          if (_currentWorkflow.isWaitingForApproval) ...[
+          if (_currentWorkflow.canAuthorizeMaintenance) ...[
             AdminCard(
               backgroundColor: const Color(0xFF78350F).withValues(alpha: 0.25),
               borderColor: const Color(0xFFF59E0B),

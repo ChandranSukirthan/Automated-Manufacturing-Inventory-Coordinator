@@ -7,6 +7,7 @@ namespace ManufacturingCoordinator.Enums
         TeaBag,
         Bag,
         Can,
-        Bottle
+        Bottle,
+        StandardRoll
     }
 }

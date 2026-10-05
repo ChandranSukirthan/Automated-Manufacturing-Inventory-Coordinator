@@ -29,7 +29,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         [Required]
         [MaxLength(10)]
-        public string Currency { get; set; } = "usd";
+        public string Currency { get; set; } = "lkr";
 
         [Required]
         [MaxLength(50)]

@@ -1,3 +1,4 @@
+import { formatMoney } from '../../../utils/locale.js';
 import React, { useState } from 'react';
 import {
   Bot,
@@ -14,7 +15,7 @@ import {
 const STEPS = [
   {
     num: 1,
-    label: 'Student 1 (Floor Worker)',
+    label: 'Inventory operations',
     title: 'Data Extraction',
     desc: 'Extracts stock level, burn rate, and required replenishment',
     icon: ClipboardList,
@@ -22,7 +23,7 @@ const STEPS = [
   },
   {
     num: 2,
-    label: 'Student 4 (Production)',
+    label: 'Production operations',
     title: 'Production Analysis',
     desc: 'Analyzes machine capacity, shift schedule, and output impact',
     icon: Settings,
@@ -30,7 +31,7 @@ const STEPS = [
   },
   {
     num: 3,
-    label: 'Student 2 (Purchasing)',
+    label: 'Purchasing operations',
     title: 'Supplier Procurement',
     desc: 'Calculates optimal supplier and drafts Purchase Order',
     icon: Zap,
@@ -38,7 +39,7 @@ const STEPS = [
   },
   {
     num: 4,
-    label: 'Student 3 (Quality)',
+    label: 'Quality assurance',
     title: 'Validation & Safety',
     desc: 'Audits defect history and verifies quarantine holds',
     icon: ShieldCheck,
@@ -80,7 +81,7 @@ export default function AgentTab({
   aiWorkflowResult,
   onTriggerAi,
 }) {
-  const [selectedMaterial, setSelectedMaterial] = useState('RM-STEEL-001');
+  const [materialChoice, setMaterialChoice] = useState('');
   const [qty, setQty] = useState(2000);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -88,10 +89,12 @@ export default function AgentTab({
   const materialOptions = stockLevels.length > 0
     ? stockLevels.map((l) => ({ sku: l.skuCode, name: l.materialName }))
     : rawMaterials.map((m) => ({ sku: m.skuCode, name: m.name }));
+  const selectedMaterial = materialOptions.some((m) => m.sku === materialChoice)
+    ? materialChoice : materialOptions[0]?.sku || '';
 
   return (
     <div className="space-y-6 tab-slide-in">
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-6">
+      <div className="worker-panel min-w-0 p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-6">
         {/* Header */}
         <div className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -148,13 +151,13 @@ export default function AgentTab({
             Trigger Replenishment Workflow
           </h4>
           <div className="flex flex-col sm:flex-row items-end gap-4">
-            <div className="flex-1 w-full">
+            <div className="min-w-0 flex-1 w-full">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Material
               </label>
               <select
                 value={selectedMaterial}
-                onChange={(e) => setSelectedMaterial(e.target.value)}
+                onChange={(e) => setMaterialChoice(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 transition"
               >
                 {materialOptions.length > 0 ? (
@@ -164,13 +167,13 @@ export default function AgentTab({
                     </option>
                   ))
                 ) : (
-                  <option value="RM-STEEL-001">RM-STEEL-001</option>
+                  <option value="">No materials available</option>
                 )}
               </select>
             </div>
             <div className="w-full sm:w-32">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Quantity (KG)
+                Quantity (material units)
               </label>
               <input
                 type="number"
@@ -183,7 +186,7 @@ export default function AgentTab({
             </div>
             <button
               onClick={() => onTriggerAi(selectedMaterial, qty)}
-              disabled={triggeringAi}
+              disabled={triggeringAi || !selectedMaterial || !Number.isFinite(qty) || qty <= 0}
               className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs rounded-xl transition flex items-center gap-2 shadow-lg shadow-cyan-500/20 disabled:opacity-50 shrink-0"
             >
               <Sparkles
@@ -228,7 +231,7 @@ export default function AgentTab({
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                 <span className="text-slate-500">Requires Approval</span>
                 <p className="font-bold text-amber-400 mt-1">
-                  {aiWorkflowResult.requires_approval ? 'Yes (> $5,000)' : 'No'}
+                  {aiWorkflowResult.requires_approval ? "Yes (> LKR 1,500,000)" : 'No'}
                 </p>
               </div>
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
@@ -250,10 +253,9 @@ export default function AgentTab({
                   <strong className="text-white font-mono">
                     {aiWorkflowResult.po_number}
                   </strong>{' '}
-                  for {aiWorkflowResult.quantity} units ($
-                  {aiWorkflowResult.total_amount?.toLocaleString(undefined, {
+                  for {aiWorkflowResult.quantity} units ({formatMoney(aiWorkflowResult.total_amount?.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
-                  })}
+                  }), 'LKR')}
                   ) has been routed to{' '}
                   <strong>Supply Chain Manager</strong>.
                 </p>

@@ -4,6 +4,21 @@ const dashboardService = {
   getQualitySummary: async () => {
     const response = await api.get('/dashboard/quality/summary');
     return response.data;
+  },
+
+  getAiValidation: async (workflowId) => {
+    const response = await api.get('/quality/ai-validation', workflowId ? { params: { workflowId } } : undefined);
+    return response.data;
+  },
+
+  getAiValidationHistory: async () => {
+    const response = await api.get('/quality/ai-validation/history');
+    return response.data;
+  },
+
+  resolveAiValidation: async (workflowId, data) => {
+    const response = await api.post(`/quality/ai-validation/${workflowId}/resolve`, data);
+    return response.data;
   }
 };
 

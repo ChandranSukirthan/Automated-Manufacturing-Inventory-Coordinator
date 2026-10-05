@@ -48,6 +48,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void setSession(AuthSession newSession) {
+    session = newSession;
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await auth.logout();
     session = null;
@@ -61,7 +66,13 @@ class AppState extends ChangeNotifier {
       session = AuthSession(
         accessToken: currentSession.accessToken,
         refreshToken: currentSession.refreshToken,
-        user: updatedUser,
+        user: UserSummary(
+          id: updatedUser.id,
+          employeeId: updatedUser.employeeId,
+          fullName: updatedUser.fullName,
+          email: updatedUser.email,
+          role: updatedUser.role,
+        ),
       );
       await storage.save(session!);
       notifyListeners();

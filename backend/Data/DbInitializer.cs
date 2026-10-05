@@ -12,6 +12,7 @@ using ManufacturingCoordinator.Models.Administration;
 using ManufacturingCoordinator.Models.Inventory;
 using ManufacturingCoordinator.Models.Quality;
 using ManufacturingCoordinator.Api.Interfaces;
+using ManufacturingCoordinator.Api.Services;
 using RawMaterial = backend.Models.RawMaterial;
 
 namespace ManufacturingCoordinator.Data
@@ -22,15 +23,17 @@ namespace ManufacturingCoordinator.Data
         {
             using var scope = serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var mfgDb = scope.ServiceProvider.GetRequiredService<backend.Data.ManufacturingContext>();
             var passwordHasher = scope.ServiceProvider.GetService<IPasswordHasher>();
 
-            // 1. Seed Users for all roles
+            // 1. Seed roles. The verified development worker avoids an email-OTP
+            // dependency during local testing; registered Floor Workers start at EMP0001.
             var seedUsers = new[]
             {
                 ("admin@amic.com", "System Admin", "Admin@123", UserRole.ITAdmin),
-                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker),
                 ("manager@amic.com", "Supply Chain Manager", "Manager@123", UserRole.SupplyChainManager),
-                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector)
+                ("quality@amic.com", "Quality Inspector", "Quality@123", UserRole.QualityInspector),
+                ("worker@amic.com", "Floor Worker", "Worker@123", UserRole.FloorWorker)
             };
 
             foreach (var (email, name, pwd, role) in seedUsers)
@@ -44,6 +47,10 @@ namespace ManufacturingCoordinator.Data
                     existing.Role = role;
                     existing.IsEmailVerified = true;
                     existing.IsActive = true;
+                    if (role == UserRole.FloorWorker)
+                    {
+                        existing.EmployeeId = "EMP0000";
+                    }
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -54,6 +61,7 @@ namespace ManufacturingCoordinator.Data
                         Email = email,
                         PasswordHash = hash,
                         Role = role,
+                        EmployeeId = role == UserRole.FloorWorker ? "EMP0000" : null,
                         IsEmailVerified = true,
                         IsActive = true
                     });
@@ -61,7 +69,10 @@ namespace ManufacturingCoordinator.Data
             }
             await db.SaveChangesAsync();
 
-            await SeedEntitiesAsync(db);
+            await FloorWorkerEmployeeIdGenerator.AssignMissingAsync(db);
+
+            await EnsureProcurementTablesAsync(db);
+            await SeedEntitiesAsync(db, mfgDb);
         }
 
         public static async Task SeedAsync(ApplicationDbContext context)
@@ -69,8 +80,37 @@ namespace ManufacturingCoordinator.Data
             await SeedEntitiesAsync(context);
         }
 
-        private static async Task SeedEntitiesAsync(ApplicationDbContext db)
+        private static async Task SeedEntitiesAsync(ApplicationDbContext db, backend.Data.ManufacturingContext? mfgDb = null)
         {
+            await EnsureProcurementTablesAsync(db);
+
+            // Student A's physical roll register and Student 3's batch register
+            // share the database through separate contexts. Reconcile their
+            // batch identities before QA tries to inspect a SKU.
+            var physicalRollBatches = await db.StockRolls
+                .Include(roll => roll.RawMaterial)
+                .Where(roll => roll.BatchId != null && roll.BatchId != "")
+                .Select(roll => new
+                {
+                    BatchId = roll.BatchId!,
+                    Category = roll.RawMaterial != null ? roll.RawMaterial.Category : string.Empty,
+                })
+                .Distinct()
+                .ToListAsync();
+            var knownBatchIds = (await db.Batches.Select(batch => batch.Id).ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var physicalBatch in physicalRollBatches)
+            {
+                if (knownBatchIds.Contains(physicalBatch.BatchId)) continue;
+                var enumName = new string((physicalBatch.Category ?? string.Empty)
+                    .Where(char.IsLetterOrDigit)
+                    .ToArray());
+                if (!Enum.TryParse<ProductType>(enumName, true, out var productType)) continue;
+                db.Batches.Add(new Batch { Id = physicalBatch.BatchId, ProductType = productType });
+                knownBatchIds.Add(physicalBatch.BatchId);
+            }
+            await db.SaveChangesAsync();
+
             // 2. Seed RawMaterials
             if (!await db.RawMaterials.AnyAsync())
             {
@@ -123,10 +163,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-001",
-                        Name = "Apex Industrial Metals",
-                        ContactEmail = "orders@apeximetals.com",
-                        ContactPhone = "+1-555-0192",
-                        Address = "100 Industrial Parkway, Chicago, IL",
+                        Name = "Lanka Flexible Packaging Supplies",
+                        ContactEmail = "orders@lankaflexible.example",
+                        ContactPhone = "+94 11 555 0192",
+                        Address = "Colombo Export Processing Zone, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 7,
                         IsActive = true,
@@ -136,10 +176,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-002",
-                        Name = "Global Precision Fasteners",
-                        ContactEmail = "procurement@globalfasteners.com",
-                        ContactPhone = "+1-555-0283",
-                        Address = "450 Logistics Way, Detroit, MI",
+                        Name = "Ceylon Food-Pack Materials",
+                        ContactEmail = "procurement@ceylonfoodpack.example",
+                        ContactPhone = "+94 11 555 0283",
+                        Address = "Colombo Logistics Park, Sri Lanka",
                         PaymentTerms = "Net 60",
                         LeadTimeDays = 14,
                         IsActive = true,
@@ -149,10 +189,10 @@ namespace ManufacturingCoordinator.Data
                     new()
                     {
                         SupplierCode = "SUP-003",
-                        Name = "Polymer & Composites Direct",
-                        ContactEmail = "sales@polymerdirect.com",
-                        ContactPhone = "+1-555-0374",
-                        Address = "78 Polymer Row, Akron, OH",
+                        Name = "Island Polymer & Paper Mills",
+                        ContactEmail = "sales@islandpolymer.example",
+                        ContactPhone = "+94 11 555 0374",
+                        Address = "Kelaniya Industrial Estate, Sri Lanka",
                         PaymentTerms = "Net 30",
                         LeadTimeDays = 10,
                         IsActive = true,
@@ -162,6 +202,55 @@ namespace ManufacturingCoordinator.Data
                 };
 
                 db.Suppliers.AddRange(suppliers);
+                await db.SaveChangesAsync();
+            }
+
+            // Give Student 2 authoritative, material-specific quotes to compare.
+            // This remains additive so existing installations receive any missing
+            // supplier/material combinations without replacing edited quote data.
+            var quoteSuppliers = await db.Suppliers
+                .Where(s => s.IsActive)
+                .OrderBy(s => s.SupplierCode)
+                .ToListAsync();
+            var quoteMaterials = await db.RawMaterials
+                .OrderBy(m => m.SkuCode)
+                .ToListAsync();
+            var existingQuoteKeys = await db.SupplierMaterialQuotes
+                .Select(q => new { q.SupplierId, q.RawMaterialId })
+                .ToListAsync();
+            var existingQuoteSet = existingQuoteKeys
+                .Select(q => $"{q.SupplierId}:{q.RawMaterialId}")
+                .ToHashSet(StringComparer.Ordinal);
+            var newQuotes = new List<SupplierMaterialQuote>();
+
+            for (var materialIndex = 0; materialIndex < quoteMaterials.Count; materialIndex++)
+            {
+                for (var supplierIndex = 0; supplierIndex < quoteSuppliers.Count; supplierIndex++)
+                {
+                    var supplier = quoteSuppliers[supplierIndex];
+                    var material = quoteMaterials[materialIndex];
+                    if (existingQuoteSet.Contains($"{supplier.Id}:{material.Id}")) continue;
+
+                    newQuotes.Add(new SupplierMaterialQuote
+                    {
+                        SupplierId = supplier.Id,
+                        RawMaterialId = material.Id,
+                        UnitPrice = Math.Round((1.25m + materialIndex * 0.18m + supplierIndex * 0.12m) * 300m, 2),
+                        MinimumOrderQuantity = 100m,
+                        PackSize = 50m,
+                        AvailableQuantity = Math.Max(1000m, 8000m + supplierIndex * 1500m - materialIndex * 100m),
+                        LeadTimeDays = supplier.LeadTimeDays,
+                        QualityEvidence = "Approved supplier record; ISO 9001 quality evidence on file",
+                        Currency = "LKR",
+                        IsActive = true,
+                        UpdatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            if (newQuotes.Count > 0)
+            {
+                db.SupplierMaterialQuotes.AddRange(newQuotes);
                 await db.SaveChangesAsync();
             }
 
@@ -178,13 +267,13 @@ namespace ManufacturingCoordinator.Data
                     {
                         PoNumber = "PO-2026-0001",
                         SupplierId = supplier1.Id,
-                        Currency = "USD",
+                        Currency = "LKR",
                         Status = PurchaseOrderStatus.Sent,
-                        BudgetLimit = 10000m,
-                        ApprovalThreshold = 5000m,
+                        BudgetLimit = 3000000.0m,
+                        ApprovalThreshold = 1500000.0m,
                         RequiresApproval = true,
-                        TotalCost = 6750m,
-                        Notes = "Q1 replenishment order",
+                        TotalCost = 2025000.0m,
+                        Notes = "Packaging-material replenishment order",
                         StripePaymentIntentId = "pi_mock_seed_001",
                         StripePaymentStatus = "succeeded",
                         EmailStatus = "Sent",
@@ -196,10 +285,10 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "Batch 1 Steel Sheets",
+                                Description = "Laminated barrier film replenishment",
                                 Quantity = 1500m,
-                                UnitPrice = 4.50m,
-                                TotalPrice = 6750m,
+                                UnitPrice = 1350.0m,
+                                TotalPrice = 2025000.0m,
                                 CreatedAt = DateTime.UtcNow.AddDays(-15),
                                 UpdatedAt = DateTime.UtcNow.AddDays(-15)
                             }
@@ -222,8 +311,8 @@ namespace ManufacturingCoordinator.Data
                     {
                         PurchaseOrderId = po1.Id,
                         TransactionId = "pi_mock_seed_001",
-                        Amount = 6750m,
-                        Currency = "usd",
+                        Amount = 2025000.0m,
+                        Currency = "lkr",
                         PaymentStatus = "succeeded",
                         Timestamp = DateTime.UtcNow.AddDays(-10)
                     });
@@ -237,13 +326,13 @@ namespace ManufacturingCoordinator.Data
                     {
                         PoNumber = "PO-2026-0002",
                         SupplierId = supplier2.Id,
-                        Currency = "USD",
+                        Currency = "LKR",
                         Status = PurchaseOrderStatus.PendingApproval,
-                        BudgetLimit = 15000m,
-                        ApprovalThreshold = 5000m,
+                        BudgetLimit = 4500000.0m,
+                        ApprovalThreshold = 1500000.0m,
                         RequiresApproval = true,
-                        TotalCost = 9000m,
-                        Notes = "AI Recommended: High burn rate forecast requires urgent steel coils.",
+                        TotalCost = 2700000.0m,
+                        Notes = "AI Recommended: high burn rate forecast requires urgent packaging material replenishment.",
                         CreatedAt = DateTime.UtcNow.AddHours(-2),
                         UpdatedAt = DateTime.UtcNow.AddHours(-1),
                         OrderLines = new List<OrderLine>
@@ -251,10 +340,10 @@ namespace ManufacturingCoordinator.Data
                             new()
                             {
                                 RawMaterialId = material1.Id,
-                                Description = "High-volume steel coil replenishment",
+                                Description = "High-volume flexible packaging material replenishment",
                                 Quantity = 2000m,
-                                UnitPrice = 4.50m,
-                                TotalPrice = 9000m,
+                                UnitPrice = 1350.0m,
+                                TotalPrice = 2700000.0m,
                                 CreatedAt = DateTime.UtcNow.AddHours(-2),
                                 UpdatedAt = DateTime.UtcNow.AddHours(-2)
                             }
@@ -584,6 +673,243 @@ namespace ManufacturingCoordinator.Data
 
                 await db.Quarantines.AddRangeAsync(quarantine1, quarantine2);
                 await db.SaveChangesAsync();
+            }
+
+            // Raw materials require a valid packaging type on the shared schema.
+            var standardRollPackaging = await db.PackagingTypes
+                .FirstOrDefaultAsync(type => type.Name == "Standard Roll");
+            if (standardRollPackaging == null)
+            {
+                standardRollPackaging = new backend.Models.PackagingType
+                {
+                    Name = "Standard Roll",
+                    ShortCode = "SR",
+                    IsActive = true
+                };
+                db.PackagingTypes.Add(standardRollPackaging);
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure Iron raw material exists in ApplicationDbContext
+            var ironMat = await db.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
+            if (ironMat == null)
+            {
+                ironMat = new RawMaterial
+                {
+                    Name = "Industrial Raw Iron",
+                    SkuCode = "RM-IRON-001",
+                    Category = "Metal",
+                    UnitOfMeasure = "KG",
+                    Description = "Standard grade structural raw iron rolls",
+                    PackagingTypeId = standardRollPackaging.Id,
+                    ReorderThreshold = 300m,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                db.RawMaterials.Add(ironMat);
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure Batches exist in ApplicationDbContext
+            var ironBatch = await db.Batches.FirstOrDefaultAsync(b => b.Id == "BATCH-IRON-001");
+            if (ironBatch == null)
+            {
+                db.Batches.Add(new Batch { Id = "BATCH-IRON-001", ProductType = ProductType.Can });
+                await db.SaveChangesAsync();
+            }
+
+            // Ensure mfgDb has Iron and historical roll if mfgDb is available
+            if (mfgDb != null)
+            {
+                var mfgIron = await mfgDb.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode == "RM-IRON-001" || m.Name.Contains("Iron"));
+                if (mfgIron == null)
+                {
+                    mfgIron = new backend.Models.RawMaterial
+                    {
+                        Name = "Industrial Raw Iron",
+                        SkuCode = "RM-IRON-001",
+                        UnitOfMeasure = "KG",
+                        Category = "Metal",
+                        Description = "Standard grade structural raw iron rolls",
+                        PackagingTypeId = standardRollPackaging.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    mfgDb.RawMaterials.Add(mfgIron);
+                    await mfgDb.SaveChangesAsync();
+                }
+
+                var ironRoll = await mfgDb.InventoryRolls.FirstOrDefaultAsync(r => r.RollIdentifier == "IRON-ROLL-001");
+                if (ironRoll == null)
+                {
+                    ironRoll = new backend.Models.InventoryRoll
+                    {
+                        RollIdentifier = "IRON-ROLL-001",
+                        BatchId = "BATCH-IRON-001",
+                        RawMaterialId = mfgIron.Id,
+                        InitialQuantity = 2000m,
+                        CurrentQuantity = 1800m,
+                        Status = "Available",
+                        BarcodeUrl = "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=IRON-ROLL-001",
+                        ReceivedDate = DateTime.UtcNow.AddDays(-30),
+                        CreatedAt = DateTime.UtcNow.AddDays(-30),
+                        UpdatedAt = DateTime.UtcNow.AddDays(-30)
+                    };
+                    mfgDb.InventoryRolls.Add(ironRoll);
+                    await mfgDb.SaveChangesAsync();
+                }
+            }
+
+            // Ensure historical defect report exists
+            var ironDefect = await db.DefectReports.FirstOrDefaultAsync(d => d.BatchId == "BATCH-IRON-001" || (d.AffectedInventoryJson != null && d.AffectedInventoryJson.Contains("IRON-ROLL-001")));
+            if (ironDefect == null)
+            {
+                ironDefect = new ManufacturingCoordinator.Models.Quality.DefectReport
+                {
+                    Id = Guid.NewGuid(),
+                    BatchId = "BATCH-IRON-001",
+                    ProductType = ProductType.Can,
+                    Severity = DefectSeverity.MEDIUM,
+                    Description = "Surface oxidation and micro-fractures detected on edge coil during ultrasonic scan",
+                    AffectedInventoryJson = "[\"IRON-ROLL-001\"]",
+                    Status = DefectStatus.InReview,
+                    CreatedAt = DateTime.UtcNow.AddDays(-15)
+                };
+                db.DefectReports.Add(ironDefect);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        private static async Task EnsureProcurementTablesAsync(ApplicationDbContext db)
+        {
+            if (!db.Database.IsRelational()) return;
+
+            try
+            {
+                var sql = @"
+                    CREATE TABLE IF NOT EXISTS ""ProcurementRequests"" (
+                        ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                        ""RawMaterialId"" integer NOT NULL,
+                        ""RequiredSpecification"" character varying(200) NOT NULL,
+                        ""ProductionRequirement"" numeric(18,3) NOT NULL,
+                        ""CurrentStock"" numeric(18,3) NOT NULL,
+                        ""SafetyStock"" numeric(18,3) NOT NULL,
+                        ""ExistingOpenPoQuantity"" numeric(18,3) NOT NULL,
+                        ""CalculatedNetQuantity"" numeric(18,3) NOT NULL,
+                        ""MaximumBudget"" numeric(18,2) NOT NULL,
+                        ""RequiredByDate"" timestamp with time zone NOT NULL,
+                        ""QualityRequirement"" character varying(500) NOT NULL DEFAULT '',
+                        ""PreferredRegion"" character varying(100),
+                        ""Status"" text NOT NULL,
+                        ""WorkflowId"" character varying(100),
+                        ""MaterialName"" character varying(200),
+                        ""RecommendedSupplierId"" integer,
+                        ""GeneratedPurchaseOrderId"" integer,
+                        ""FailureReason"" character varying(1000),
+                        ""CreatedById"" uuid,
+                        ""CreatedAt"" timestamp with time zone NOT NULL DEFAULT (timezone('utc', now())),
+                        ""UpdatedAt"" timestamp with time zone NOT NULL DEFAULT (timezone('utc', now())),
+                        CONSTRAINT ""FK_ProcurementRequests_RawMaterials_RawMaterialId"" FOREIGN KEY (""RawMaterialId"") REFERENCES ""RawMaterials"" (""Id"") ON DELETE RESTRICT,
+                        CONSTRAINT ""FK_ProcurementRequests_Suppliers_RecommendedSupplierId"" FOREIGN KEY (""RecommendedSupplierId"") REFERENCES ""Suppliers"" (""Id"") ON DELETE SET NULL,
+                        CONSTRAINT ""FK_ProcurementRequests_PurchaseOrders_GeneratedPurchaseOrderId"" FOREIGN KEY (""GeneratedPurchaseOrderId"") REFERENCES ""PurchaseOrders"" (""Id"") ON DELETE SET NULL,
+                        CONSTRAINT ""FK_ProcurementRequests_Users_CreatedById"" FOREIGN KEY (""CreatedById"") REFERENCES ""Users"" (""Id"") ON DELETE SET NULL
+                    );
+
+                    CREATE TABLE IF NOT EXISTS ""SupplierCandidates"" (
+                        ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                        ""ProcurementRequestId"" integer NOT NULL,
+                        ""SupplierId"" integer,
+                        ""SupplierName"" character varying(200) NOT NULL,
+                        ""MaterialName"" character varying(200) NOT NULL,
+                        ""UnitPrice"" numeric(18,2) NOT NULL,
+                        ""Currency"" character varying(10) NOT NULL DEFAULT 'LKR',
+                        ""MinimumOrderQuantity"" numeric(18,3) NOT NULL,
+                        ""PackSize"" numeric(18,3) NOT NULL DEFAULT 1,
+                        ""LeadTimeDays"" integer NOT NULL,
+                        ""QualityEvidence"" character varying(500) NOT NULL DEFAULT '',
+                        ""Availability"" character varying(100) NOT NULL DEFAULT 'In Stock',
+                        ""SupplierStatus"" character varying(50) NOT NULL DEFAULT 'UNVERIFIED',
+                        ""ConfidenceScore"" numeric(5,2) NOT NULL,
+                        ""SourceUrl"" character varying(500),
+                        ""IsValidated"" boolean NOT NULL,
+                        ""ValidationRemarks"" character varying(1000),
+                        ""RecommendedOrderQuantity"" numeric(18,3) NOT NULL,
+                        ""TotalCost"" numeric(18,2) NOT NULL,
+                        ""CreatedAt"" timestamp with time zone NOT NULL DEFAULT (timezone('utc', now())),
+                        CONSTRAINT ""FK_SupplierCandidates_ProcurementRequests_ProcurementRequestId"" FOREIGN KEY (""ProcurementRequestId"") REFERENCES ""ProcurementRequests"" (""Id"") ON DELETE CASCADE,
+                        CONSTRAINT ""FK_SupplierCandidates_Suppliers_SupplierId"" FOREIGN KEY (""SupplierId"") REFERENCES ""Suppliers"" (""Id"") ON DELETE SET NULL
+                    );
+
+                    ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""WorkflowId"" character varying(100);
+                    ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""MaterialName"" character varying(200);
+                    ALTER TABLE ""ProcurementRequests"" ADD COLUMN IF NOT EXISTS ""Priority"" character varying(50) DEFAULT 'Normal';
+                    ALTER TABLE ""SupplierCandidates"" ADD COLUMN IF NOT EXISTS ""Availability"" character varying(100) DEFAULT 'In Stock';
+
+                    -- Ensure StockAlerts procurement columns exist
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""MaterialId"" integer;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""MaterialName"" character varying(200);
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""CurrentStock"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""RequiredQuantity"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""SafetyStock"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""OpenPurchaseQuantity"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""NetDeficit"" numeric(18,3) NOT NULL DEFAULT 0;
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""Severity"" character varying(50) DEFAULT 'Medium';
+                    ALTER TABLE ""StockAlerts"" ADD COLUMN IF NOT EXISTS ""IsRead"" boolean NOT NULL DEFAULT false;
+
+                    -- Ensure PurchaseOrders tracking, verification and delivery columns exist
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ProcurementRequestId"" integer;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingStatus"" character varying(50) DEFAULT 'Draft';
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ExpectedDeliveryDate"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""ActualDeliveryDate"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsAcknowledgedByScm"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsQualityVerified"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""IsFinancialVerified"" boolean NOT NULL DEFAULT false;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""CompletedAt"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""TrackingNumber"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""DeliveryRemarks"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""StripePaymentIntentId"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""StripePaymentStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""PaymentFailureReason"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUrl"" character varying(500);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankReferenceNumber"" character varying(100);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""BankSlipUploadedAt"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""SendGridMessageId"" character varying(200);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailStatus"" character varying(50);
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailSentAt"" timestamp with time zone;
+                    ALTER TABLE ""PurchaseOrders"" ADD COLUMN IF NOT EXISTS ""EmailFailureReason"" character varying(500);
+
+                    CREATE TABLE IF NOT EXISTS ""ProcurementOutcomes"" (
+                        ""Id"" integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                        ""Material"" character varying(200) NOT NULL,
+                        ""RequestedQuantity"" numeric(18,3) NOT NULL,
+                        ""RecommendedQuantity"" numeric(18,3) NOT NULL,
+                        ""FinalOrderedQuantity"" numeric(18,3) NOT NULL,
+                        ""RecommendedSupplier"" character varying(200) NOT NULL,
+                        ""SelectedSupplier"" character varying(200) NOT NULL,
+                        ""EstimatedPrice"" numeric(18,2) NOT NULL,
+                        ""FinalPrice"" numeric(18,2) NOT NULL,
+                        ""EstimatedLeadTime"" integer NOT NULL,
+                        ""ActualLeadTime"" integer NOT NULL,
+                        ""QualityEvidence"" character varying(1000) NOT NULL DEFAULT '',
+                        ""SupplierVerification"" character varying(100) NOT NULL DEFAULT 'VERIFIED',
+                        ""ManagerDecision"" character varying(100) NOT NULL,
+                        ""ManagerRevision"" character varying(1000),
+                        ""ProcurementSuccess"" boolean NOT NULL DEFAULT true,
+                        ""PaymentSuccess"" boolean NOT NULL DEFAULT true,
+                        ""DeliverySuccess"" boolean NOT NULL DEFAULT false,
+                        ""QualityOutcome"" character varying(500),
+                        ""CreatedAt"" timestamp with time zone NOT NULL DEFAULT (timezone('utc', now())),
+                        ""CompletedAt"" timestamp with time zone,
+                        ""PurchaseOrderId"" integer,
+                        ""ProcurementRequestId"" integer
+                    );
+                ";
+                await db.Database.ExecuteSqlRawAsync(sql);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Procurement tables creation/check notice: {ex.Message}");
             }
         }
     }

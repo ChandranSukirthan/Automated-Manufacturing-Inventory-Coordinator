@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { formatColomboDate } from '../../utils/locale.js';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   PlusCircle,
   Search,
   ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   RotateCcw,
   Eye,
   Edit2,
   Trash2,
   Loader2,
   AlertTriangle,
-  ClipboardList
+  ClipboardList,
+  ShieldAlert,
+  CheckCircle2,
+  Package,
+  Layers
 } from 'lucide-react';
 import defectService from '../../services/defectService';
 import quarantineService from '../../services/quarantineService';
@@ -47,12 +50,12 @@ export default function DefectReportsPage() {
     try {
       const [defectData, quarantineData, rollData] = await Promise.all([
         defectService.getAll(),
-        quarantineService.getAll(),
-        inventoryService.getRolls()
+        quarantineService.getAll().catch(() => []),
+        inventoryService.getRolls().catch(() => [])
       ]);
-      setDefects(defectData);
-      setQuarantines(quarantineData);
-      setInventoryRolls(rollData);
+      setDefects(Array.isArray(defectData) ? defectData : []);
+      setQuarantines(Array.isArray(quarantineData) ? quarantineData : []);
+      setInventoryRolls(Array.isArray(rollData) ? rollData : []);
     } catch (err) {
       setError(parseErrorMessage(err, 'Unable to load defect reports.'));
     } finally {
@@ -61,7 +64,8 @@ export default function DefectReportsPage() {
   };
 
   useEffect(() => {
-    loadDefects();
+    const initialLoad = setTimeout(loadDefects, 0);
+    return () => clearTimeout(initialLoad);
   }, []);
 
   const inventoryFor = (defect) => {
@@ -73,9 +77,15 @@ export default function DefectReportsPage() {
 
   const inventoryRollFor = (defect) => {
     const rollId = inventoryFor(defect)[0];
-    const roll = inventoryRolls.find((item) => item.id === rollId);
-    return roll?.rollIdentifier || roll?.id || 'Unavailable';
+    const roll = inventoryRolls.find((item) => item.rollIdentifier === rollId);
+    return roll?.rollIdentifier || rollId || 'Unavailable';
   };
+
+  // Metrics
+  const openDefects = defects.filter((d) => ['open', 'inreview'].includes(String(d.status).toLowerCase()));
+  const criticalHighCount = defects.filter((d) => ['critical', 'high'].includes(String(d.severity).toLowerCase())).length;
+  const mediumCount = defects.filter((d) => String(d.severity).toLowerCase() === 'medium').length;
+  const resolvedCount = defects.filter((d) => ['resolved', 'closed'].includes(String(d.status).toLowerCase())).length;
 
   const isFiltered = query.trim() !== '' || severity !== 'All' || status !== 'All';
 
@@ -90,6 +100,7 @@ export default function DefectReportsPage() {
     .filter((defect) => {
       const haystack = [
         inventoryRollFor(defect),
+        defect.skuCode,
         defect.severity,
         defect.status,
         defect.description,
@@ -100,8 +111,8 @@ export default function DefectReportsPage() {
 
       return (
         haystack.includes(query.trim().toLowerCase()) &&
-        (severity === 'All' || defect.severity === severity) &&
-        (status === 'All' || defect.status === status)
+        (severity === 'All' || String(defect.severity).toLowerCase() === severity.toLowerCase()) &&
+        (status === 'All' || String(defect.status).toLowerCase() === status.toLowerCase())
       );
     })
     .sort((left, right) => {
@@ -110,7 +121,8 @@ export default function DefectReportsPage() {
         severity: [left.severity, right.severity],
         inventoryRoll: [inventoryRollFor(left), inventoryRollFor(right)],
         status: [left.status, right.status]
-      }[sort.key];
+      }[sort.key] || [new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime()];
+
       const comparison =
         typeof values[0] === 'number'
           ? values[0] - values[1]
@@ -141,30 +153,62 @@ export default function DefectReportsPage() {
     }
   };
 
-  const sortButtons = [
-    { key: 'createdAt', label: 'Date' },
-    { key: 'inventoryRoll', label: 'Inventory Roll' },
-    { key: 'severity', label: 'Severity' },
-    { key: 'status', label: 'Status' }
-  ];
-
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Page Header */}
       <PageHeader
         category="Quality Assurance"
         title="Defect Reports"
-        subtitle="Monitor and review reported quality issues."
+        subtitle="Track, investigate and manage manufacturing quality defects"
         actions={
-          <button
-            onClick={() => navigate('/quality/defects/new')}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-500 transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2"
+          <Link
+            to="/quality/defects/new"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-600/25 flex items-center gap-2 transition-all"
           >
-            <PlusCircle className="w-4 h-4 stroke-[2.5]" />
-            <span>+ Create Defect</span>
-          </button>
+            <PlusCircle className="w-4 h-4" />
+            <span>Log Defect Report</span>
+          </Link>
         }
       />
+
+      {/* Top Metric Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Open</span>
+            <ClipboardList className="w-4 h-4 text-blue-400" />
+          </div>
+          <p className="text-2xl font-extrabold text-white mt-2">{openDefects.length}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Active investigation</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Critical / High</span>
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+          </div>
+          <p className="text-2xl font-extrabold text-rose-400 mt-2">{criticalHighCount}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Requires priority containment</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Medium</span>
+            <Layers className="w-4 h-4 text-amber-400" />
+          </div>
+          <p className="text-2xl font-extrabold text-amber-300 mt-2">{mediumCount}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Standard inspection</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Resolved</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          </div>
+          <p className="text-2xl font-extrabold text-emerald-400 mt-2">{resolvedCount}</p>
+          <span className="text-[11px] text-slate-400 mt-1 block">Cleared or closed</span>
+        </div>
+      </div>
 
       {/* Error Alert */}
       {error && (
@@ -173,254 +217,197 @@ export default function DefectReportsPage() {
             <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
             <span className="text-sm font-medium">{error}</span>
           </div>
-          <button
-            onClick={loadDefects}
-            className="text-xs font-semibold underline hover:text-rose-100 ml-4"
-          >
+          <button onClick={loadDefects} className="text-xs font-semibold underline hover:text-rose-100 ml-4">
             Retry
           </button>
         </div>
       )}
 
-      {/* Filter Toolbar */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-sm space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12 items-center">
-          {/* Search Input */}
-          <div className="relative sm:col-span-2 lg:col-span-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search inventory roll, description..."
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-purple-500 transition-colors"
-            />
-          </div>
-
-          {/* Severity Filter */}
-          <div className="lg:col-span-2">
-            <select
-              value={severity}
-              onChange={(e) => {
-                setSeverity(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2.5 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-            >
-              <option value="All">All Severities</option>
-              {severities.map((val) => (
-                <option key={val} value={val}>
-                  {val}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div className="lg:col-span-2">
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2.5 text-sm text-white outline-none focus:border-purple-500 transition-colors"
-            >
-              <option value="All">All Statuses</option>
-              {statuses.map((val) => (
-                <option key={val} value={val}>
-                  {val}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Reset Filters */}
-          {isFiltered && (
-            <div className="lg:col-span-1 flex justify-end">
-              <button
-                onClick={clearFilters}
-                title="Reset filters"
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-xs font-medium transition-all"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="lg:hidden">Reset</span>
-              </button>
-            </div>
-          )}
+      {/* Filter and Search Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search SKU, roll, defect description..."
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 pl-10 pr-4 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition-colors"
+          />
         </div>
 
-        {/* Sort Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400 uppercase tracking-wider">Sort By:</span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {sortButtons.map(({ key, label }) => {
-                const isActive = sort.key === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => handleSort(key)}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                      isActive
-                        ? 'border-purple-500/50 bg-purple-500/10 text-purple-300 font-bold'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                    }`}
-                  >
-                    <span>{label}</span>
-                    {isActive ? (
-                      sort.direction === 'asc' ? (
-                        <ArrowUp className="w-3 h-3" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-40" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Severity Filter */}
+          <select
+            value={severity}
+            onChange={(e) => {
+              setSeverity(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
+          >
+            <option value="All">All Severities</option>
+            {severities.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
 
-          <div className="text-slate-400">
-            {filtered.length} defect report{filtered.length === 1 ? '' : 's'} found
-          </div>
+          {/* Status Filter */}
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-xl bg-slate-950 border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500"
+          >
+            <option value="All">All Statuses</option>
+            {statuses.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          {isFiltered && (
+            <button
+              onClick={clearFilters}
+              className="p-2 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title="Clear Filters"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Loading State */}
+      {/* Main Table / Data View */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
-          <p className="text-sm font-medium">Loading defect telemetry and inspection reports...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+          <p className="text-sm font-medium">Loading defect telemetry...</p>
         </div>
-      ) : visibleDefects.length === 0 ? (
-        /* Empty State */
+      ) : defects.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
-          title="No defect reports"
-          description={
-            isFiltered
-              ? 'No quality defects match the selected filter criteria.'
-              : 'There are currently no defect reports logged in the system.'
-          }
-          actionLabel={isFiltered ? 'Clear Filters' : undefined}
-          onAction={isFiltered ? clearFilters : undefined}
+          title="No defect reports found"
+          description="No quality defects have been logged yet. Click below to record a defect."
+          actionLabel="Log Defect"
+          onAction={() => navigate('/quality/defects/new')}
+        />
+      ) : visibleDefects.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No matching defects"
+          description="No defects match your current search and filter parameters."
+          actionLabel="Reset Filters"
+          onAction={clearFilters}
         />
       ) : (
-        /* Data Table */
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
+        <div className="space-y-4">
+          {/* Desktop Table View */}
+          <div className="hidden md:block rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm overflow-hidden shadow-sm">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-5 py-4">Inventory Roll</th>
-                  <th className="px-5 py-4">Severity</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Reported By</th>
-                  <th className="px-5 py-4">Affected Inventory</th>
-                  <th className="px-5 py-4">Created</th>
-                  <th className="px-5 py-4 text-right">Actions</th>
+                <tr className="border-b border-slate-800 bg-slate-900/90 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <th className="px-4 py-3.5">Defect ID</th>
+                  <th className="px-4 py-3.5">SKU / Roll</th>
+                  <th className="px-4 py-3.5">Severity</th>
+                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-4 py-3.5">Description</th>
+                  <th className="px-4 py-3.5 cursor-pointer hover:text-white" onClick={() => handleSort('createdAt')}>
+                    <div className="flex items-center gap-1">
+                      <span>Logged</span>
+                      <ArrowUpDown className="w-3.5 h-3.5" />
+                    </div>
+                  </th>
+                  <th className="px-4 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
-                {visibleDefects.map((defect) => {
-                  const inv = inventoryFor(defect);
-                  return (
-                    <tr
-                      key={defect.id}
-                      className="hover:bg-slate-800/40 transition-colors group"
-                    >
-                      {/* SKU */}
-                      <td className="px-5 py-4 font-mono font-bold text-white tracking-tight">
-                        {inventoryRollFor(defect)}
-                      </td>
-
-                      {/* Severity */}
-                      <td className="px-5 py-4">
-                        <SeverityBadge severity={defect.severity} />
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-5 py-4">
-                        <StatusBadge status={defect.status} />
-                      </td>
-
-                      {/* Reported By */}
-                      <td className="px-5 py-4 text-slate-400 text-xs font-mono">
-                        {defect.reportedByUserId || 'System'}
-                      </td>
-
-                      {/* Affected Inventory */}
-                      <td className="px-5 py-4 text-slate-400 text-xs font-mono">
-                        {inv.length > 0 ? (
-                          <span className="inline-block truncate max-w-[180px]" title={inv.join(', ')}>
-                            {inv.join(', ')}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
-                      </td>
-
-                      {/* Created */}
-                      <td className="px-5 py-4 text-slate-400 text-xs whitespace-nowrap">
-                        {new Date(defect.createdAt).toLocaleString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => navigate(`/quality/defects/${defect.id}`)}
-                            title="View defect details"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white text-xs font-medium transition-all"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>View</span>
-                          </button>
-                          <button
-                            onClick={() => navigate(`/quality/defects/${defect.id}/edit`)}
-                            title="Edit defect"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 text-xs font-medium transition-all"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(defect.id)}
-                            title="Delete defect"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 text-xs font-medium transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {visibleDefects.map((d) => (
+                  <tr key={d.id} className="hover:bg-slate-800/40 transition-colors group">
+                    <td className="px-4 py-3.5 font-mono font-semibold text-blue-300">
+                      #{d.id.substring(0, 8)}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className="font-mono text-cyan-300 font-medium">{inventoryRollFor(d)}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <SeverityBadge severity={d.severity} />
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <StatusBadge status={d.status} />
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-300 max-w-xs truncate">
+                      {d.description || '—'}
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-400">
+                      {d.createdAt ? formatColomboDate(d.createdAt, 'toLocaleDateString') : 'N/A'}
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100">
+                        <Link
+                          to={`/quality/defects/${d.id}`}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 border border-transparent hover:border-cyan-500/20 transition-all"
+                          title="View Detail"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Link>
+                        <Link
+                          to={`/quality/defects/${d.id}/edit`}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 border border-transparent hover:border-blue-500/20 transition-all"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(d.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="border-t border-slate-800/80 px-4">
-            <TablePagination
-              currentPage={visiblePage}
-              totalPages={totalPages}
-              totalResults={filtered.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setPage}
-            />
+          {/* Mobile Card Layout */}
+          <div className="grid md:hidden gap-3">
+            {visibleDefects.map((d) => (
+              <div key={d.id} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-blue-300 text-xs">#{d.id.substring(0, 8)}</span>
+                  <StatusBadge status={d.status} />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-mono text-cyan-300">{inventoryRollFor(d)}</span>
+                  <SeverityBadge severity={d.severity} />
+                </div>
+                <p className="text-xs text-slate-300 line-clamp-2">{d.description}</p>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+                  <span>{d.createdAt ? formatColomboDate(d.createdAt, 'toLocaleDateString') : ''}</span>
+                  <div className="flex items-center gap-2">
+                    <Link to={`/quality/defects/${d.id}`} className="text-cyan-400 font-semibold">View</Link>
+                    <Link to={`/quality/defects/${d.id}/edit`} className="text-blue-400 font-semibold">Edit</Link>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
+
+          {/* Pagination */}
+          <TablePagination
+            page={visiblePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       )}
     </div>

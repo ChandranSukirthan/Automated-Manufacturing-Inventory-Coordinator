@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from psycopg import OperationalError
 
 from ai.agents.quality_agent import run_quality_validation
 from ai.core.state import AgentState
+from ai.security import require_actor, require_role
 
 
 router = APIRouter(prefix="/quality", tags=["quality"])
@@ -23,13 +24,16 @@ class DefectInput(BaseModel):
 
 
 @router.post("/recommendation")
-def quality_recommendation(defect: DefectInput) -> dict:
+def quality_recommendation(defect: DefectInput, actor: dict = Depends(require_actor)) -> dict:
+    require_role(actor, "QualityInspector")
     state: AgentState = {
         "quality_data": {"defect": defect.model_dump(by_alias=True)},
         "tool_results": {},
     }
     try:
         result = run_quality_validation(state)
-    except (ValueError, ConnectionError, OperationalError) as error:
+    except (ConnectionError, OperationalError) as error:
+        raise HTTPException(status_code=503, detail="Live quality verification is unavailable") from error
+    except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return result["quality_data"]["validation"]

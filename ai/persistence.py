@@ -1,3 +1,4 @@
+from pathlib import Path
 import datetime
 import json
 import logging
@@ -23,12 +24,13 @@ class WorkflowStateRepository:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._store: Dict[str, Dict[str, Any]] = {}
+        from ai.session_store import SessionStore
+        self._store = SessionStore(Path(__file__).parent / "workflow_history.sqlite3")
 
     def save_workflow(self, state: AgentState) -> Dict[str, Any]:
         """Sanitizes and saves workflow execution record."""
         wf_id = state.get("workflow_id") or f"WF-{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-        mat_id = state.get("target_material_id") or state.get("target_batch") or "RM001"
+        mat_id = state.get("target_material_id") or state.get("target_batch") or state.get("material_id")
 
         # Explicitly extract ONLY permitted fields — NEVER store hidden chain-of-thought
         inventory_res = state.get("data_extraction_result") or state.get("inventory_result")
@@ -36,7 +38,7 @@ class WorkflowStateRepository:
         tool_summary = state.get("tool_execution_summary", [])
         timestamps = state.get("timestamps", {})
         errors = state.get("errors", [])
-        status = "Completed" if state.get("human_approval_status") == "APPROVED" else "WaitingForApproval" if state.get("requires_human_approval") else "Active"
+        status = str(state.get("status") or ("Completed" if state.get("human_approval_status") == "APPROVED" else "WaitingForApproval" if state.get("requires_human_approval") else "Active"))
 
         record = {
             "workflowId": wf_id,
