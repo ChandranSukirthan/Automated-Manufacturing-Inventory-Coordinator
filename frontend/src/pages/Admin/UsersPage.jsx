@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
@@ -282,7 +283,7 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-xs text-slate-400 font-mono">
-                      {new Date(u.createdAt).toLocaleDateString()}
+                      {formatColomboDate(u.createdAt, 'toLocaleDateString')}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">

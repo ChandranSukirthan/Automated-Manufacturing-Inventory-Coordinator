@@ -550,7 +550,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasDefaultValue("usd");
+                        .HasDefaultValue("lkr");
 
                     b.Property<string>("FailureReason")
                         .HasMaxLength(500)
@@ -788,7 +788,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                     b.Property<decimal>("ApprovalThreshold")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(5000m);
+                        .HasDefaultValue(1500000m);
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
@@ -827,7 +827,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasDefaultValue("USD");
+                        .HasDefaultValue("LKR");
 
                     b.Property<string>("DeliveryRemarks")
                         .HasMaxLength(500)
@@ -1077,7 +1077,7 @@ namespace ManufacturingCoordinator.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasDefaultValue("USD");
+                        .HasDefaultValue("LKR");
 
                     b.Property<bool>("IsValidated")
                         .HasColumnType("boolean");

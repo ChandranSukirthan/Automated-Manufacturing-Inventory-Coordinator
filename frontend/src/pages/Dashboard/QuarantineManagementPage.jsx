@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -351,7 +352,7 @@ export default function QuarantineManagementPage() {
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="px-4 py-3.5 text-slate-400">
-                      {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A'}
+                      {r.createdAt ? formatColomboDate(r.createdAt, 'toLocaleDateString') : 'N/A'}
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -392,7 +393,7 @@ export default function QuarantineManagementPage() {
                 </div>
                 <p className="text-xs text-slate-300 line-clamp-2">{r.reason}</p>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                  <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
+                  <span>{r.createdAt ? formatColomboDate(r.createdAt, 'toLocaleDateString') : ''}</span>
                   <div className="flex items-center gap-2">
                     {r.status === 'Active' && (
                       <button

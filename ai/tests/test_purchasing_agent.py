@@ -80,7 +80,7 @@ class TestPurchasingAgent(unittest.TestCase):
                 "materialName": "BoxPouch Film",
                 "specification": "BP-FILM-001",
                 "unitPrice": 1.42,
-                "currency": "USD",
+                "currency": "LKR",
                 "unit": "meters",
                 "minimumOrderQuantity": 500.0,
                 "availableQuantity": 10000.0,
@@ -237,7 +237,7 @@ class TestPurchasingAgent(unittest.TestCase):
         report_unverified = {"isValid": True, "supplierStatus": "UNVERIFIED", "totalCost": 1300.0, "adjustedQuantity": 1000.0}
         report_approved = {"isValid": True, "supplierStatus": "APPROVED", "totalCost": 1450.0, "adjustedQuantity": 1000.0}
 
-        selection = select_supplier([(cand_unverified, report_unverified), (cand_approved, report_approved)], {"maximumBudget": 10000.0})
+        selection = select_supplier([(cand_unverified, report_unverified), (cand_approved, report_approved)], {"maximumBudget": 3000000.0})
         # APPROVED is prioritized over UNVERIFIED
         self.assertEqual(selection["selectedCandidate"]["supplierName"], "Contract Vendor")
 
@@ -312,7 +312,7 @@ class TestPurchasingAgent(unittest.TestCase):
                 "currentStock": 1000.0,
                 "safetyStock": 1000.0,
                 "existingOpenPoQuantity": 1000.0,
-                "maximumBudget": 20000.0
+                "maximumBudget": 6000000.0
             },
             "completed_steps": [],
             "errors": [],
@@ -333,8 +333,8 @@ class TestPurchasingAgent(unittest.TestCase):
         Current Stock = 1,000.
         Open PO = 0.
         Net Required Quantity = 4,000.
-        Candidate selected: Apex Polymer Solutions Ltd @ $1.45/m.
-        Expected Total Cost = 4,000 * 1.45 = $5,800 USD.
+        Candidate selected: Apex Polymer Solutions Ltd @ LKR 435/m.
+        Expected Total Cost = 4,000 * 435 = LKR 1,740,000.
         Draft PO created with UNPAID status, emailSent = False, requiresApproval = True.
         """
         state = {
@@ -346,7 +346,7 @@ class TestPurchasingAgent(unittest.TestCase):
                 "safetyStock": 1000.0,
                 "currentStock": 1000.0,
                 "existingOpenPoQuantity": 0.0,
-                "maximumBudget": 10000.0
+                "maximumBudget": 3000000.0
             },
             "completed_steps": [],
             "errors": [],
@@ -354,8 +354,8 @@ class TestPurchasingAgent(unittest.TestCase):
         }
         output = purchasing_node(state)
         self.assertEqual(output["required_quantity"], 4000.0)
-        self.assertEqual(output["total_cost"], 5800.0)
-        self.assertEqual(output["purchasing_data"]["draft_po"]["estimatedCostUsd"], 5800.0)
+        self.assertEqual(output["total_cost"], 1740000.0)
+        self.assertEqual(output["purchasing_data"]["draft_po"]["estimatedCost"], 1740000.0)
         self.assertEqual(output["purchasing_data"]["draft_po"]["paymentStatus"], "UNPAID")
         self.assertFalse(output["purchasing_data"]["draft_po"]["emailSent"])
 
@@ -388,7 +388,7 @@ class TestPurchasingAgent(unittest.TestCase):
             "material": "Film",
             "specification": "Spec A",
             "unitPrice": 1.50,
-            "currency": "USD",
+            "currency": "LKR",
             "unit": "meters",
             "minimumOrderQuantity": 100.0,
             "packSize": 50.0,
@@ -420,7 +420,7 @@ class TestPurchasingAgent(unittest.TestCase):
                 "materialName": "BoxPouch Film",
                 "requiredSpecification": "BP-FILM-001",
                 "netDeficit": 900.0,
-                "maximumBudget": 15000.0
+                "maximumBudget": 4500000.0
             },
             "completed_steps": [],
             "errors": [],
@@ -460,7 +460,7 @@ class TestPurchasingAgent(unittest.TestCase):
                     "poNumber": "PO-DRAFT-2026-001",
                     "supplier": "Apex Polymer Solutions Ltd",
                     "quantity": 900,
-                    "estimatedCostUsd": 1305.0,
+                    "estimatedCost": 1305.0,
                     "unitPrice": 1.45,
                     "paymentStatus": "UNPAID",
                     "emailSent": False,

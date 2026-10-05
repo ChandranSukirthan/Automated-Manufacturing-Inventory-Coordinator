@@ -132,7 +132,7 @@ class SystemHealthTab extends StatelessWidget {
                 ),
               ),
               Text(
-                'Synced: ${health?.timestamp.toLocal().toString().substring(11, 19) ?? "Now"}',
+                'Synced: ${health?.timestamp.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 19) ?? "Now"}',
                 style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
               ),
             ],

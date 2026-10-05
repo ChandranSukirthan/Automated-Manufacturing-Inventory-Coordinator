@@ -37,7 +37,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         private readonly IConfiguration _configuration;
         private readonly ILogger<PurchaseOrderService> _logger;
 
-        private const string DefaultCurrency = "usd";
+        private const string DefaultCurrency = "lkr";
 
         public PurchaseOrderService(
             ApplicationDbContext context,
@@ -177,13 +177,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var supplier = await ValidateSupplierAsync(dto.SupplierId);
 
             var approvalThreshold = _configuration.GetValue<decimal>(
-                "PurchaseOrderSettings:ApprovalThresholdAmount", 5000m);
+                "PurchaseOrderSettings:ApprovalThresholdAmount", 1500000m);
 
             var po = new PurchaseOrder
             {
                 PoNumber = await GeneratePoNumberAsync(),
                 SupplierId = dto.SupplierId,
-                Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "USD" : dto.Currency.Trim().ToUpperInvariant(),
+                Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "LKR" : dto.Currency.Trim().ToUpperInvariant(),
                 BudgetLimit = dto.BudgetLimit,
                 Notes = dto.Notes,
                 ProcurementRequestId = dto.ProcurementRequestId,
@@ -799,7 +799,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             // Budget validation against authorized limit
             if (po.BudgetLimit > 0 && po.TotalCost > po.BudgetLimit)
             {
-                throw new InvalidOperationException($"Approval blocked: Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).");
+                throw new InvalidOperationException($"Approval blocked: Total order cost ({po.Currency} {po.TotalCost:N2}) exceeds authorized budget limit ({po.Currency} {po.BudgetLimit:N2}).");
             }
 
             if (await GetMaterialQuarantinedRollsCountAsync(po) > 0)
@@ -853,7 +853,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         var bStr = bc.GetString();
                         if (bStr == "BUDGET_EXCEEDED" || bStr == "FAIL" || bStr == "FAILED")
                         {
-                            throw new InvalidOperationException($"Approval blocked: Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).");
+                            throw new InvalidOperationException($"Approval blocked: Total order cost ({po.Currency} {po.TotalCost:N2}) exceeds authorized budget limit ({po.Currency} {po.BudgetLimit:N2}).");
                         }
                     }
 
@@ -984,7 +984,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             {
                 budgetCheck = "BUDGET_EXCEEDED";
                 isValid = false;
-                rejectionReason ??= $"Total order cost (${po.TotalCost:N2}) exceeds authorized budget limit (${po.BudgetLimit:N2}).";
+                rejectionReason ??= $"Total order cost ({po.Currency} {po.TotalCost:N2}) exceeds authorized budget limit ({po.Currency} {po.BudgetLimit:N2}).";
             }
 
             // 4. Validate Order Lines & Math
@@ -1016,7 +1016,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     {
                         poMathematicalCheck = "CALCULATION_MISMATCH";
                         isValid = false;
-                        rejectionReason ??= $"Calculation mismatch: {line.Quantity} x ${line.UnitPrice:N2} != ${line.TotalPrice:N2}";
+                        rejectionReason ??= $"Calculation mismatch: {line.Quantity} x {po.Currency} {line.UnitPrice:N2} != {po.Currency} {line.TotalPrice:N2}";
                         break;
                     }
                 }
@@ -1102,7 +1102,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             }
             else
             {
-                impactReason = $"Procurement order (${po.TotalCost:N2}) within standard operational parameters.";
+                impactReason = $"Procurement order ({po.Currency} {po.TotalCost:N2}) within standard operational parameters.";
             }
 
             // 7. Manual resolution state handling (strictly authoritative from current DB state)
@@ -1236,7 +1236,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     existingWf.Status = WorkflowStatus.Completed;
                     existingWf.ApprovalStatus = ApprovalStatus.Approved;
                     existingWf.CompletedAt = DateTime.UtcNow;
-                    existingWf.FinalOutcome = $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})";
+                    existingWf.FinalOutcome = $"PO {po.PoNumber} approved & dispatched ({po.Currency} {po.TotalCost:F2})";
                 }
                 else if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.InTransit)
                 {
@@ -1286,7 +1286,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                     ApprovalStatus = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? ApprovalStatus.Approved : (po.Status == PurchaseOrderStatus.Rejected ? ApprovalStatus.Rejected : ApprovalStatus.Pending),
                     StartedAt = DateTime.UtcNow,
                     CompletedAt = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? DateTime.UtcNow : null,
-                    FinalOutcome = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? $"PO {po.PoNumber} approved & dispatched (${po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
+                    FinalOutcome = (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.Delivered || po.Status == PurchaseOrderStatus.Completed) ? $"PO {po.PoNumber} approved & dispatched ({po.Currency} {po.TotalCost:F2})" : (isQaPassed ? $"PO {po.PoNumber} automated validation & safety checks passed (4/4)" : null),
                     ValidationResults = json
                 };
                 if (po.Status == PurchaseOrderStatus.Sent || po.Status == PurchaseOrderStatus.InTransit)
@@ -1559,7 +1559,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         .SetFontSize(8.5f).SetFontColor(grayText));
                     poMetaCell.Add(new Paragraph($"Status: {po.Status.ToString().ToUpperInvariant()}")
                         .SetFontSize(9.5f).SetBold().SetFontColor(po.Status == PurchaseOrderStatus.Sent ? emeraldGreen : brandBlue));
-                    poMetaCell.Add(new Paragraph($"Currency: {(string.IsNullOrWhiteSpace(po.Currency) ? "USD" : po.Currency.ToUpperInvariant())}")
+                    poMetaCell.Add(new Paragraph($"Currency: {(string.IsNullOrWhiteSpace(po.Currency) ? "LKR" : po.Currency.ToUpperInvariant())}")
                         .SetFontSize(8.5f).SetFontColor(grayText));
                     headerTable.AddCell(poMetaCell);
 
@@ -1648,12 +1648,12 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                                 .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
 
                             // Col 4: Unit Price
-                            itemsTable.AddCell(new Cell().Add(new Paragraph($"${line.UnitPrice:N2}").SetFontSize(8.5f))
+                            itemsTable.AddCell(new Cell().Add(new Paragraph($"{po.Currency} {line.UnitPrice:N2}").SetFontSize(8.5f))
                                 .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
 
                             // Col 5: Total Price
                             var lineTotal = line.TotalPrice > 0 ? line.TotalPrice : line.Quantity * line.UnitPrice;
-                            itemsTable.AddCell(new Cell().Add(new Paragraph($"${lineTotal:N2}").SetFontSize(8.5f).SetBold().SetFontColor(darkSlate))
+                            itemsTable.AddCell(new Cell().Add(new Paragraph($"{po.Currency} {lineTotal:N2}").SetFontSize(8.5f).SetBold().SetFontColor(darkSlate))
                                 .SetBackgroundColor(rowBg).SetPadding(6).SetTextAlignment(TextAlignment.RIGHT).SetBorderBottom(new SolidBorder(borderLight, 0.5f)));
 
                             itemIndex++;
@@ -1685,7 +1685,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
                     var totalCell = new Cell().SetBorder(new SolidBorder(brandBlue, 1.5f)).SetBackgroundColor(bgLight).SetPadding(8).SetTextAlignment(TextAlignment.RIGHT);
                     totalCell.Add(new Paragraph("TOTAL COMMITTED AMOUNT").SetFontSize(7.5f).SetBold().SetFontColor(grayText));
-                    totalCell.Add(new Paragraph($"${po.TotalCost:N2} {(string.IsNullOrWhiteSpace(po.Currency) ? "USD" : po.Currency.ToUpperInvariant())}")
+                    totalCell.Add(new Paragraph($"{po.Currency} {po.TotalCost:N2}")
                         .SetFontSize(15).SetBold().SetFontColor(brandBlue));
                     summaryTable.AddCell(totalCell);
 

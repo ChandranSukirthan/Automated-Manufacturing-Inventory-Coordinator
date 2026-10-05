@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
@@ -342,7 +343,7 @@ export default function DefectReportsPage() {
                       {d.description || '—'}
                     </td>
                     <td className="px-4 py-3.5 text-slate-400">
-                      {d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'N/A'}
+                      {d.createdAt ? formatColomboDate(d.createdAt, 'toLocaleDateString') : 'N/A'}
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100">
@@ -389,7 +390,7 @@ export default function DefectReportsPage() {
                 </div>
                 <p className="text-xs text-slate-300 line-clamp-2">{d.description}</p>
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                  <span>{d.createdAt ? new Date(d.createdAt).toLocaleDateString() : ''}</span>
+                  <span>{d.createdAt ? formatColomboDate(d.createdAt, 'toLocaleDateString') : ''}</span>
                   <div className="flex items-center gap-2">
                     <Link to={`/quality/defects/${d.id}`} className="text-cyan-400 font-semibold">View</Link>
                     <Link to={`/quality/defects/${d.id}/edit`} className="text-blue-400 font-semibold">Edit</Link>

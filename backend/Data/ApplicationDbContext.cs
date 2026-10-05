@@ -441,7 +441,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(po => po.Currency)
                     .HasMaxLength(10)
-                    .HasDefaultValue("USD");
+                    .HasDefaultValue("LKR");
 
                 entity.Property(po => po.TotalCost)
                     .HasColumnType("decimal(18,2)");
@@ -451,7 +451,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(po => po.ApprovalThreshold)
                     .HasColumnType("decimal(18,2)")
-                    .HasDefaultValue(5000m);
+                    .HasDefaultValue(1500000m);
 
                 entity.Property(po => po.Notes)
                     .HasMaxLength(1000);
@@ -560,7 +560,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(pt => pt.Currency)
                     .HasMaxLength(10)
-                    .HasDefaultValue("usd");
+                    .HasDefaultValue("lkr");
 
                 entity.Property(pt => pt.PaymentStatus)
                     .HasMaxLength(50)
@@ -841,7 +841,7 @@ namespace ManufacturingCoordinator.Data
 
                 entity.Property(sc => sc.Currency)
                     .HasMaxLength(10)
-                    .HasDefaultValue("USD");
+                    .HasDefaultValue("LKR");
 
                 entity.Property(sc => sc.MinimumOrderQuantity)
                     .HasColumnType("decimal(18,3)");

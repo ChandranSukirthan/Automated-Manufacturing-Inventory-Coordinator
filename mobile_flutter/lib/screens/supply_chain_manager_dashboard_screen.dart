@@ -1,3 +1,4 @@
+import '../utils/locale.dart';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
@@ -102,7 +103,7 @@ class _SupplyChainManagerDashboardScreenState extends State<SupplyChainManagerDa
 
   Widget _buildSummaryCards() {
     final pendingApprovals = _purchaseOrders.where((po) => po.status == 'PendingApproval').length;
-    final totalValue = _purchaseOrders.fold<double>(0, (sum, po) => sum + po.totalCost);
+    final totalValue = _purchaseOrders.where((po) => po.currency.toUpperCase() == 'LKR').fold<double>(0, (sum, po) => sum + po.totalCost);
 
     return GridView.count(
       crossAxisCount: 2,
@@ -114,7 +115,7 @@ class _SupplyChainManagerDashboardScreenState extends State<SupplyChainManagerDa
       children: [
         _buildMetricCard(
           title: 'Total Purchase Value',
-          value: '\$${totalValue.toStringAsFixed(2)}',
+          value: formatMoney(totalValue),
           icon: Icons.attach_money,
           color: Colors.green,
         ),
@@ -308,7 +309,7 @@ class _SupplyChainManagerDashboardScreenState extends State<SupplyChainManagerDa
               child: ListTile(
                 leading: const Icon(Icons.receipt, color: Colors.blueAccent),
                 title: Text(po.poNumber, style: const TextStyle(color: Colors.white)),
-                subtitle: Text('${po.supplierName} - \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white70)),
+                subtitle: Text('${po.supplierName} - ${formatMoney(po.totalCost, currency: po.currency)}', style: const TextStyle(color: Colors.white70)),
                 trailing: Text(po.status, style: const TextStyle(color: Colors.white54)),
               ),
             );

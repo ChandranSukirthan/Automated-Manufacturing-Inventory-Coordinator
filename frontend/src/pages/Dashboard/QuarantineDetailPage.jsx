@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
@@ -153,7 +154,7 @@ export default function QuarantineDetailPage() {
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Quarantined On</span>
             <div className="mt-1 text-sm text-slate-200">
-              {record.createdAt ? new Date(record.createdAt).toLocaleString() : 'N/A'}
+              {record.createdAt ? formatColomboDate(record.createdAt, 'toLocaleString') : 'N/A'}
             </div>
           </div>
         </div>

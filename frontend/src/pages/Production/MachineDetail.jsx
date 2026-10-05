@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
@@ -369,7 +370,7 @@ export default function MachineDetail() {
                     {getMaintenanceTypeBadge(log.type)}
                     <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
                       <Calendar className="w-3.5 h-3.5" />
-                      {new Date(log.performedAt).toLocaleString()}
+                      {formatColomboDate(log.performedAt, 'toLocaleString')}
                     </span>
                   </div>
                   <p className="text-sm text-slate-200 font-medium pt-1">{log.description}</p>

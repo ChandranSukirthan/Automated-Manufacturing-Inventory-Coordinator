@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../Common/ModalOverlay';
 import useCurrentTime from '../../hooks/useCurrentTime';
 import React, { useState, useEffect, useRef } from 'react';
@@ -458,10 +459,10 @@ export default function StockAlertNotifications() {
                         </div>
                         <div className="text-right">
                           <span className="font-mono font-bold text-white block">
-                            ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                           </span>
                           <span className="text-[10px] text-slate-500">
-                            {new Date(po.createdAt).toLocaleDateString()}
+                            {formatColomboDate(po.createdAt, 'toLocaleDateString')}
                           </span>
                         </div>
                       </div>

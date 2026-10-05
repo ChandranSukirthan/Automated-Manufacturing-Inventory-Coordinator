@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -473,7 +474,7 @@ class _NotificationStatusScreenState extends State<NotificationStatusScreen> {
                                             ),
                                           ),
                                           Text(
-                                            '\$${po.totalCost.toStringAsFixed(2)}',
+                                            formatMoney(po.totalCost, currency: po.currency),
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,

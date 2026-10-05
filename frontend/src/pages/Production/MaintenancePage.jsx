@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -304,7 +305,7 @@ export default function MaintenancePage() {
                       {getMaintenanceTypeBadge(log.type)}
                       <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5" />
-                        {new Date(log.performedAt).toLocaleDateString()} at {new Date(log.performedAt).toLocaleTimeString()}
+                        {formatColomboDate(log.performedAt, 'toLocaleDateString')} at {formatColomboDate(log.performedAt, 'toLocaleTimeString')}
                       </span>
                     </div>
                     <p className="text-sm text-slate-200 font-medium">{log.description}</p>

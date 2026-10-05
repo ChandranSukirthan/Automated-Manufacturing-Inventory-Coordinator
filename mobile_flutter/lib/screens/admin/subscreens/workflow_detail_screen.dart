@@ -103,7 +103,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Created: ${_currentWorkflow.createdAt.toLocal().toString().split('.')[0]}',
+                  'Created: ${_currentWorkflow.createdAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]}',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
               ],

@@ -48,7 +48,7 @@ class PurchaseOrderSummary {
       poNumber: json['poNumber'] as String? ?? 'PO-${json['id']}',
       supplierName: json['supplierName'] as String? ?? 'Unknown Supplier',
       status: json['status'] as String? ?? 'Draft',
-      currency: json['currency'] as String? ?? 'USD',
+      currency: json['currency'] as String? ?? 'LKR',
       totalCost: (json['totalCost'] as num? ?? json['totalAmount'] as num? ?? 0).toDouble(),
       requiresApproval: json['requiresApproval'] as bool? ?? false,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -190,7 +190,7 @@ class PaymentTransaction {
       id: json['id'] as int? ?? 0,
       transactionId: json['transactionId'] as String?,
       amount: (json['amount'] as num? ?? 0).toDouble(),
-      currency: json['currency'] as String? ?? 'usd',
+      currency: json['currency'] as String? ?? 'lkr',
       paymentStatus: json['paymentStatus'] as String? ?? 'Completed',
       failureReason: json['failureReason'] as String?,
       timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
@@ -271,7 +271,7 @@ class PurchaseOrderDetail {
       supplierId: json['supplierId'] as int? ?? 0,
       supplierName: json['supplierName'] as String? ?? 'Unknown Supplier',
       status: json['status'] as String? ?? 'Draft',
-      currency: json['currency'] as String? ?? 'USD',
+      currency: json['currency'] as String? ?? 'LKR',
       totalCost: (json['totalCost'] as num? ?? json['totalAmount'] as num? ?? 0).toDouble(),
       budgetLimit: (json['budgetLimit'] as num? ?? 0).toDouble(),
       approvalThreshold: (json['approvalThreshold'] as num? ?? 0).toDouble(),
@@ -367,6 +367,7 @@ class AgentWorkflowItem {
   const AgentWorkflowItem({
     required this.workflowId,
     this.workflowType = 'Procurement',
+    this.currency = 'LKR',
     this.errors = const [],
     required this.objective,
     required this.currentAgent,
@@ -386,6 +387,7 @@ class AgentWorkflowItem {
 
   final String workflowId;
   final String workflowType;
+  final String currency;
   final List<String> errors;
   bool get canRetry => workflowType == 'Procurement' && purchaseOrderId == 0 &&
       (status == 'Failed' || currentAgent == 'Supplier Review');
@@ -410,6 +412,7 @@ class AgentWorkflowItem {
     return AgentWorkflowItem(
       workflowId: json['workflowId'] as String? ?? 'WF-${json['purchaseOrderId']}',
       workflowType: json['workflowType'] as String? ?? 'Procurement',
+      currency: json['currency']?.toString() ?? (details['draft_po'] is Map ? details['draft_po']['currency']?.toString() : null) ?? 'LKR',
       errors: (details['errors'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
       objective: json['objective'] as String? ?? 'Inventory replenishment',
       currentAgent: json['currentAgent'] as String? ?? 'Agent',

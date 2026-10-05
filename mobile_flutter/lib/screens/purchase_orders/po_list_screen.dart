@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -370,7 +371,7 @@ class _POListScreenState extends State<POListScreen> {
                                             ],
                                           ),
                                           Text(
-                                            '\$${po.totalCost.toStringAsFixed(2)}',
+                                            formatMoney(po.totalCost, currency: po.currency),
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
@@ -510,7 +511,7 @@ class _POListScreenState extends State<POListScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Unit Price (\$)',
+                            'Unit Price (LKR )',
                             style: TextStyle(
                               color: Colors.white54,
                               fontSize: 12,

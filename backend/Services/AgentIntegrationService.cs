@@ -114,7 +114,7 @@ namespace backend.Services
             {
                 var payload = new
                 {
-                    objective = $"Procure raw material '{materialName}' ({specification}) — net deficit {netDeficit ?? requiredQuantity} {unit ?? "units"} — budget ${budgetLimit ?? 0:F2}",
+                    objective = $"Procure raw material '{materialName}' ({specification}) — net deficit {netDeficit ?? requiredQuantity} {unit ?? "units"} — budget LKR {budgetLimit ?? 0:F2}",
                     workflowId,
                     procurementRequestId,
                     triggerType = "Manual",
@@ -128,9 +128,10 @@ namespace backend.Services
                     openPOQuantity,
                     netDeficit = netDeficit ?? requiredQuantity,   // authoritative deficit
                     budgetLimit,
+                    currency = "LKR",
                     unit,
                     qualityRequirement,
-                    preferredRegion,
+                    preferredRegion = preferredRegion ?? "Sri Lanka",
                     requiredByDate
                 };
 
@@ -177,7 +178,7 @@ namespace backend.Services
                                 SupplierName = GetString(s, "supplierName", "supplier_name", "supplier") ?? "Unknown Supplier",
                                 MaterialName = GetString(s, "materialName", "material_name") ?? materialName,
                                 UnitPrice = GetDecimal(s, 0m, "unitPrice", "unit_price"),
-                                Currency = GetString(s, "currency") ?? "USD",
+                                Currency = GetString(s, "currency") ?? "LKR",
                                 MinimumOrderQuantity = GetDecimal(s, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
                                 PackSize = GetDecimal(s, 1m, "packSize", "pack_size"),
                                 LeadTimeDays = GetInt(s, 0, "leadTimeDays", "lead_time_days"),
@@ -197,7 +198,7 @@ namespace backend.Services
                             SupplierName = GetString(recEl, "supplierName", "supplier_name", "supplier") ?? "Unknown Supplier",
                             MaterialName = GetString(recEl, "materialName", "material_name") ?? materialName,
                             UnitPrice = GetDecimal(recEl, 0m, "unitPrice", "unit_price"),
-                            Currency = GetString(recEl, "currency") ?? "USD",
+                            Currency = GetString(recEl, "currency") ?? "LKR",
                             MinimumOrderQuantity = GetDecimal(recEl, 0m, "minimumOrderQuantity", "minimum_order_quantity", "moq"),
                             PackSize = GetDecimal(recEl, 1m, "packSize", "pack_size"),
                             LeadTimeDays = GetInt(recEl, 0, "leadTimeDays", "lead_time_days"),

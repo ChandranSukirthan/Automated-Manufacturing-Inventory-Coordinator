@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React, { useState, useMemo } from 'react';
 import {
   Clock,
@@ -209,7 +210,7 @@ export default function AlertsTab({
                     {relativeTime(alert.timestamp)}
                   </span>
                   <span className="text-[10px] text-slate-600 block mt-0.5">
-                    {new Date(alert.timestamp).toLocaleDateString()}
+                    {formatColomboDate(alert.timestamp, 'toLocaleDateString')}
                   </span>
                 </div>
               </div>

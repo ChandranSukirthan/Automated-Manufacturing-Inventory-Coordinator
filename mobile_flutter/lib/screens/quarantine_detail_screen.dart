@@ -414,8 +414,8 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
   );
 
   String _formatDate(DateTime value) {
-    final local = value.toLocal();
+    final local = value.toUtc().add(const Duration(hours: 5, minutes: 30));
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${local.month}/${two(local.day)}/${local.year} ${two(local.hour)}:${two(local.minute)}';
+    return '${two(local.day)}/${two(local.month)}/${local.year} ${two(local.hour)}:${two(local.minute)}';
   }
 }

@@ -136,8 +136,8 @@ void main() {
       expect(find.text('AI Procurement Recommendation'), findsOneWidget);
       expect(find.text('Apex Packaging Materials Ltd'), findsOneWidget);
       expect(find.text('1000 units'), findsOneWidget);
-      expect(find.text('\$3.50'), findsOneWidget);
-      expect(find.text('\$3500.00'), findsOneWidget);
+      expect(find.text('LKR 3.50'), findsOneWidget);
+      expect(find.text('LKR 3,500.00'), findsOneWidget);
       expect(find.text('In Stock'), findsOneWidget);
       expect(find.text('Supplier: APPROVED'), findsOneWidget);
       expect(find.text('Quality: VERIFIED'), findsOneWidget);

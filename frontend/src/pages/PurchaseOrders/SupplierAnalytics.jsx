@@ -1,3 +1,4 @@
+import { formatMoney } from '../../utils/locale.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -148,7 +149,7 @@ export default function SupplierAnalytics() {
             <DollarSign className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-emerald-400 mt-2">
-            ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
           <span className="text-[11px] text-slate-400 mt-1 block">Approved & Dispatched</span>
         </div>
@@ -277,7 +278,7 @@ export default function SupplierAnalytics() {
                       )}
                     </td>
                     <td className="py-3 px-3 text-right font-bold text-white font-mono">
-                      ${s.totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMoney(s.totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2 }), 'LKR')}
                     </td>
                   </tr>
                 ))}
@@ -326,7 +327,7 @@ export default function SupplierAnalytics() {
 
               <div className="flex items-center gap-4">
                 <span className="font-mono font-bold text-white text-sm">
-                  ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                 </span>
                 <StatusBadge status={po.status} />
               </div>

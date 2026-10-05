@@ -1,3 +1,4 @@
+import '../utils/locale.dart';
 import 'package:flutter/material.dart';
 
 import '../app_colors.dart';
@@ -2838,7 +2839,7 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Total: \$${result.totalAmount ?? 0}',
+                'Total: ${formatMoney(result.totalAmount ?? 0, currency: result.currency)}',
                 style: const TextStyle(
                   color: Color(0xFF34D399),
                   fontWeight: FontWeight.w800,

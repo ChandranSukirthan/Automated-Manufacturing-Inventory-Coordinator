@@ -125,4 +125,4 @@ class _SupplyDeliveryTrackingScreenState
 
 String _formatDeliveryTime(DateTime? value) => value == null
     ? 'Not available'
-    : value.toLocal().toString().split('.').first;
+    : value.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.').first;

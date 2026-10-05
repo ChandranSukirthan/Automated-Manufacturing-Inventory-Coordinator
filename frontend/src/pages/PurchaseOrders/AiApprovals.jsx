@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
@@ -458,7 +459,7 @@ export default function AiApprovals() {
                             </span>
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            Supplier: <strong className="text-white">{po.supplierName}</strong> • Approved on {po.approvedAt ? new Date(po.approvedAt).toLocaleDateString() : 'Recently'}
+                            Supplier: <strong className="text-white">{po.supplierName}</strong> • Approved on {po.approvedAt ? formatColomboDate(po.approvedAt, 'toLocaleDateString') : 'Recently'}
                           </p>
                         </div>
                       </div>
@@ -467,7 +468,7 @@ export default function AiApprovals() {
                         <div className="text-right">
                           <span className="text-[10px] uppercase font-semibold text-slate-400 block">Total Due</span>
                           <span className="text-base font-mono font-bold text-emerald-400">
-                            ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+                            {formatMoney(totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                           </span>
                         </div>
                         <StatusBadge status={po.status} />
@@ -484,8 +485,8 @@ export default function AiApprovals() {
                                 <div className="col-span-2 sm:col-span-1"><span className="text-slate-500 block">Material</span><strong className="text-white">{line.rawMaterialName}</strong><span className="block text-[10px] text-slate-500">{line.rawMaterialSku}</span></div>
                                 <div><span className="text-slate-500 block">In stock</span><strong className="text-white">{Number(line.currentStock || 0).toLocaleString()}</strong></div>
                                 <div><span className="text-slate-500 block">Buying</span><strong className="text-amber-300">{Number(line.quantity || 0).toLocaleString()}</strong></div>
-                                <div><span className="text-slate-500 block">Unit price</span><strong className="text-white">${Number(line.unitPrice || 0).toFixed(2)}</strong></div>
-                                <div><span className="text-slate-500 block">Line total</span><strong className="text-emerald-400">${Number(line.totalPrice || line.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
+                                <div><span className="text-slate-500 block">Unit price</span><strong className="text-white">{formatMoney(Number(line.unitPrice || 0).toFixed(2), po?.currency || 'LKR')}</strong></div>
+                                <div><span className="text-slate-500 block">Line total</span><strong className="text-emerald-400">{formatMoney(Number(line.totalPrice || line.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}</strong></div>
                               </div>
                             ))}
                           </div>
@@ -499,7 +500,7 @@ export default function AiApprovals() {
                             <span className="text-slate-500">Email</span><span className="text-slate-200 break-all">{po.supplierContactEmail || 'Not recorded'}</span>
                             <span className="text-slate-500">Phone</span><span className="text-slate-200">{po.supplierContactPhone || 'Not recorded'}</span>
                             <span className="text-slate-500">Terms / lead time</span><span className="text-slate-200">{po.supplierPaymentTerms || 'Not recorded'} / {po.supplierLeadTimeDays || 0} days</span>
-                            <span className="text-slate-500">Budget limit</span><span className="text-slate-200">${Number(po.budgetLimit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-500">Budget limit</span><span className="text-slate-200">{formatMoney(Number(po.budgetLimit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}</span>
                             <span className="text-slate-500">Agent validation</span><strong className="text-emerald-400">{po.qualitySafetyStatus || 'APPROVED'}</strong>
                           </div>
                         </div>
@@ -616,7 +617,7 @@ export default function AiApprovals() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Submitted on {new Date(po.createdAt).toLocaleString()}
+                          Submitted on {formatColomboDate(po.createdAt, 'toLocaleString')}
                         </p>
                       </div>
                     </div>
@@ -638,7 +639,7 @@ export default function AiApprovals() {
                         AI Recommendation & Predictive Analysis
                       </span>
                       <p className="text-xs text-slate-200 mt-0.5 leading-relaxed">
-                        <strong>APPROVE RECOMMENDED:</strong> Current inventory for {materialName} is nearing reorder threshold. Linear burn rate forecast indicates stockout risk in <strong>3.2 days</strong>. Unit price (${unitPrice.toFixed(2)}) is consistent with active supply contracts.
+                        <strong>APPROVE RECOMMENDED:</strong> Current inventory for {materialName} is nearing reorder threshold. Linear burn rate forecast indicates stockout risk in <strong>3.2 days</strong>. Unit price ({formatMoney(unitPrice.toFixed(2), po?.currency || 'LKR')}) is consistent with active supply contracts.
                       </p>
                     </div>
                   </div>
@@ -675,7 +676,7 @@ export default function AiApprovals() {
                         Unit Price
                       </span>
                       <p className="font-bold text-white font-mono text-sm">
-                        ${unitPrice.toFixed(2)}
+                        {formatMoney(unitPrice.toFixed(2), po?.currency || 'LKR')}
                       </p>
                     </div>
 
@@ -684,7 +685,7 @@ export default function AiApprovals() {
                         Total Amount
                       </span>
                       <p className="font-extrabold text-white font-mono text-sm">
-                        ${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {formatMoney(totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                       </p>
                     </div>
 
@@ -707,13 +708,13 @@ export default function AiApprovals() {
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">Budget Limit:</span>
                         <span className="font-mono text-slate-200">
-                          ${budgetLimit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {formatMoney(budgetLimit.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">Budget Utilization:</span>
                         <span className={`font-bold font-mono ${isBudgetPassed ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {budgetPercentage}% utilized ({isBudgetPassed ? 'Passed' : `Exceeded by +$${exceededAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`})
+                          {budgetPercentage}% utilized ({isBudgetPassed ? 'Passed' : `Exceeded by +${'LKR'} ${exceededAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`})
                         </span>
                       </div>
                       <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
@@ -737,7 +738,7 @@ export default function AiApprovals() {
                               </div>
                               <p className="text-[11px] text-slate-300">
                                 Resolved by <span className="font-semibold text-emerald-300">{po.resolvedBy || 'QA Inspector'}</span>
-                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                                {po.resolvedAt && <span> on {formatColomboDate(po.resolvedAt, 'toLocaleString')}</span>}
                               </p>
                               {po.manualResolutionNote && (
                                 <p className="text-[11px] text-slate-300 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
@@ -763,7 +764,7 @@ export default function AiApprovals() {
                               </div>
                               <p className="text-[11px] text-slate-300">
                                 Rejected by <span className="font-semibold text-rose-300">{po.resolvedBy || 'QA Inspector'}</span>
-                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                                {po.resolvedAt && <span> on {formatColomboDate(po.resolvedAt, 'toLocaleString')}</span>}
                               </p>
                               {(po.manualResolutionNote || po.rejectionReason) && (
                                 <p className="text-[11px] text-rose-200/90 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
@@ -789,7 +790,7 @@ export default function AiApprovals() {
                               </div>
                               <p className="text-[11px] text-slate-300">
                                 Placed on Hold by <span className="font-semibold text-amber-300">{po.resolvedBy || 'QA Inspector'}</span>
-                                {po.resolvedAt && <span> on {new Date(po.resolvedAt).toLocaleString()}</span>}
+                                {po.resolvedAt && <span> on {formatColomboDate(po.resolvedAt, 'toLocaleString')}</span>}
                               </p>
                               {(po.manualResolutionNote || po.rejectionReason) && (
                                 <p className="text-[11px] text-amber-200/90 italic bg-slate-950/70 p-1.5 rounded border border-slate-800/80">
@@ -839,7 +840,7 @@ export default function AiApprovals() {
                         <span>Tool Execution &amp; Gate Summary</span>
                       </span>
                       <div className="text-[11px] text-slate-400 space-y-1">
-                        <p>• recorded total → ${totalAmount.toFixed(2)}</p>
+                        <p>• recorded total → {formatMoney(totalAmount.toFixed(2), po?.currency || 'LKR')}</p>
                         <p>• budget check → <span className={isBudgetPassed ? 'text-emerald-400' : 'text-rose-400 font-bold'}>{budgetLimit > 0 ? (isBudgetPassed ? 'PASSED' : 'BUDGET_EXCEEDED') : 'BUDGET_NOT_RECORDED'}</span></p>
                         <p>• check_qa_safety_status() → <span className={isResolved ? 'text-emerald-400 font-bold' : isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400'}>{
                           isResolved 
@@ -924,7 +925,7 @@ export default function AiApprovals() {
         onClose={() => setApproveModalOpen(false)}
         onConfirm={handleApprove}
         title={`Approve Order ${selectedOrder?.poNumber}`}
-        message={`Are you sure you want to approve this purchase order for $${selectedOrder?.totalCost?.toFixed(2)}? Once approved, you will proceed to the Payment Gateway to settle via Stripe Card or upload a Bank Transfer Slip before dispatching to ${selectedOrder?.supplierName}.`}
+        message={`Are you sure you want to approve this purchase order for ${selectedOrder?.currency || 'LKR'} ${selectedOrder?.totalCost?.toFixed(2)}? Once approved, you will proceed to the Payment Gateway to settle via Stripe Card or upload a Bank Transfer Slip before dispatching to ${selectedOrder?.supplierName}.`}
         confirmText="Confirm & Approve"
         variant="success"
         loading={actionLoading}
@@ -968,7 +969,7 @@ export default function AiApprovals() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Purchase Order Execution Pipeline</h3>
-                <p className="text-xs text-slate-400">Order {selectedOrder?.poNumber} • ${selectedOrder?.totalCost?.toFixed(2)}</p>
+                <p className="text-xs text-slate-400">Order {selectedOrder?.poNumber} • {formatMoney(selectedOrder?.totalCost?.toFixed(2), selectedOrder?.currency || 'LKR')}</p>
               </div>
             </div>
 
@@ -1184,20 +1185,20 @@ export default function AiApprovals() {
                             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                               <p className="text-slate-400 text-[10px]">PO Total:</p>
                               <p className="text-white font-bold text-xs">
-                                ${validationFailure.diagnostic.poTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatMoney(validationFailure.diagnostic.poTotal?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), selectedOrder?.currency || 'LKR')}
                               </p>
                             </div>
                             <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
                               <p className="text-slate-400 text-[10px]">Budget Limit:</p>
                               <p className="text-emerald-400 font-bold text-xs">
-                                ${validationFailure.diagnostic.budgetLimit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                {formatMoney(validationFailure.diagnostic.budgetLimit?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), selectedOrder?.currency || 'LKR')}
                               </p>
                             </div>
                             {validationFailure.diagnostic.exceededBy > 0 && (
                               <div className="col-span-2 p-2 rounded-lg bg-rose-950/50 border border-rose-500/30 flex items-center justify-between">
                                 <span className="text-rose-300 font-semibold text-[11px]">Exceeded By:</span>
                                 <span className="text-rose-400 font-bold text-xs font-mono">
-                                  +${validationFailure.diagnostic.exceededBy?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  +{formatMoney(validationFailure.diagnostic.exceededBy?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), selectedOrder?.currency || 'LKR')}
                                 </span>
                               </div>
                             )}

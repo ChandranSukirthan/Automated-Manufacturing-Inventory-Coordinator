@@ -4,7 +4,7 @@ import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import { useAuth } from '../../context/useAuth';
 
-const emptyQuote = { rawMaterialId: '', unitPrice: '', minimumOrderQuantity: 1, packSize: 1, availableQuantity: '', leadTimeDays: '', qualityEvidence: '', currency: 'USD', isActive: true };
+const emptyQuote = { rawMaterialId: '', unitPrice: '', minimumOrderQuantity: 1, packSize: 1, availableQuantity: '', leadTimeDays: '', qualityEvidence: '', currency: 'LKR', isActive: true };
 export default function SupplierQuotesPanel({ supplierId }) {
   const { user } = useAuth();
   const manager = [1, '1', 'SupplyChainManager'].includes(user?.role);

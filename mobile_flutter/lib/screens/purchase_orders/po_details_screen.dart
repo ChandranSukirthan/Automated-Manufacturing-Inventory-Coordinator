@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import 'receive_goods_screen.dart';
@@ -162,7 +163,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     _buildMetaColumn('Supplier', _po!.supplierName, Icons.business_outlined),
-                                    _buildMetaColumn('Total Cost', '\$${_po!.totalCost.toStringAsFixed(2)}', Icons.payments_outlined),
+                                    _buildMetaColumn('Total Cost', formatMoney(_po!.totalCost, currency: _po!.currency), Icons.payments_outlined),
                                   ],
                                 ),
                               ],
@@ -400,14 +401,14 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                                                 ),
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  '${line.quantity} units @ \$${line.unitPrice.toStringAsFixed(2)} / unit',
+                                                  '${line.quantity} units @ ${formatMoney(line.unitPrice, currency: _po!.currency)} / unit',
                                                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                                                 ),
                                               ],
                                             ),
                                           ),
                                           Text(
-                                            '\$${line.totalPrice.toStringAsFixed(2)}',
+                                            formatMoney(line.totalPrice, currency: _po!.currency),
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
@@ -846,7 +847,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Payable Total:', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                              Text('${po.currency} \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(formatMoney(po.totalCost, currency: po.currency), style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
                             ],
                           ),
                         ],
@@ -1005,7 +1006,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
             const SizedBox(height: 4),
             Text('Reference: ${po.bankReferenceNumber ?? 'N/A'}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('Total Amount: ${po.currency} \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+            Text('Total Amount: ${formatMoney(po.totalCost, currency: po.currency)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
             const Text('Slip Voucher URL on server:', style: TextStyle(color: Colors.white38, fontSize: 11)),
             const SizedBox(height: 4),

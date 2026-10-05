@@ -412,7 +412,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                     const Icon(Icons.access_time_rounded, color: Color(0xFF64748B), size: 14),
                     const SizedBox(width: 4),
                     Text(
-                      '${shift.startTime.toLocal().toString().substring(11, 16)} - ${shift.endTime.toLocal().toString().substring(11, 16)}',
+                      '${shift.startTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)} - ${shift.endTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)}',
                       style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                     ),
                     const Spacer(),

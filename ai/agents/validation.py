@@ -88,9 +88,9 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     net_deficit = finite_number(state.get("net_deficit") or 0.0, "net deficit")
     required_purchase = finite_number(state.get("requested_quantity") or state.get("required_quantity"), "manual request", positive=True) if state.get("trigger_type") == "Manual" else net_deficit
     recommended_qty = finite_number(first_present(state.get("recommended_quantity"), draft_po.get("quantity"), state.get("required_quantity")), "proposal quantity", positive=True)
-    estimated_total = finite_number(first_present(state.get("estimated_total_cost"), state.get("total_cost"), draft_po.get("totalAmount"), draft_po.get("estimatedCostUsd")), "proposal total", positive=True)
-    budget_limit = finite_number(first_present(state.get("budget_limit"), draft_po.get("budgetLimit"), 20000.0 if settings.demo_mode else 0), "budget")
-    budget_threshold = float(draft_po.get("budgetThreshold", 5000.0))
+    estimated_total = finite_number(first_present(state.get("estimated_total_cost"), state.get("total_cost"), draft_po.get("totalAmount"), draft_po.get("estimatedCost"), draft_po.get("estimatedCostUsd")), "proposal total", positive=True)
+    budget_limit = finite_number(first_present(state.get("budget_limit"), draft_po.get("budgetLimit"), 6000000.0 if settings.demo_mode else 0), "budget")
+    budget_threshold = float(draft_po.get("budgetThreshold", 1500000.0 if draft_po.get("currency", "LKR").upper() == "LKR" else 5000.0))
     supplier_verification = state.get("supplier_verification") or recommended_supplier.get("verificationStatus") or "UNVERIFIED"
     attempt = int(state.get("supplier_selection_attempt") or 1)
     max_attempts = int(state.get("max_supplier_selection_attempts") or 3)
@@ -112,8 +112,8 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     rejection_reasons = []
 
     if not budget_check_passed:
-        errors.append(f"Budget exceeded: ${estimated_total:,.2f} > limit ${budget_limit:,.2f}")
-        rejection_reasons.append(f"Total order cost (${estimated_total:,.2f}) exceeds authorized budget limit (${budget_limit:,.2f}).")
+        errors.append(f"Budget exceeded: {estimated_total:,.2f} > limit {budget_limit:,.2f}")
+        rejection_reasons.append(f"Total order cost ({estimated_total:,.2f}) exceeds authorized budget limit ({budget_limit:,.2f}).")
 
     unit_price = finite_number(draft_po.get("unitPrice"), "unit price", positive=True)
     expected_cost = quantity * unit_price if (quantity > 0 and unit_price > 0) else cost
@@ -128,10 +128,10 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     if unit_price > 0 and quantity > 0 and abs(cost - (quantity * unit_price)) > 0.05:
         po_math_check = "CALCULATION_MISMATCH"
         is_valid = False
-        rejection_reasons.append(f"Calculation mismatch: {quantity} x ${unit_price:.2f} != ${cost:.2f}")
+        rejection_reasons.append(f"Calculation mismatch: {quantity} x {unit_price:.2f} != {cost:.2f}")
 
-    expected_currency = (state.get("procurement_requirement") or {}).get("currency", "USD")
-    if draft_po.get("currency", "USD") != expected_currency or recommended_supplier.get("currency", "USD") != expected_currency:
+    expected_currency = (state.get("procurement_requirement") or {}).get("currency", "LKR")
+    if draft_po.get("currency", "LKR") != expected_currency or recommended_supplier.get("currency", "LKR") != expected_currency:
         po_math_check = "CALCULATION_MISMATCH"
         is_valid = False
         rejection_reasons.append("Proposal currency differs from the authorized budget currency.")
@@ -287,7 +287,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     if po_math_check == "CALCULATION_MISMATCH":
         diagnostic_reasons.append("PO financial calculation mismatch detected")
     if not budget_check_passed:
-        diagnostic_reasons.append(f"Total order cost exceeds budget limit (${budget_limit:,.2f})")
+        diagnostic_reasons.append(f"Total order cost exceeds budget limit ({budget_limit:,.2f})")
 
     existing_vr = state.get("validation_results", {})
     if not isinstance(existing_vr, dict):
@@ -455,6 +455,6 @@ def execution_node(state: AgentState) -> Dict[str, Any]:
             f"Procurement recommendation approved. Draft PO {po_num} queued for "
             f"{state.get('recommended_supplier', {}).get('supplierName', 'supplier')}. "
             f"Quantity: {state.get('recommended_quantity', 0):,.0f} {state.get('unit', 'units')}. "
-            f"Estimated total: ${state.get('estimated_total_cost', 0):,.2f}."
+            f"Estimated total: {state.get('estimated_total_cost', 0):,.2f}."
         ),
     }

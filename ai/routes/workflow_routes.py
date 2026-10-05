@@ -76,7 +76,7 @@ class RunWorkflowRequest(BaseModel):
     netDeficit: Optional[float] = None          # authoritative — never invented by AI
     budgetLimit: Optional[float] = None
     unit: Optional[str] = None
-    currency: Literal["USD"] = "USD"
+    currency: Literal["LKR", "USD"] = "LKR"
     productionContext: Optional[ProductionContext] = None
     qualityRequirement: Optional[str] = None
     preferredRegion: Optional[str] = None

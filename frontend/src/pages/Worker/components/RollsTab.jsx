@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React, { useState } from 'react';
 import { QrCode, Search, Trash2, Copy, Check, PlusCircle, Sparkles } from 'lucide-react';
 import EmptyState from './EmptyState';
@@ -322,7 +323,7 @@ export default function RollsTab({
                       {roll.status || 'In Stock'}
                     </span>
                     <span className="text-xs text-slate-500 hidden sm:inline">
-                      {new Date(roll.createdAt).toLocaleDateString()}
+                      {formatColomboDate(roll.createdAt, 'toLocaleDateString')}
                     </span>
                     <button
                       onClick={() => onDeleteRoll(roll.id)}

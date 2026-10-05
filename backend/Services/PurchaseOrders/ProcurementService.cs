@@ -265,7 +265,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         SupplierName = existingSupplier?.Name ?? c.SupplierName,
                         MaterialName = c.MaterialName,
                         UnitPrice = c.UnitPrice,
-                        Currency = string.IsNullOrWhiteSpace(c.Currency) ? "USD" : c.Currency,
+                        Currency = string.IsNullOrWhiteSpace(c.Currency) ? "LKR" : c.Currency,
                         MinimumOrderQuantity = c.MinimumOrderQuantity,
                         PackSize = c.PackSize > 0 ? c.PackSize : 1m,
                         LeadTimeDays = existingSupplier?.LeadTimeDays > 0 ? existingSupplier.LeadTimeDays : c.LeadTimeDays,
@@ -676,7 +676,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             {
                 SupplierId = candidate.SupplierId.Value,
                 ProcurementRequestId = request.Id,
-                Currency = string.IsNullOrWhiteSpace(candidate.Currency) ? "USD" : candidate.Currency,
+                Currency = string.IsNullOrWhiteSpace(candidate.Currency) ? "LKR" : candidate.Currency,
                 BudgetLimit = request.MaximumBudget,
                 Notes = $"AI-Assisted Procurement for Request #{request.Id}. " +
                         $"Candidate: {candidate.SupplierName}. Unit Price: ${candidate.UnitPrice}. " +

@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
@@ -340,7 +341,7 @@ export default function PurchaseOrderDetail() {
   return (
     <AppLayout
       title={`Order ${po.poNumber}`}
-      subtitle={`Created on ${new Date(po.createdAt).toLocaleDateString()} for ${po.supplierName}`}
+      subtitle={`Created on ${formatColomboDate(po.createdAt, 'toLocaleDateString')} for ${po.supplierName}`}
       actionButton={
         <div className="flex items-center gap-2">
           {/* Draft Actions */}
@@ -568,7 +569,7 @@ export default function PurchaseOrderDetail() {
             {tracking?.expectedDeliveryDate && (
               <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
                 <span>Carrier: <strong className="text-slate-200">{tracking.carrier || 'AMIC Express Freight'}</strong></span>
-                <span>Expected Delivery: <strong className="text-emerald-400 font-mono">{new Date(tracking.expectedDeliveryDate).toLocaleDateString()}</strong></span>
+                <span>Expected Delivery: <strong className="text-emerald-400 font-mono">{formatColomboDate(tracking.expectedDeliveryDate, 'toLocaleDateString')}</strong></span>
               </div>
             )}
           </div>
@@ -612,7 +613,7 @@ export default function PurchaseOrderDetail() {
                 Total Amount Due
               </span>
               <p className="text-lg font-mono font-bold text-emerald-400">
-                ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+                {formatMoney(po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
               </p>
             </div>
           </div>
@@ -677,7 +678,7 @@ export default function PurchaseOrderDetail() {
                     ) : (
                       <CreditCard className="w-4 h-4" />
                     )}
-                    <span>Launch Stripe Hosted Checkout (${po.totalCost?.toFixed(2)})</span>
+                    <span>Launch Stripe Hosted Checkout ({formatMoney(po.totalCost?.toFixed(2), po?.currency || 'LKR')})</span>
                   </button>
                 </div>
               )}
@@ -836,7 +837,7 @@ export default function PurchaseOrderDetail() {
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
               <span className="text-[10px] uppercase font-semibold text-slate-500 block mb-0.5">Paid Amount</span>
               <span className="font-mono font-bold text-emerald-400">
-                ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })} {po.currency || 'USD'}
+                {formatMoney(po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
               </span>
             </div>
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
@@ -906,25 +907,25 @@ export default function PurchaseOrderDetail() {
             <div className="flex justify-between">
               <span className="text-slate-400">Total Committed Spend:</span>
               <span className="font-bold text-white text-sm">
-                ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {formatMoney(po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Department Budget Limit:</span>
               <span className="text-slate-300 font-mono">
-                ${po.budgetLimit?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {formatMoney(po.budgetLimit?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Approval Threshold:</span>
               <span className="text-slate-300 font-mono">
-                ${(po.approvalThreshold || 5000)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {formatMoney((po.approvalThreshold || 1500000)?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
               </span>
             </div>
             <div className="pt-1 flex justify-between">
               <span className="text-slate-400">Requires Manager Approval:</span>
               <span className={po.requiresApproval ? 'text-amber-400 font-bold' : 'text-slate-400'}>
-                {po.requiresApproval ? 'Yes (> $5,000)' : 'No'}
+                {po.requiresApproval ? "Yes (> LKR 1,500,000)" : 'No'}
               </span>
             </div>
           </div>
@@ -944,7 +945,7 @@ export default function PurchaseOrderDetail() {
               </span>
               {po.approvedAt && (
                 <span className="text-[10px] text-slate-400 block">
-                  on {new Date(po.approvedAt).toLocaleString()}
+                  on {formatColomboDate(po.approvedAt, 'toLocaleString')}
                 </span>
               )}
             </div>
@@ -1075,7 +1076,7 @@ export default function PurchaseOrderDetail() {
                         <span>{po.supplierName}</span>
                         <span className="text-emerald-400">BEST MATCH</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono">Recorded unit price: ${avgUnitPrice.toFixed(2)}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">Recorded unit price: {formatMoney(avgUnitPrice.toFixed(2), po?.currency || 'LKR')}</p>
                       <p className="text-[11px] text-slate-400">Alternative candidates are shown only when stored by the procurement workflow.</p>
                     </div>
                   </div>
@@ -1087,7 +1088,7 @@ export default function PurchaseOrderDetail() {
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Budget Result</span>
                     <p className="font-bold text-emerald-400">PASSED</p>
                     <span className="text-[11px] text-slate-400 font-mono block">
-                      ${totalAmount.toFixed(2)} ≤ ${budgetLimit.toFixed(2)}
+                      {formatMoney(totalAmount.toFixed(2), po?.currency || 'LKR')} ≤ {formatMoney(budgetLimit.toFixed(2), po?.currency || 'LKR')}
                     </span>
                   </div>
 
@@ -1158,8 +1159,8 @@ export default function PurchaseOrderDetail() {
                     <div className="text-[11px] text-slate-400 space-y-1">
                       <p>• material → {materialSku}</p>
                       <p>• recorded quantity → {totalQty}</p>
-                      <p>• recorded total → ${totalAmount.toFixed(2)}</p>
-                      <p>• budget limit → {budgetLimit == null ? 'Not recorded' : `$${Number(budgetLimit).toFixed(2)}`}</p>
+                      <p>• recorded total → {formatMoney(totalAmount.toFixed(2), po?.currency || 'LKR')}</p>
+                      <p>• budget limit → {budgetLimit == null ? 'Not recorded' : `${po?.currency || 'LKR'} ${Number(budgetLimit).toFixed(2)}`}</p>
                       <p>• approval required → {po.requiresApproval ? 'YES' : 'NO'}</p>
                     </div>
                   </div>
@@ -1210,10 +1211,10 @@ export default function PurchaseOrderDetail() {
                       {line.quantity?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono text-slate-300">
-                      ${line.unitPrice?.toFixed(2)}
+                      {formatMoney(line.unitPrice?.toFixed(2), po?.currency || 'LKR')}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-white">
-                      ${line.totalPrice?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMoney(line.totalPrice?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                     </td>
                   </tr>
                 ))
@@ -1231,7 +1232,7 @@ export default function PurchaseOrderDetail() {
                   Grand Total Cost:
                 </td>
                 <td className="py-4 px-4 text-right font-extrabold text-white text-base">
-                  ${po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {formatMoney(po.totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                 </td>
               </tr>
             </tfoot>
@@ -1266,7 +1267,7 @@ export default function PurchaseOrderDetail() {
         onClose={() => setApproveModalOpen(false)}
         onConfirm={handleApproveConfirm}
         title="Approve Purchase Order & Authorize Payment"
-        message={`Approving ${po.poNumber} ($${po.totalCost?.toFixed(2)}) will automatically process the transaction via Stripe Sandbox and send the generated PO PDF to ${po.supplierName} via SendGrid.`}
+        message={`Approving ${po.poNumber} (${po?.currency || 'LKR'} ${po.totalCost?.toFixed(2)}) will automatically process the transaction via Stripe Sandbox and send the generated PO PDF to ${po.supplierName} via SendGrid.`}
         confirmText="Approve & Send"
         variant="success"
         loading={actionLoading}

@@ -59,7 +59,7 @@ class _POCreateScreenState extends State<POCreateScreen> {
     try {
       final poData = {
         'supplierId': _selectedSupplierId,
-        'currency': 'USD',
+        'currency': 'LKR',
         'budgetLimit': double.parse(_budgetController.text),
         'notes': 'Manual Purchase Order generated from mobile',
         'lines': [
@@ -134,7 +134,7 @@ class _POCreateScreenState extends State<POCreateScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text('Budget Limit (USD)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const Text('Budget Limit (LKR)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _budgetController,

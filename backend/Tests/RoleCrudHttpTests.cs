@@ -281,14 +281,15 @@ public sealed class RoleCrudHttpTests : IDisposable
         var supplier = await Success(await client.PostAsJsonAsync("/api/suppliers", new { name = "Offline Supplier", contactEmail = "offline@example.test", leadTimeDays = 3 }));
         var id = supplier.GetProperty("id").GetInt32();
         await Success(await client.PutAsJsonAsync($"/api/suppliers/{id}", new { name = "Updated Supplier", contactEmail = "offline@example.test", leadTimeDays = 4, isActive = true }));
-        var quoteBody = new { rawMaterialId = 1, unitPrice = 2, packSize = 1, minimumOrderQuantity = 0, availableQuantity = 100, leadTimeDays = 4, qualityEvidence = "Recorded inspection", currency = "USD", isActive = true };
+        var quoteBody = new { rawMaterialId = 1, unitPrice = 2, packSize = 1, minimumOrderQuantity = 0, availableQuantity = 100, leadTimeDays = 4, qualityEvidence = "Recorded inspection", currency = "LKR", isActive = true };
         var quote = await Success(await client.PostAsJsonAsync($"/api/suppliers/{id}/quotes", quoteBody));
         var quoteId = quote.GetProperty("id").GetInt32();
         await Success(await client.PutAsJsonAsync($"/api/suppliers/{id}/quotes/{quoteId}", quoteBody));
         var po = await Success(await client.PostAsJsonAsync("/api/purchase-orders", new { supplierId = id, budgetLimit = 100, lines = new[] { new { rawMaterialId = 1, quantity = 10, unitPrice = 2 } } }));
         var poId = po.GetProperty("id").GetInt32();
         Assert.Equal("Draft", po.GetProperty("status").GetString());
-        await Success(await client.PutAsJsonAsync($"/api/purchase-orders/{poId}", new { supplierId = id, budgetLimit = 100, currency = "USD", notes = "Updated draft", lines = new[] { new { rawMaterialId = 1, quantity = 12, unitPrice = 2 } } }));
+        Assert.Equal("LKR", po.GetProperty("currency").GetString());
+        await Success(await client.PutAsJsonAsync($"/api/purchase-orders/{poId}", new { supplierId = id, budgetLimit = 100, currency = "LKR", notes = "Updated draft", lines = new[] { new { rawMaterialId = 1, quantity = 12, unitPrice = 2 } } }));
         var addedLine = await Success(await client.PostAsJsonAsync($"/api/purchase-orders/{poId}/lines", new { rawMaterialId = 1, description = "Second line", quantity = 2, unitPrice = 3 }));
         var lineId = addedLine.GetProperty("id").GetInt32();
         await Success(await client.PutAsJsonAsync($"/api/purchase-orders/{poId}/lines/{lineId}", new { rawMaterialId = 1, description = "Updated line", quantity = 3, unitPrice = 3 }));

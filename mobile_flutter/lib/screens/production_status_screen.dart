@@ -148,7 +148,7 @@ class _ProductionStatusScreenState extends State<ProductionStatusScreen> {
 
 String _formatTime(DateTime? value) => value == null
     ? 'Time not set'
-    : value.toLocal().toString().split('.').first;
+    : value.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.').first;
 
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.status});

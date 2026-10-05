@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -296,7 +297,7 @@ export default function AdminDashboard() {
                   <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>{alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : 'Recent'}</span>
+                      <span>{alert.timestamp ? formatColomboDate(alert.timestamp, 'toLocaleTimeString') : 'Recent'}</span>
                     </div>
 
                     <button

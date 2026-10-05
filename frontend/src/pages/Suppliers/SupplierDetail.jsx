@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -191,7 +192,7 @@ export default function SupplierDetail() {
               </div>
               <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Partner Since {supplier.createdAt ? new Date(supplier.createdAt).toLocaleDateString() : 'Not recorded'}</span>
+                <span>Partner Since {supplier.createdAt ? formatColomboDate(supplier.createdAt, 'toLocaleDateString') : 'Not recorded'}</span>
               </p>
             </div>
           </div>
@@ -255,7 +256,7 @@ export default function SupplierDetail() {
             <DollarSign className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-emerald-400 mt-2">
-            ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
         </div>
 
@@ -314,17 +315,17 @@ export default function SupplierDetail() {
                         <StatusBadge status={po.status} />
                       </td>
                       <td className="py-3.5 px-4 font-bold text-white">
-                        ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                       </td>
                       <td className="py-3.5 px-4 text-xs">
                         {po.requiresApproval ? (
-                          <span className="text-amber-400 font-semibold">Yes (&gt; $5,000)</span>
+                          <span className="text-amber-400 font-semibold">Yes (&gt; LKR 1,500,000)</span>
                         ) : (
                           <span className="text-slate-400">No</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-xs text-slate-400">
-                        {new Date(po.createdAt).toLocaleDateString()}
+                        {formatColomboDate(po.createdAt, 'toLocaleDateString')}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <Link

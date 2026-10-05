@@ -100,7 +100,7 @@ class SupplierCandidateItem {
       supplierName: json['supplierName'] as String? ?? 'Unknown Vendor',
       materialName: json['materialName'] as String? ?? 'Raw Material',
       unitPrice: (json['unitPrice'] as num? ?? 0).toDouble(),
-      currency: json['currency'] as String? ?? 'USD',
+      currency: json['currency'] as String? ?? 'LKR',
       minimumOrderQuantity: (json['minimumOrderQuantity'] as num? ?? 0).toDouble(),
       packSize: (json['packSize'] as num? ?? 1).toDouble(),
       leadTimeDays: json['leadTimeDays'] as int? ?? 0,

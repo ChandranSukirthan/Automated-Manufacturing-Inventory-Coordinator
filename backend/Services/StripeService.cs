@@ -46,7 +46,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             try
             {
-                // Stripe uses smallest currency unit (cents for USD)
+                // Stripe uses smallest currency unit (cents for LKR)
                 var amountInCents = (long)Math.Round(amount * 100, 0);
 
                 var options = new PaymentIntentCreateOptions

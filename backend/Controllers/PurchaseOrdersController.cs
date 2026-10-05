@@ -388,7 +388,7 @@ namespace ManufacturingCoordinator.Controllers
 
                 if (po.Status is not ("Approved" or "Payment" or "PaymentFailed")) return BadRequest(new { message = "Approve the order before starting payment." });
                 var amountCents = (long)Math.Round(po.TotalCost * 100, 0);
-                var currency = string.IsNullOrWhiteSpace(po.Currency) ? "usd" : po.Currency.ToLowerInvariant();
+                var currency = string.IsNullOrWhiteSpace(po.Currency) ? "lkr" : po.Currency.ToLowerInvariant();
 
                 var options = new Stripe.Checkout.SessionCreateOptions
                 {

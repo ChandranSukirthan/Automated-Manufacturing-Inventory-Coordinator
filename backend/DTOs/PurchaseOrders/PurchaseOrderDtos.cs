@@ -58,7 +58,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int SupplierId { get; set; }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         [Required]
         [Range(0.01, double.MaxValue, ErrorMessage = "Budget limit must be greater than zero.")]
@@ -84,7 +84,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int SupplierId { get; set; }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         [Required]
         [Range(0.01, double.MaxValue)]
@@ -110,7 +110,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string PoNumber { get; set; } = string.Empty;
         public string SupplierName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
         public decimal BudgetLimit { get; set; }
@@ -132,7 +132,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string SupplierPaymentTerms { get; set; } = string.Empty;
         public int SupplierLeadTimeDays { get; set; }
         public string Status { get; set; } = string.Empty;
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public decimal TotalCost { get; set; }
         public decimal TotalAmount => TotalCost;
         public decimal BudgetLimit { get; set; }
@@ -187,7 +187,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public int Id { get; set; }
         public string? TransactionId { get; set; }
         public decimal Amount { get; set; }
-        public string Currency { get; set; } = "usd";
+        public string Currency { get; set; } = "lkr";
         public string PaymentStatus { get; set; } = string.Empty;
         public string? FailureReason { get; set; }
         public DateTime Timestamp { get; set; }
@@ -247,7 +247,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string TrackingStatus { get; set; } = "Draft";
         public string? TrackingNumber { get; set; }
         public decimal TotalCost { get; set; }
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public string? PaymentMethod { get; set; }
         public string? PaymentStatus { get; set; }
         public string? PaymentReference { get; set; }

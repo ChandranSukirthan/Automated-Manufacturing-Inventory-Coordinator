@@ -46,7 +46,7 @@ public sealed class WorkflowDraftService(ApplicationDbContext db)
         if (existing != null) { workflow.PurchaseOrderId = existing.Id; await db.SaveChangesAsync(); return existing.Id; }
         var po = new PurchaseOrder { PoNumber = number, SupplierId = supplier.Id, BudgetLimit = budget,
             ProcurementRequestId = requestId,
-            Currency = draft.TryGetProperty("currency", out var currency) ? currency.GetString() ?? "USD" : "USD",
+            Currency = draft.TryGetProperty("currency", out var currency) ? currency.GetString() ?? "LKR" : "LKR",
             Status = PurchaseOrderStatus.PendingApproval, RequiresApproval = true,
             TotalCost = Math.Round(quantity * price, 2), Notes = $"[AI workflow] {workflow.WorkflowId}" };
         po.OrderLines.Add(new OrderLine { RawMaterialId = material.Id, Description = material.Name,

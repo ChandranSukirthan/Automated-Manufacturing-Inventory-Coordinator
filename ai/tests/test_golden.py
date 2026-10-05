@@ -188,7 +188,7 @@ def test_cross_agent_quality_and_planner_coordination(monkeypatch):
     import ai.agents.validation as validation
     monkeypatch.setattr(validation, "run_quality_validation", lambda state: {**state,
         "quality_data": {**state["quality_data"], "validation": {"valid": False, "quarantineRequired": True, "affectedInventory": ["R1"]}}})
-    state = {"purchasing_data": {"draft_po": {"quantity": 4000, "unitPrice": 1.45, "estimatedCostUsd": 5800}},
+    state = {"purchasing_data": {"draft_po": {"quantity": 4000, "unitPrice": 1.45, "estimatedCost": 5800}},
         "material_id": "RM001", "quality_data": {"defect": {"severity": "High", "description": "Contamination"}},
         "completed_steps": [], "errors": []}
     evidence = validation_node(state)

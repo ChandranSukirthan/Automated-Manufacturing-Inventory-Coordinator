@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import useCurrentTime from '../../hooks/useCurrentTime';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -103,7 +104,7 @@ export default function ProcurementResearch() {
     currentStock: 0,
     maximumBudget: '',
     qualityStandard: '',
-    preferredRegion: 'Global',
+    preferredRegion: 'Sri Lanka',
     requiredByDate: ''
   }));
 
@@ -744,7 +745,7 @@ export default function ProcurementResearch() {
               {/* Maximum Budget */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Maximum Budget ($ USD) *
+                  Maximum Budget (LKR  LKR) *
                 </label>
                 <input
                   type="number"
@@ -781,6 +782,7 @@ export default function ProcurementResearch() {
                   onChange={(e) => setFormValues({ ...formValues, preferredRegion: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500"
                 >
+                  <option value="Sri Lanka">Sri Lanka</option>
                   <option value="Global">Global / Any Region</option>
                   <option value="North America">North America (USA, Canada)</option>
                   <option value="Europe">Europe (EU, UK)</option>
@@ -974,13 +976,13 @@ export default function ProcurementResearch() {
                 <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800">
                   <span className="text-slate-400 block text-[10px] uppercase">Max Budget</span>
                   <span className="text-sm font-bold text-emerald-400">
-                    ${(currentRequest.maximumBudget || 0).toLocaleString()}
+                    {formatMoney((currentRequest.maximumBudget || 0).toLocaleString(), 'LKR')}
                   </span>
                 </div>
                 <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800">
                   <span className="text-slate-400 block text-[10px] uppercase">Required By</span>
                   <span className="text-sm font-semibold text-slate-200">
-                    {new Date(currentRequest.requiredByDate).toLocaleDateString()}
+                    {formatColomboDate(currentRequest.requiredByDate, 'toLocaleDateString')}
                   </span>
                 </div>
                 <button
@@ -1069,7 +1071,7 @@ export default function ProcurementResearch() {
                 <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
                   <span className="text-slate-400 uppercase text-[10px] font-bold block">Unit Price:</span>
                   <p className="text-emerald-400 font-bold text-sm font-mono">
-                    ${(activeCandidate.unitPrice || 0).toFixed(2)}
+                    {formatMoney((activeCandidate.unitPrice || 0).toFixed(2), activeCandidate?.currency || 'LKR')}
                   </p>
                   <span className="text-[10px] text-slate-500">Per unit landed cost</span>
                 </div>
@@ -1077,9 +1079,9 @@ export default function ProcurementResearch() {
                 <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-1">
                   <span className="text-slate-400 uppercase text-[10px] font-bold block">Total Estimated Cost:</span>
                   <p className="text-emerald-400 font-extrabold text-base font-mono">
-                    ${(activeCandidate.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatMoney((activeCandidate.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), activeCandidate?.currency || 'LKR')}
                   </p>
-                  <span className="text-[10px] text-slate-500">Budget Limit: ${(currentRequest.maximumBudget || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-slate-500">Budget Limit: {formatMoney((currentRequest.maximumBudget || 0).toLocaleString(), 'LKR')}</span>
                 </div>
               </div>
 
@@ -1089,7 +1091,7 @@ export default function ProcurementResearch() {
                   <span className="text-slate-400 font-bold uppercase text-[10px] block">Reason Summary:</span>
                   <p className="text-slate-300 leading-relaxed text-[11px]">
                     {recommendation?.rationale ||
-                      `Ranked #1 candidate based on lowest total landed cost ($${(activeCandidate.totalCost || 0).toLocaleString()}), full specification compatibility with ${activeCandidate.materialName}, and verified delivery within ${activeCandidate.leadTimeDays} days.`}
+                      `Ranked #1 candidate based on lowest total landed cost (${activeCandidate?.currency || 'LKR'} ${(activeCandidate.totalCost || 0).toLocaleString()}), full specification compatibility with ${activeCandidate.materialName}, and verified delivery within ${activeCandidate.leadTimeDays} days.`}
                   </p>
                 </div>
 
@@ -1271,7 +1273,7 @@ export default function ProcurementResearch() {
 
                           {/* Price */}
                           <td className="py-3 px-3 text-right font-medium text-white font-mono">
-                            ${(cand.unitPrice || 0).toFixed(2)}
+                            {formatMoney((cand.unitPrice || 0).toFixed(2), cand?.currency || 'LKR')}
                           </td>
 
                           {/* MOQ */}
@@ -1329,7 +1331,7 @@ export default function ProcurementResearch() {
 
                           {/* Total Cost */}
                           <td className="py-3 px-3 text-right font-bold text-white font-mono">
-                            ${(cand.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {formatMoney((cand.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), cand?.currency || 'LKR')}
                           </td>
 
                           {/* Source */}
@@ -1458,7 +1460,7 @@ export default function ProcurementResearch() {
                     <div>
                       <div className="text-xs font-semibold text-white">3. Budget Compliance Check</div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
-                        ${(validationChecks.totalCost || 0).toLocaleString()} ≤ Max Budget ${(currentRequest?.maximumBudget || 0).toLocaleString()}
+                        {formatMoney((validationChecks.totalCost || 0).toLocaleString(), 'LKR')} ≤ Max Budget {formatMoney((currentRequest?.maximumBudget || 0).toLocaleString(), 'LKR')}
                       </p>
                     </div>
                   </div>
@@ -1539,7 +1541,7 @@ export default function ProcurementResearch() {
                     <div className="flex justify-between">
                       <span className="text-slate-400">Landed Cost:</span>
                       <span className="text-emerald-400 font-extrabold">
-                        ${(validationChecks?.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {formatMoney((validationChecks?.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), 'LKR')}
                       </span>
                     </div>
                   </div>
@@ -1826,7 +1828,7 @@ export default function ProcurementResearch() {
                             {record.requestedQuantity} / {record.finalOrderedQuantity || record.recommendedQuantity}
                           </td>
                           <td className="py-3 px-3 text-right font-mono text-emerald-400">
-                            ${(record.estimatedPrice || 0).toFixed(2)} / ${(record.finalPrice || record.estimatedPrice || 0).toFixed(2)}
+                            {formatMoney((record.estimatedPrice || 0).toFixed(2), 'LKR')} / {formatMoney((record.finalPrice || record.estimatedPrice || 0).toFixed(2), 'LKR')}
                           </td>
                           <td className="py-3 px-3 text-center text-slate-300 font-mono">
                             {record.actualLeadTime > 0 ? `${record.actualLeadTime}d` : `${record.estimatedLeadTime}d est`}
@@ -1857,7 +1859,7 @@ export default function ProcurementResearch() {
                             </span>
                           </td>
                           <td className="py-3 px-3 text-right text-slate-500 font-mono">
-                            {new Date(record.createdAt).toLocaleDateString()}
+                            {formatColomboDate(record.createdAt, 'toLocaleDateString')}
                           </td>
                         </tr>
                       ))}

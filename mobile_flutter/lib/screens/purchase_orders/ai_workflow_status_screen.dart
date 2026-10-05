@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -255,7 +256,7 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
 
                                 const SizedBox(height: 12),
                                 Text(
-                                  'Linked: ${wf.poNumber} • \$${wf.totalCost.toStringAsFixed(2)}',
+                                  'Linked: ${wf.poNumber} • ${formatMoney(wf.totalCost, currency: wf.currency)}',
                                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                                 ),
                               ],

@@ -561,7 +561,7 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
               : 'contact@vendor.com',
           'contactPhone': phoneController.text.trim().isNotEmpty
               ? phoneController.text.trim()
-              : '+1-555-0100',
+              : '',
           'address': addressController.text.trim().isNotEmpty
               ? addressController.text.trim()
               : 'Sector 4, Industrial Zone',

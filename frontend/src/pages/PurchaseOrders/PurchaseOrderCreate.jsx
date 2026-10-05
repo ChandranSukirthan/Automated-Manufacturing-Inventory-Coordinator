@@ -1,3 +1,4 @@
+import { formatMoney } from '../../utils/locale.js';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -46,7 +47,7 @@ export default function PurchaseOrderCreate() {
 
   // Form State
   const [supplierId, setSupplierId] = useState(paramSupplierId || '');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('LKR');
   const [budgetLimit, setBudgetLimit] = useState('');
   const [notes, setNotes] = useState(
     isFromAiRecommendation
@@ -175,7 +176,7 @@ export default function PurchaseOrderCreate() {
 
   const budgetNum = parseFloat(budgetLimit) || 0;
   const exceedsBudget = calculatedTotal > budgetNum && budgetNum > 0;
-  const requiresApproval = calculatedTotal > 5000;
+  const requiresApproval = calculatedTotal > 1500000;
 
   const selectedSupplier = suppliers.find((s) => s.id.toString() === supplierId);
 
@@ -217,7 +218,7 @@ export default function PurchaseOrderCreate() {
 
     if (exceedsBudget) {
       setErrorMessage(
-        `Total cost ($${calculatedTotal.toFixed(2)}) exceeds budget limit ($${budgetNum.toFixed(2)}). Please increase budget or adjust quantities.`
+        `Total cost (${currency} ${calculatedTotal.toFixed(2)}) exceeds budget limit (${currency} ${budgetNum.toFixed(2)}). Please increase budget or adjust quantities.`
       );
       return;
     }
@@ -368,7 +369,7 @@ export default function PurchaseOrderCreate() {
                     onChange={(e) => setCurrency(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-brand-500"
                   >
-                    <option value="USD">USD ($)</option>
+                    <option value="LKR">LKR (Sri Lankan rupee)</option>
                     <option value="EUR">EUR (€)</option>
                     <option value="GBP">GBP (£)</option>
                   </select>
@@ -380,7 +381,7 @@ export default function PurchaseOrderCreate() {
                     Department Budget Limit *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">$</span>
+                    <span className="absolute left-3.5 top-2.5 text-slate-500 text-sm">LKR</span>
                     <input
                       type="number"
                       step="0.01"
@@ -487,7 +488,7 @@ export default function PurchaseOrderCreate() {
                       {/* Unit Price */}
                       <div className="md:col-span-2">
                         <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Unit Price ($) *
+                          Unit Price (LKR) *
                         </label>
                         <input
                           type="number"
@@ -504,7 +505,7 @@ export default function PurchaseOrderCreate() {
                       <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-2">
                         <div className="text-right">
                           <span className="block text-[10px] text-slate-500">Subtotal</span>
-                          <span className="text-xs font-bold text-white">${lineSubtotal.toFixed(2)}</span>
+                          <span className="text-xs font-bold text-white">{formatMoney(lineSubtotal.toFixed(2), currency)}</span>
                         </div>
                         {lines.length > 1 && (
                           <button
@@ -531,7 +532,7 @@ export default function PurchaseOrderCreate() {
                     Computed Purchase Order Total
                   </span>
                   <div className="text-3xl font-extrabold text-white mt-0.5">
-                    ${calculatedTotal.toFixed(2)} <span className="text-sm font-normal text-slate-400">{currency}</span>
+                    {formatMoney(calculatedTotal.toFixed(2), currency)} <span className="text-sm font-normal text-slate-400">{currency}</span>
                   </div>
                 </div>
 
@@ -539,7 +540,7 @@ export default function PurchaseOrderCreate() {
                   {requiresApproval ? (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
                       <AlertTriangle className="w-4 h-4" />
-                      <span>Executive Approval Required (&gt; $5,000 threshold)</span>
+                      <span>Executive Approval Required (&gt; LKR 1,500,000 threshold)</span>
                     </div>
                   ) : (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
@@ -551,7 +552,7 @@ export default function PurchaseOrderCreate() {
                   {exceedsBudget && (
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold">
                       <AlertTriangle className="w-4 h-4" />
-                      <span>Exceeds Budget Limit (${budgetNum.toFixed(2)})</span>
+                      <span>Exceeds Budget Limit ({formatMoney(budgetNum.toFixed(2), currency)})</span>
                     </div>
                   )}
                 </div>

@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
@@ -263,8 +264,8 @@ export default function QuarantineHistoryPage() {
                 {visibleRecords.map((r) => {
                   const isExpanded = expandedRows[r.id];
                   const released = isRecordReleased(r);
-                  const createdDate = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : 'N/A';
-                  const releasedDate = r.releasedAt ? new Date(r.releasedAt).toLocaleDateString() : released ? 'Cleared' : '—';
+                  const createdDate = r.createdAt ? formatColomboDate(r.createdAt, 'toLocaleDateString') : 'N/A';
+                  const releasedDate = r.releasedAt ? formatColomboDate(r.releasedAt, 'toLocaleDateString') : released ? 'Cleared' : '—';
 
                   return (
                     <React.Fragment key={r.id}>
@@ -321,13 +322,13 @@ export default function QuarantineHistoryPage() {
                               <div>
                                 <span className="text-slate-400 block font-semibold">Quarantine Timestamp</span>
                                 <span className="text-slate-200">
-                                  {r.createdAt ? new Date(r.createdAt).toLocaleString() : 'N/A'}
+                                  {r.createdAt ? formatColomboDate(r.createdAt, 'toLocaleString') : 'N/A'}
                                 </span>
                               </div>
                               <div>
                                 <span className="text-slate-400 block font-semibold">Release Timestamp</span>
                                 <span className={`font-semibold ${released ? 'text-emerald-400' : 'text-amber-400'}`}>
-                                  {r.releasedAt ? new Date(r.releasedAt).toLocaleString() : released ? 'Released' : 'Active Hold'}
+                                  {r.releasedAt ? formatColomboDate(r.releasedAt, 'toLocaleString') : released ? 'Released' : 'Active Hold'}
                                 </span>
                               </div>
                             </div>
@@ -359,7 +360,7 @@ export default function QuarantineHistoryPage() {
                   </div>
                   <p className="text-xs text-slate-300 line-clamp-2">{r.reason}</p>
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                    <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ''}</span>
+                    <span>{r.createdAt ? formatColomboDate(r.createdAt, 'toLocaleDateString') : ''}</span>
                     <Link to={`/quality/quarantine/${r.id}`} className="text-blue-400 font-semibold">
                       View Details
                     </Link>

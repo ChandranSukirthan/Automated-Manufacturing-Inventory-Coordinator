@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
@@ -321,13 +322,13 @@ export default function AgentWorkflowsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400 pt-2 font-mono border-t border-white/5">
                   <span className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    Started: {new Date(wf.startedAt).toLocaleString()}
+                    Started: {formatColomboDate(wf.startedAt, 'toLocaleString')}
                   </span>
 
                   {wf.completedAt ? (
                     <span className="flex items-center gap-1.5 text-emerald-400">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      Completed: {new Date(wf.completedAt).toLocaleString()}
+                      Completed: {formatColomboDate(wf.completedAt, 'toLocaleString')}
                     </span>
                   ) : (
                     <span className="text-amber-400/80 font-sans">Awaiting final execution</span>

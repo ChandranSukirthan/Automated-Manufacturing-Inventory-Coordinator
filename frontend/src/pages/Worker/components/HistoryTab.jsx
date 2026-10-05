@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../../utils/locale.js';
 import React from 'react';
 import { ArrowDownRight, ArrowUpRight, Clock } from 'lucide-react';
 import { TableSkeleton } from './SkeletonLoader';
@@ -89,7 +90,7 @@ export default function HistoryTab({
                     <td className="px-6 py-3">
                       <div className="flex flex-col">
                         <span className="text-xs text-slate-300">
-                          {new Date(h.date).toLocaleDateString()}
+                          {formatColomboDate(h.date, 'toLocaleDateString')}
                         </span>
                         <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <Clock className="w-2.5 h-2.5" />

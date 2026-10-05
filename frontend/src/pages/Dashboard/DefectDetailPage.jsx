@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
@@ -173,7 +174,7 @@ export default function DefectDetailPage() {
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Logged Timestamp</span>
             <div className="mt-1 text-sm text-slate-200">
-              {defect.createdAt ? new Date(defect.createdAt).toLocaleString() : 'N/A'}
+              {defect.createdAt ? formatColomboDate(defect.createdAt, 'toLocaleString') : 'N/A'}
             </div>
           </div>
 

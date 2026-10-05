@@ -1,3 +1,4 @@
+import { formatColomboDate } from '../../utils/locale.js';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -572,7 +573,7 @@ export default function QualityDashboard() {
                   <div className="flex items-center justify-between text-[11px] mb-1">
                     <span className="font-bold text-blue-400">{act.type}</span>
                     <span className="text-slate-400">
-                      {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                      {act.timestamp ? formatColomboDate(act.timestamp, 'toLocaleTimeString') : 'Recent'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-200 font-medium truncate">{act.detail}</p>

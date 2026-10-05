@@ -102,8 +102,8 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
     budget = first_present(state.get("budget_limit"), req.get("budgetLimit"), req.get("maximumBudget"))
     if not settings.demo_mode and (not material_id or budget is None or float(budget) <= 0):
         raise ValueError("An exact material and a positive authorized budget are required")
-    max_budget = float(budget if budget is not None else 20000.0)
-    preferred_region: str = state.get("preferred_region") or req.get("preferredRegion") or "Global"
+    max_budget = float(budget if budget is not None else 6000000.0)
+    preferred_region: str = state.get("preferred_region") or req.get("preferredRegion") or "Sri Lanka"
     required_by_date: Optional[str] = state.get("required_by_date") or req.get("requiredByDate")
     unit: str = state.get("unit") or req.get("unit") or "units"
 
@@ -190,7 +190,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "materialName": material_name,
             "specification": specification,
             "unitPrice": float(s.get("unitPrice") or s.get("unitPriceUsd") or 0),
-            "currency": s.get("currency", "USD"),
+            "currency": s.get("currency", "LKR"),
             "unit": s.get("unit") or unit,
             "minimumOrderQuantity": float(s.get("minimumOrderQuantity", 0)),
             "packSize": float(s.get("packSize", 1)),
@@ -223,7 +223,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
                 "materialName": material_name,
                 "specification": specification,
                 "unitPrice": float(cat.get("pricePerUnit") or cat.get("unitPrice") or 1.45),
-                "currency": "USD",
+                "currency": "LKR",
                 "unit": unit,
                 "minimumOrderQuantity": float(cat.get("minOrderQuantity") or cat.get("minimumOrderQuantity") or 500.0),
                 "packSize": 50.0,
@@ -287,7 +287,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
 
         # MOQ/pack rounding changes both cost and availability requirements.
         val_report = validate_supplier_candidate(cand, {**eval_requirement, "requiredQuantity": cand_qty})
-        if str(cand.get("currency", "USD")).upper() != str(req.get("currency", "USD")).upper() or str(cand.get("unit", unit)).upper() != unit.upper():
+        if str(cand.get("currency", "LKR")).upper() != str(req.get("currency", "LKR")).upper() or str(cand.get("unit", unit)).upper() != unit.upper():
             val_report["isValid"] = False
             val_report["rejectionReasons"].append("Quote currency or unit differs from the authorized request; conversion is required.")
         val_report["adjustedQuantity"] = cand_qty
@@ -332,7 +332,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         "leadTimeDays": int(top_cand.get("leadTimeDays") or 0),
         "minOrderQuantity": float(top_cand.get("minimumOrderQuantity") or 0),
         "isActive": top_cand.get("supplierStatus") == "APPROVED",
-        "currency": top_cand.get("currency", "USD"),
+        "currency": top_cand.get("currency", "LKR"),
     }
 
     if inv_data.get("currentStock") is not None and inv_data.get("burnRate") is not None:
@@ -351,13 +351,13 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         quantity=recommended_qty,
         unit_price=chosen_supplier["pricePerUnit"],
         total_amount=total_cost,
-        currency="USD",
-        budget_threshold=5000.0,
+        currency=chosen_supplier["currency"],
+        budget_threshold=1500000.0 if chosen_supplier["currency"].upper() == "LKR" else 5000.0,
     )
     # Enrich with details for manager UI
     draft_po["itemCode"] = specification
     draft_po["materialName"] = material_name
-    draft_po["estimatedCostUsd"] = total_cost
+    draft_po["estimatedCost"] = total_cost
     draft_po["totalCost"] = total_cost
 
     tool_log.append({
@@ -384,7 +384,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
             "materialName": cand.get("materialName"),
             "origin": cand.get("origin"),
             "unitPrice": cand.get("unitPrice"),
-            "currency": cand.get("currency", "USD"),
+            "currency": cand.get("currency", "LKR"),
             "moq": cand.get("minimumOrderQuantity"),
             "packSize": cand.get("packSize"),
             "availability": cand.get("availabilityStatus", "UNKNOWN"),

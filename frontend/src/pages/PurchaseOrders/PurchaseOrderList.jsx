@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -108,7 +109,7 @@ export default function PurchaseOrderList() {
     }, 0);
   }, [poForm.lines]);
 
-  const exceedsThreshold = calculatedTotalCost > 5000;
+  const exceedsThreshold = calculatedTotalCost > 1500000;
   const exceedsBudget = calculatedTotalCost > parseFloat(poForm.budgetLimit || 0);
 
   // Line item handlers
@@ -344,7 +345,7 @@ export default function PurchaseOrderList() {
             <DollarSign className="w-4 h-4 text-cyan-400" />
           </div>
           <p className="text-2xl font-bold text-cyan-400 mt-2">
-            ${totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
         </div>
       </div>
@@ -495,20 +496,20 @@ export default function PurchaseOrderList() {
                       <StatusBadge status={order.status} />
                     </td>
                     <td className="py-4 px-4 font-bold text-white">
-                      ${(order.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {formatMoney((order.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), order?.currency || 'LKR')}
                     </td>
                     <td className="py-4 px-4 text-xs">
                       {order.requiresApproval ? (
                         <span className="inline-flex items-center gap-1 text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
                           <AlertTriangle className="w-3 h-3" />
-                          <span>&gt; $5,000 (Req. Approval)</span>
+                          <span>&gt; LKR 1,500,000 (Req. Approval)</span>
                         </span>
                       ) : (
                         <span className="text-slate-400">Within Threshold</span>
                       )}
                     </td>
                     <td className="py-4 px-4 text-xs text-slate-400">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {formatColomboDate(order.createdAt, 'toLocaleDateString')}
                     </td>
                     <td className="py-4 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -618,7 +619,7 @@ export default function PurchaseOrderList() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Budget Limit ($ USD) <span className="text-rose-400">*</span>
+                    Budget Limit (LKR  LKR) <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="number"
@@ -697,7 +698,7 @@ export default function PurchaseOrderList() {
                         </div>
 
                         <div className="col-span-2">
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price ($)</label>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price (LKR )</label>
                           <input
                             type="number"
                             min="0.01"
@@ -711,7 +712,7 @@ export default function PurchaseOrderList() {
                         <div className="col-span-2 text-right">
                           <span className="text-[10px] text-slate-400 block mb-0.5">Line Total</span>
                           <span className="font-bold text-white">
-                            ${lineTotal.toFixed(2)}
+                            {formatMoney(lineTotal.toFixed(2), 'LKR')}
                           </span>
                         </div>
 
@@ -739,8 +740,7 @@ export default function PurchaseOrderList() {
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
                     <span>
-                      <strong>Manager Approval Threshold Exceeded:</strong> Total cost ($
-                      {calculatedTotalCost.toFixed(2)}) is greater than $5,000.00. This order will automatically require Supply Chain Manager approval.
+                      <strong>Manager Approval Threshold Exceeded:</strong> Total cost ({formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}) is greater than LKR 1,500,000.00. This order will automatically require Supply Chain Manager approval.
                     </span>
                   </div>
                 )}
@@ -749,7 +749,7 @@ export default function PurchaseOrderList() {
                   <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>
-                      <strong>Budget Limit Violation:</strong> Total cost (${calculatedTotalCost.toFixed(2)}) exceeds specified budget limit (${parseFloat(poForm.budgetLimit || 0).toFixed(2)}).
+                      <strong>Budget Limit Violation:</strong> Total cost ({formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}) exceeds specified budget limit ({formatMoney(parseFloat(poForm.budgetLimit || 0).toFixed(2), 'LKR')}).
                     </span>
                   </div>
                 )}
@@ -760,7 +760,7 @@ export default function PurchaseOrderList() {
                 <div>
                   <span className="text-xs text-slate-400 block">Total Calculated Cost</span>
                   <span className="text-xl font-extrabold text-white">
-                    ${calculatedTotalCost.toFixed(2)}
+                    {formatMoney(calculatedTotalCost.toFixed(2), 'LKR')}
                   </span>
                 </div>
                 <div className="text-right">

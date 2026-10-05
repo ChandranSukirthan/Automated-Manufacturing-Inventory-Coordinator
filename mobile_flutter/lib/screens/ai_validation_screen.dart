@@ -1782,7 +1782,7 @@ class _AiValidationScreenState extends State<AiValidationScreen> {
   String _formatDate(String dateStr) {
     final parsed = DateTime.tryParse(dateStr);
     if (parsed == null) return dateStr;
-    final local = parsed.toLocal();
+    final local = parsed.toUtc().add(const Duration(hours: 5, minutes: 30));
     String two(int n) => n.toString().padLeft(2, '0');
     return '${local.month}/${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
   }

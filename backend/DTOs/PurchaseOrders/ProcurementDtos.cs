@@ -83,7 +83,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public string SupplierName { get; set; } = string.Empty;
         public string MaterialName { get; set; } = string.Empty;
         public decimal UnitPrice { get; set; }
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
         public decimal MinimumOrderQuantity { get; set; }
         public decimal PackSize { get; set; } = 1m;
         public int LeadTimeDays { get; set; }

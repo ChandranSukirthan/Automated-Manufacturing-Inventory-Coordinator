@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/procurement_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -711,13 +712,13 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
           _buildDetailRow(
             'Unit Price',
             t.unitPrice != null
-                ? '\$${t.unitPrice!.toStringAsFixed(2)}'
+                ? formatMoney(t.unitPrice!)
                 : 'TBD',
           ),
           _buildDetailRow(
             'Estimated Total',
             t.totalCost != null
-                ? '\$${t.totalCost!.toStringAsFixed(2)}'
+                ? formatMoney(t.totalCost!)
                 : 'TBD',
             valueColor: cyanAccent,
             isBold: true,
@@ -1127,14 +1128,14 @@ class _ProcurementDetailsScreenState extends State<ProcurementDetailsScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'MOQ: ${c.minimumOrderQuantity.toStringAsFixed(0)} units @ \$${c.unitPrice.toStringAsFixed(2)}',
+                            'MOQ: ${c.minimumOrderQuantity.toStringAsFixed(0)} units @ ${formatMoney(c.unitPrice, currency: c.currency)}',
                             style: const TextStyle(
                               color: Colors.white54,
                               fontSize: 11,
                             ),
                           ),
                           Text(
-                            'Total: \$${c.totalCost.toStringAsFixed(2)}',
+                            'Total: ${formatMoney(c.totalCost, currency: c.currency)}',
                             style: TextStyle(
                               color: cyanAccent,
                               fontWeight: FontWeight.bold,

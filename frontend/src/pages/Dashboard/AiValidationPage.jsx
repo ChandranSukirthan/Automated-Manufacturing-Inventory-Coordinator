@@ -65,7 +65,8 @@ const formatTimestamp = (dateStr) => {
   try {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return 'Not available';
-    return date.toLocaleString('en-US', {
+    return date.toLocaleString('en-GB', {
+      timeZone: 'Asia/Colombo',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1045,9 +1046,9 @@ export default function AiValidationPage() {
                   </div>
                   <dl className="mt-3 space-y-1.5 text-xs">
                     <div className="flex justify-between gap-3"><dt className="text-slate-500">Supplier</dt><dd className="text-right font-semibold text-slate-200">{supplier.supplierName || 'Not available'}</dd></div>
-                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Unit price</dt><dd className="font-mono text-slate-200">{supplier.unitPrice != null ? `$${Number(supplier.unitPrice).toFixed(2)}` : 'Not available'}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Unit price</dt><dd className="font-mono text-slate-200">{supplier.unitPrice != null ? `${'LKR'} ${Number(supplier.unitPrice).toFixed(2)}` : 'Not available'}</dd></div>
                     <div className="flex justify-between gap-3"><dt className="text-slate-500">Available</dt><dd className="font-mono text-slate-200">{supplier.availableQuantity ?? 'Not available'}</dd></div>
-                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Order total</dt><dd className="font-mono text-slate-200">{supplier.totalCost != null ? `$${Number(supplier.totalCost).toFixed(2)}` : 'Not available'}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-slate-500">Order total</dt><dd className="font-mono text-slate-200">{supplier.totalCost != null ? `${'LKR'} ${Number(supplier.totalCost).toFixed(2)}` : 'Not available'}</dd></div>
                   </dl>
                   <p className={`mt-3 rounded-xl border p-2.5 text-xs leading-5 ${approved ? 'border-emerald-500/20 text-emerald-100' : 'border-rose-500/20 text-rose-100'}`}>
                     {attempt.reason || (approved ? 'All supplier, stock, price, budget, material, and quality checks passed.' : 'The recommendation failed one or more validation checks.')}

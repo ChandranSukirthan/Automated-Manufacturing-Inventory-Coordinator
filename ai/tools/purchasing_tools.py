@@ -38,29 +38,29 @@ STATIC_SUPPLIER_CATALOG = [
     {
         "supplierId": "SUP-001",
         "name": "Apex Industrial Metals",
-        "pricePerUnit": 4.50,
+        "pricePerUnit": 1350.0,
         "leadTimeDays": 7,
         "minOrderQuantity": 500,
         "isActive": True,
-        "currency": "USD"
+        "currency": "LKR"
     },
     {
         "supplierId": "SUP-002",
         "name": "Global Precision Fasteners",
-        "pricePerUnit": 4.80,
+        "pricePerUnit": 1440.0,
         "leadTimeDays": 14,
         "minOrderQuantity": 200,
         "isActive": True,
-        "currency": "USD"
+        "currency": "LKR"
     },
     {
         "supplierId": "SUP-003",
         "name": "Polymer & Composites Direct",
-        "pricePerUnit": 5.00,
+        "pricePerUnit": 1500.0,
         "leadTimeDays": 10,
         "minOrderQuantity": 1000,
         "isActive": True,
-        "currency": "USD"
+        "currency": "LKR"
     }
 ]
 
@@ -157,8 +157,8 @@ def _call_gemini_search_grounding(
     specification: str,
     quantity: float,
     quality: str = "",
-    budget: float = 10000.0,
-    region: str = "Global"
+    budget: float = 3000000.0,
+    region: str = "Sri Lanka"
 ) -> List[Dict[str, Any]]:
     """
     Invokes Gemini API with Google Search Grounding to find real online suppliers.
@@ -174,9 +174,10 @@ Search current online suppliers and market prices using Google Search Grounding 
 - Specification: {specification}
 - Required Quantity: {quantity} units
 - Quality Requirement: {quality}
-- Maximum Budget: ${budget:.2f}
+- Maximum Budget: LKR {budget:.2f}
 - Preferred Region: {region}
 
+Return the actual currency quoted by each source. Never relabel a USD or other foreign price as LKR, and do not invent an exchange rate. Foreign currency proposals require explicit conversion approval and will not pass an LKR-only budget comparison.
 Return ONLY a valid JSON array of up to 5 supplier candidate objects with the following schema:
 [
   {{
@@ -184,8 +185,8 @@ Return ONLY a valid JSON array of up to 5 supplier candidate objects with the fo
     "productName": "{material} - Grade",
     "materialName": "{material}",
     "specification": "{specification}",
-    "unitPrice": 1.45,
-    "currency": "USD",
+    "unitPrice": 435.0,
+    "currency": "LKR",
     "unit": "units",
     "minimumOrderQuantity": 500,
     "packSize": 50,
@@ -238,7 +239,7 @@ def search_external_supplier_market(
     specification: str,
     required_quantity: float,
     quality_requirement: str = "",
-    maximum_budget: float = 10000.0,
+    maximum_budget: float = 3000000.0,
     preferred_region: Optional[str] = None,
     required_by_date: Optional[str] = None,
     revision_notes: Optional[str] = None,
@@ -253,7 +254,7 @@ def search_external_supplier_market(
         spec_clean += "\nRequested revision: " + sanitize_untrusted_web_content(revision_notes)
     if required_by_date:
         spec_clean += "\nRequired by: " + str(required_by_date)
-    region_clean = sanitize_untrusted_web_content(preferred_region or "Global")
+    region_clean = sanitize_untrusted_web_content(preferred_region or "Sri Lanka")
     now_iso = datetime.now(timezone.utc).isoformat()
 
     try:
@@ -274,12 +275,12 @@ def search_external_supplier_market(
         return []
 
     supplier_pool = [
-        {"supplierName": "Apex Polymer Solutions Ltd", "productName": f"{material_clean} - Industrial Grade", "materialName": material_clean, "specification": spec_clean or "ASTM A36 / ISO certified", "unitPrice": 1.45, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 3, "qualityEvidence": "ISO 9001 Certified", "certifications": ["ISO 9001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://apexpolymer.example.com", "sourceWebsite": "Apex Polymer Solutions Ltd", "region": region_clean},
-        {"supplierName": "SteelTech Industries", "productName": f"{material_clean} - Premium Grade", "materialName": material_clean, "specification": "ASTM A36, tensile strength ≥400 MPa, mill certified", "unitPrice": 1.85, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 7, "qualityEvidence": "ISO 9001:2015, ASTM certified", "certifications": ["ISO 9001", "ASTM"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://steeltech.example.com/products", "sourceWebsite": "SteelTech Industries", "region": "North America"},
-        {"supplierName": "GlobalMetals Corp", "productName": f"{material_clean} - Standard", "materialName": material_clean, "specification": "EN 10025, S275 structural steel", "unitPrice": 1.62, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 1000, "packSize": 100, "availableQuantity": 50000, "leadTimeDays": 10, "qualityEvidence": "ISO 9001, CE Marking", "certifications": ["ISO 9001", "CE"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://globalmetals.example.com", "sourceWebsite": "GlobalMetals Corp", "region": "Europe"},
-        {"supplierName": "AsiaPac Manufacturing", "productName": f"{material_clean} - Export Grade", "materialName": material_clean, "specification": "GB/T 700, Q235 structural steel", "unitPrice": 1.20, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 2000, "packSize": 200, "availableQuantity": 100000, "leadTimeDays": 21, "qualityEvidence": "ISO 9001, SGS Inspected", "certifications": ["ISO 9001", "SGS"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://asiapac.example.com", "sourceWebsite": "AsiaPac Manufacturing", "region": "Asia"},
-        {"supplierName": "PrecisionAlloys Ltd", "productName": f"{material_clean} - High Tensile", "materialName": material_clean, "specification": "BS EN 10083, 42CrMo4 alloy steel", "unitPrice": 2.45, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 250, "packSize": 25, "availableQuantity": 8000, "leadTimeDays": 5, "qualityEvidence": "ISO 9001:2015, ISO 14001", "certifications": ["ISO 9001", "ISO 14001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://precisionalloys.example.com", "sourceWebsite": "PrecisionAlloys Ltd", "region": "Europe"},
-        {"supplierName": "Midwest Steel Supply", "productName": f"{material_clean} - Domestic Grade", "materialName": material_clean, "specification": "ASTM A572 Grade 50, high-strength low-alloy", "unitPrice": 2.10, "currency": "USD", "unit": "kg", "minimumOrderQuantity": 300, "packSize": 50, "availableQuantity": 15000, "leadTimeDays": 3, "qualityEvidence": "ASTM certified, ISO 9001", "certifications": ["ASTM", "ISO 9001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://midweststeel.example.com", "sourceWebsite": "Midwest Steel Supply", "region": "North America"},
+        {"supplierName": "Apex Polymer Solutions Ltd", "productName": f"{material_clean} - Industrial Grade", "materialName": material_clean, "specification": spec_clean or "ASTM A36 / ISO certified", "unitPrice": 435.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 3, "qualityEvidence": "ISO 9001 Certified", "certifications": ["ISO 9001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://apexpolymer.example.com", "sourceWebsite": "Apex Polymer Solutions Ltd", "region": region_clean},
+        {"supplierName": "SteelTech Industries", "productName": f"{material_clean} - Premium Grade", "materialName": material_clean, "specification": "ASTM A36, tensile strength ≥400 MPa, mill certified", "unitPrice": 555.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 500, "packSize": 50, "availableQuantity": 25000, "leadTimeDays": 7, "qualityEvidence": "ISO 9001:2015, ASTM certified", "certifications": ["ISO 9001", "ASTM"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://steeltech.example.com/products", "sourceWebsite": "SteelTech Industries", "region": "North America"},
+        {"supplierName": "GlobalMetals Corp", "productName": f"{material_clean} - Standard", "materialName": material_clean, "specification": "EN 10025, S275 structural steel", "unitPrice": 486.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 1000, "packSize": 100, "availableQuantity": 50000, "leadTimeDays": 10, "qualityEvidence": "ISO 9001, CE Marking", "certifications": ["ISO 9001", "CE"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://globalmetals.example.com", "sourceWebsite": "GlobalMetals Corp", "region": "Europe"},
+        {"supplierName": "AsiaPac Manufacturing", "productName": f"{material_clean} - Export Grade", "materialName": material_clean, "specification": "GB/T 700, Q235 structural steel", "unitPrice": 360.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 2000, "packSize": 200, "availableQuantity": 100000, "leadTimeDays": 21, "qualityEvidence": "ISO 9001, SGS Inspected", "certifications": ["ISO 9001", "SGS"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://asiapac.example.com", "sourceWebsite": "AsiaPac Manufacturing", "region": "Asia"},
+        {"supplierName": "PrecisionAlloys Ltd", "productName": f"{material_clean} - High Tensile", "materialName": material_clean, "specification": "BS EN 10083, 42CrMo4 alloy steel", "unitPrice": 735.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 250, "packSize": 25, "availableQuantity": 8000, "leadTimeDays": 5, "qualityEvidence": "ISO 9001:2015, ISO 14001", "certifications": ["ISO 9001", "ISO 14001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://precisionalloys.example.com", "sourceWebsite": "PrecisionAlloys Ltd", "region": "Europe"},
+        {"supplierName": "Midwest Steel Supply", "productName": f"{material_clean} - Domestic Grade", "materialName": material_clean, "specification": "ASTM A572 Grade 50, high-strength low-alloy", "unitPrice": 630.0, "currency": "LKR", "unit": "kg", "minimumOrderQuantity": 300, "packSize": 50, "availableQuantity": 15000, "leadTimeDays": 3, "qualityEvidence": "ASTM certified, ISO 9001", "certifications": ["ASTM", "ISO 9001"], "availabilityStatus": "AVAILABLE", "supplierStatus": "UNVERIFIED", "sourceUrl": "https://midweststeel.example.com", "sourceWebsite": "Midwest Steel Supply", "region": "North America"},
     ]
 
     sorted_pool = sorted(supplier_pool, key=lambda x: x["unitPrice"])[:5]
@@ -297,7 +298,7 @@ def _format_candidates(raw_list: List[Dict[str, Any]], material: str, now_iso: s
             "materialName": s.get("materialName", material),
             "specification": s.get("specification", "Standard manufacturing grade, certified"),
             "unitPrice": float(s.get("unitPrice", 1.50)),
-            "currency": s.get("currency", "USD"),
+            "currency": s.get("currency", "LKR"),
             "unit": s.get("unit", "units"),
             "minimumOrderQuantity": float(s.get("minimumOrderQuantity", 500)),
             "packSize": float(s.get("packSize", 50)),
@@ -395,7 +396,7 @@ def calculate_total_cost(
     quantity: float,
     unit_price: float,
     alternative_price: Optional[float] = None,
-    currency: str = "USD",
+    currency: str = "LKR",
     conflicting_quotes: Optional[List[float]] = None,
     **kwargs
 ) -> Dict[str, Any]:
@@ -429,8 +430,8 @@ def calculate_total_cost(
         if alt > 0 and abs(alt - price) > 0.01:
             has_conflict = True
             conflict_notes = (
-                f"Conflicting prices detected: authoritative=${price:.2f}, "
-                f"alternative=${alt:.2f}. Using authoritative price."
+                f"Conflicting prices detected: authoritative={price:.2f}, "
+                f"alternative={alt:.2f}. Using authoritative price."
             )
 
     total = round(qty * price, 2)
@@ -512,8 +513,8 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
                         "verificationStatus": "VERIFIED",
                         "supplierStatus": "APPROVED",
                         "qualityEvidence": "ISO 9001 Certified (Internal contract verified)",
-                        "unitPrice": 1.45,
-                        "currency": "USD",
+                        "unitPrice": 435.0,
+                        "currency": "LKR",
                     })
         except Exception as ex:
             logger.warning(f"Error querying internal suppliers: {ex}")
@@ -533,8 +534,8 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
                 "verificationStatus": "VERIFIED",
                 "supplierStatus": "APPROVED",
                 "qualityEvidence": "ISO 9001 Certified (Internal contract verified)",
-                "unitPrice": 1.45,
-                "currency": "USD",
+                "unitPrice": 435.0,
+                "currency": "LKR",
             },
             {
                 "supplierId": 2,
@@ -547,8 +548,8 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
                 "verificationStatus": "VERIFIED",
                 "supplierStatus": "APPROVED",
                 "qualityEvidence": "ISO 9001:2015, ISO 14001",
-                "unitPrice": 1.55,
-                "currency": "USD",
+                "unitPrice": 465.0,
+                "currency": "LKR",
             }
         ]
 
@@ -585,7 +586,7 @@ def validate_supplier_candidate(
     budget_ok = True
     if max_budget > 0 and est_total > max_budget:
         budget_ok = False
-        reasons.append(f"Estimated total (${est_total:,.2f}) exceeds maximum budget (${max_budget:,.2f}).")
+        reasons.append(f"Estimated total ({est_total:,.2f}) exceeds maximum budget ({max_budget:,.2f}).")
 
     quality_status = "VERIFIED"
     quality_evidence = candidate.get("qualityEvidence", "")
@@ -674,7 +675,7 @@ def select_supplier(*args, **kwargs) -> Dict[str, Any]:
     selection_reasons = [
         f"Selected {top_cand.get('supplierName')} based on "
         f"{'approved supplier agreement' if top_cand.get('supplierStatus') == 'APPROVED' else 'verified capabilities'}, "
-        f"total cost (${top_report.get('totalCost', 0):,.2f}), and lead time ({top_cand.get('leadTimeDays', 7)} days)."
+        f"total cost ({top_report.get('totalCost', 0):,.2f}), and lead time ({top_cand.get('leadTimeDays', 7)} days)."
     ]
 
     return {
@@ -709,8 +710,8 @@ def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
         quantity = float(args[3]) if len(args) > 3 else 0.0
         unit_price = float(args[4]) if len(args) > 4 else 0.0
         total_amount = float(args[5]) if len(args) > 5 else round(quantity * unit_price, 2)
-        currency = args[6] if len(args) > 6 else kwargs.get("currency", "USD")
-        budget_threshold = float(args[7]) if len(args) > 7 else kwargs.get("budget_threshold", 5000.0)
+        currency = args[6] if len(args) > 6 else kwargs.get("currency", "LKR")
+        budget_threshold = float(args[7]) if len(args) > 7 else kwargs.get("budget_threshold", 1500000.0)
 
         draft_id = f"PO-DRAFT-{str(uuid.uuid4())[:6].upper()}"
         return {
@@ -722,7 +723,7 @@ def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
             "quantity": quantity,
             "unitPrice": unit_price,
             "totalAmount": total_amount,
-            "estimatedCostUsd": total_amount,
+            "estimatedCost": total_amount,
             "currency": currency,
             "status": "Draft",
             "paymentStatus": "UNPAID",
@@ -755,17 +756,17 @@ def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
             "quantity": quantity,
             "unitPrice": unit_price,
             "unit": selected_candidate.get("unit", "units"),
-            "estimatedCostUsd": total_cost,
+            "estimatedCost": total_cost,
             "totalAmount": total_cost,
             "totalCost": total_cost,
-            "currency": selected_candidate.get("currency", "USD"),
+            "currency": selected_candidate.get("currency", "LKR"),
             "leadTimeDays": selected_candidate.get("leadTimeDays", 5),
             "qualityEvidence": selected_candidate.get("qualityEvidence", "ISO 9001"),
             "status": "Draft",
             "paymentStatus": "UNPAID",
             "emailSent": False,
             "requiresApproval": True,
-            "budgetThreshold": 5000.0,
+            "budgetThreshold": 1500000.0,
             "terms": terms,
             "reason": reason,
             "notes": kwargs.get("notes") or f"AI-Recommended procurement for {item_code} via {selected_candidate.get('supplierName')}."
@@ -776,7 +777,7 @@ def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
     qty = float(kwargs.get("quantity", 0.0))
     price = float(kwargs.get("unit_price", 0.0))
     total = float(kwargs.get("total_amount") or kwargs.get("total_cost") or round(qty * price, 2))
-    thresh = float(kwargs.get("budget_threshold", 5000.0))
+    thresh = float(kwargs.get("budget_threshold", 1500000.0))
 
     return {
         "poNumber": draft_id,
@@ -787,8 +788,8 @@ def create_draft_po(*args, **kwargs) -> Dict[str, Any]:
         "quantity": qty,
         "unitPrice": price,
         "totalAmount": total,
-        "estimatedCostUsd": total,
-        "currency": kwargs.get("currency", "USD"),
+        "estimatedCost": total,
+        "currency": kwargs.get("currency", "LKR"),
         "status": "Draft",
         "paymentStatus": "UNPAID",
         "emailSent": False,
@@ -853,7 +854,7 @@ def query_supplier_rates(
                             "leadTimeDays": int(row[2]),
                             "minOrderQuantity": 500,
                             "isActive": bool(row[3]),
-                            "currency": "USD"
+                            "currency": "LKR"
                         })
         except Exception as ex:
             logger.warning(f"Database query failed in query_supplier_rates: {ex}. Using static supplier catalog.")

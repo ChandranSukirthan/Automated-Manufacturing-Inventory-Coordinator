@@ -1,3 +1,4 @@
+import { formatColomboDate, toColomboInput, fromColomboInput } from '../../utils/locale.js';
 import ModalOverlay from '../../components/Common/ModalOverlay';
 import { useState, useEffect } from 'react';
 import { 
@@ -80,8 +81,8 @@ export default function ShiftPage() {
       availableMaterial: 6000,
       actualOutput: 0,
       status: 0,
-      startTime: now.toISOString().slice(0, 16),
-      endTime: end.toISOString().slice(0, 16)
+      startTime: toColomboInput(now),
+      endTime: toColomboInput(end)
     });
     setIsModalOpen(true);
   };
@@ -102,8 +103,8 @@ export default function ShiftPage() {
       availableMaterial: shift.availableMaterial,
       actualOutput: shift.actualOutput,
       status: parseShiftStatus(shift.status),
-      startTime: new Date(shift.startTime).toISOString().slice(0, 16),
-      endTime: new Date(shift.endTime).toISOString().slice(0, 16)
+      startTime: toColomboInput(shift.startTime),
+      endTime: toColomboInput(shift.endTime)
     });
     setIsModalOpen(true);
   };
@@ -122,8 +123,8 @@ export default function ShiftPage() {
         availableMaterial: parseInt(formData.availableMaterial, 10),
         actualOutput: parseInt(formData.actualOutput, 10),
         status: parseInt(formData.status, 10),
-        startTime: new Date(formData.startTime).toISOString(),
-        endTime: new Date(formData.endTime).toISOString()
+        startTime: fromColomboInput(formData.startTime),
+        endTime: fromColomboInput(formData.endTime)
       };
 
       if (editingShift) {
@@ -268,7 +269,7 @@ export default function ShiftPage() {
                           <span>{shift.name}</span>
                         </div>
                         <span className="block text-xs text-slate-400 font-normal mt-0.5">
-                          {new Date(shift.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(shift.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatColomboDate(shift.startTime, 'toLocaleTimeString')} - {formatColomboDate(shift.endTime, 'toLocaleTimeString')}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">{getStatusBadge(shift.status)}</td>

@@ -1,3 +1,4 @@
+import { formatMoney, formatColomboDate } from '../../utils/locale.js';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -65,13 +66,13 @@ export default function AdminDashboard() {
   const revisionOrders = orders.filter((o) => o.status === 'RevisionRequested');
   const sentOrders = orders.filter((o) => o.status === 'Sent');
 
-  const totalPurchaseValue = orders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
-  const pendingApprovalAmount = pendingOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
+  const totalPurchaseValue = orders.filter(o => (o.currency || 'LKR').toUpperCase() === 'LKR').reduce((sum, o) => sum + (o.totalCost || 0), 0);
+  const pendingApprovalAmount = pendingOrders.filter(o => (o.currency || 'LKR').toUpperCase() === 'LKR').reduce((sum, o) => sum + (o.totalCost || 0), 0);
   const supplierCount = suppliers.length;
   const activeSuppliersCount = suppliers.filter((s) => s.isActive).length;
   const supplierPerformance = supplierCount > 0 ? Math.round((activeSuppliersCount / supplierCount) * 100) : 100;
   const aiWorkflowCount = orders.filter((o) => o.requiresApproval || o.status === 'Approved').length || orders.length;
-  const highRiskOrders = orders.filter((o) => (o.totalCost || 0) > 10000 || o.requiresApproval);
+  const highRiskOrders = orders.filter((o) => (o.totalCost || 0) > (o.approvalThreshold || 1500000) || o.requiresApproval);
 
   if (loading) return <div className="p-8 text-slate-300">Loading dashboard…</div>;
   if (error) return <div className="p-8 text-rose-400">{error}</div>;
@@ -141,19 +142,19 @@ export default function AdminDashboard() {
 
       {/* Primary Financial & Strategic KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Purchase Value & Orders */}
+        {/* Total Purchase Value (LKR) & Orders */}
         <Link
           to="/purchase-orders"
           className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-brand-500/40 backdrop-blur-sm transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-brand-400">
-              Total Purchase Value
+              Total Purchase Value (LKR)
             </span>
             <DollarSign className="w-4 h-4 text-brand-400" />
           </div>
           <p className="text-2xl font-extrabold text-white mt-2 font-mono">
-            ${totalPurchaseValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalPurchaseValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
           <span className="text-[11px] text-slate-400 flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80">
             <span>{totalOrders} Total Purchase Orders</span>
@@ -161,19 +162,19 @@ export default function AdminDashboard() {
           </span>
         </Link>
 
-        {/* Pending Approval Amount */}
+        {/* Pending Approval Amount (LKR) */}
         <Link
           to="/purchase-orders/approvals"
           className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-amber-500/40 backdrop-blur-sm transition-all group"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-amber-400">
-              Pending Approval Amount
+              Pending Approval Amount (LKR)
             </span>
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
           <p className="text-2xl font-extrabold text-amber-400 mt-2 font-mono">
-            ${pendingApprovalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(pendingApprovalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 'LKR')}
           </p>
           <span className="text-[11px] text-amber-300 flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80">
             <span>{pendingOrders.length} Orders Awaiting Review</span>
@@ -218,7 +219,7 @@ export default function AdminDashboard() {
             <span className="text-xs text-slate-400">Active Workflows</span>
           </div>
           <span className="text-[11px] text-rose-400 flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 font-semibold">
-            <span>{highRiskOrders.length} High Risk POs (&gt; $10k)</span>
+            <span>{highRiskOrders.length} High Risk POs (approval required)</span>
             <ArrowRight className="w-3 h-3 text-cyan-500 group-hover:text-white" />
           </span>
         </Link>
@@ -306,7 +307,7 @@ export default function AdminDashboard() {
                     <div className="text-right">
                       <span className="text-[10px] uppercase text-slate-400 block">Total Spend</span>
                       <span className="font-bold text-white text-sm font-mono">
-                        ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                       </span>
                     </div>
 
@@ -453,10 +454,10 @@ export default function AdminDashboard() {
                     <StatusBadge status={po.status} />
                   </td>
                   <td className="py-3 px-3 font-mono font-bold text-white">
-                    ${(po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {formatMoney((po.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }), po?.currency || 'LKR')}
                   </td>
                   <td className="py-3 px-3 text-slate-400">
-                    {new Date(po.createdAt).toLocaleDateString()}
+                    {formatColomboDate(po.createdAt, 'toLocaleDateString')}
                   </td>
                   <td className="py-3 px-3 text-right">
                     <Link

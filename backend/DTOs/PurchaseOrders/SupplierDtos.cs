@@ -111,6 +111,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
     public class SupplierPerformanceDto
     {
+        public string Currency { get; set; } = "LKR";
         public int SupplierId { get; set; }
         public string SupplierCode { get; set; } = string.Empty;
         public string SupplierName { get; set; } = string.Empty;
@@ -124,6 +125,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
     public class SupplierAnalyticsDto
     {
+        public string Currency { get; set; } = "LKR";
         public int TotalSuppliers { get; set; }
         public int ActiveSuppliers { get; set; }
         public int TotalOrders { get; set; }

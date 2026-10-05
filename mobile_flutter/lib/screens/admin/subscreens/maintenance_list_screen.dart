@@ -1,3 +1,4 @@
+import '../../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../../models/admin/machine_model.dart';
 import '../../../services/admin/admin_api_service.dart';
@@ -137,7 +138,7 @@ class _MaintenanceListScreenState extends State<MaintenanceListScreen> {
                                         style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                                       ),
                                       Text(
-                                        log.performedAt.toLocal().toString().split(' ')[0],
+                                        log.performedAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split(' ')[0],
                                         style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                                       ),
                                     ],
@@ -145,7 +146,7 @@ class _MaintenanceListScreenState extends State<MaintenanceListScreen> {
                                   if (log.cost > 0) ...[
                                     const SizedBox(height: 6),
                                     Text(
-                                      'Cost: \$${log.cost.toStringAsFixed(2)}',
+                                      'Cost: ${formatMoney(log.cost)}',
                                       style: const TextStyle(
                                         color: Color(0xFF10B981),
                                         fontWeight: FontWeight.w700,

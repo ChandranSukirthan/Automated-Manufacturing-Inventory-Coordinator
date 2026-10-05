@@ -19,7 +19,7 @@ class _SupplierQuotesScreenState extends State<SupplierQuotesScreen> {
   String get _path => '/suppliers/${widget.supplierId}/quotes';
   @override
   void initState() { super.initState(); _reset(); _load(); }
-  void _reset() { _materialId = null; _quoteId = null; _active = true; for (final c in _fields.values) { c.clear(); } _fields['currency']!.text = 'USD'; _fields['packSize']!.text = '1'; _fields['minimumOrderQuantity']!.text = '1'; }
+  void _reset() { _materialId = null; _quoteId = null; _active = true; for (final c in _fields.values) { c.clear(); } _fields['currency']!.text = 'LKR'; _fields['packSize']!.text = '1'; _fields['minimumOrderQuantity']!.text = '1'; }
   Future<void> _load() async {
     try {
       final results = await Future.wait([_api.get(_path), _api.get('/inventory/rawmaterials')]);

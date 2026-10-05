@@ -1,3 +1,4 @@
+import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
@@ -97,8 +98,8 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
     final revisionOrders = _orders.where((o) => o.status.toLowerCase() == 'revisionrequested').toList();
     final sentOrders = _orders.where((o) => o.status.toLowerCase() == 'sent').toList();
 
-    final totalPurchaseValue = _orders.fold<double>(0, (sum, o) => sum + o.totalCost);
-    final pendingApprovalAmount = pendingOrders.fold<double>(0, (sum, o) => sum + o.totalCost);
+    final totalPurchaseValue = _orders.where((o) => o.currency.toUpperCase() == 'LKR').fold<double>(0, (sum, o) => sum + o.totalCost);
+    final pendingApprovalAmount = pendingOrders.where((o) => o.currency.toUpperCase() == 'LKR').fold<double>(0, (sum, o) => sum + o.totalCost);
     final supplierCount = _suppliers.length;
     final activeSuppliersCount = _suppliers.where((s) => s.isActive).length;
     final supplierPerformance = supplierCount > 0 ? ((activeSuppliersCount / supplierCount) * 100).round() : 100;
@@ -299,7 +300,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       children: [
         _buildKpiCard(
           title: 'Total Purchase Value',
-          value: '\$${totalPurchaseValue.toStringAsFixed(2)}',
+          value: formatMoney(totalPurchaseValue),
           subtitle: '$totalOrders Total POs',
           icon: Icons.payments_outlined,
           color: cyanAccent,
@@ -308,7 +309,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
         ),
         _buildKpiCard(
           title: 'Pending Approvals',
-          value: '\$${pendingApprovalAmount.toStringAsFixed(2)}',
+          value: formatMoney(pendingApprovalAmount),
           subtitle: '$pendingCount Orders Awaiting',
           icon: Icons.pending_actions_outlined,
           color: amberAccent,
@@ -672,7 +673,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                       ),
                       Row(
                         children: [
-                          Text('\$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(formatMoney(po.totalCost, currency: po.currency), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(width: 10),
                           ElevatedButton(
                             onPressed: () => Navigator.push(
@@ -837,7 +838,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                           child: Text(po.status, style: TextStyle(color: po.statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 12),
-                        Text('\$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(formatMoney(po.totalCost, currency: po.currency), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(width: 4),
                         const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 12),
                       ],
@@ -997,7 +998,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                 controller: priceController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(labelText: 'Unit Price (\$)', labelStyle: TextStyle(color: Colors.white54)),
+                decoration: const InputDecoration(labelText: 'Unit Price (LKR )', labelStyle: TextStyle(color: Colors.white54)),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -1118,7 +1119,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
         await widget.service.createSupplier({
           'name': nameController.text.trim(),
           'contactEmail': emailController.text.trim().isNotEmpty ? emailController.text.trim() : 'contact@supplier.com',
-          'contactPhone': phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : '+1-555-0100',
+          'contactPhone': phoneController.text.trim().isNotEmpty ? phoneController.text.trim() : '',
           'address': addressController.text.trim().isNotEmpty ? addressController.text.trim() : 'Industrial Zone, Sector 4',
           'paymentTerms': 'Net30',
           'leadTimeDays': 5,
@@ -1234,7 +1235,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(po.poNumber, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                      subtitle: Text('${po.supplierName} • \$${po.totalCost.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      subtitle: Text('${po.supplierName} • ${formatMoney(po.totalCost, currency: po.currency)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                       trailing: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(ctx);

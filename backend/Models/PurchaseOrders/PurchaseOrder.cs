@@ -47,7 +47,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
         }
 
         [MaxLength(10)]
-        public string Currency { get; set; } = "USD";
+        public string Currency { get; set; } = "LKR";
 
         /// <summary>Maximum allowed spend for this order.</summary>
         [Column(TypeName = "decimal(18,2)")]
@@ -55,7 +55,7 @@ namespace ManufacturingCoordinator.Models.PurchaseOrders
 
         /// <summary>Threshold above which manager approval is mandatory.</summary>
         [Column(TypeName = "decimal(18,2)")]
-        public decimal ApprovalThreshold { get; set; } = 5000m;
+        public decimal ApprovalThreshold { get; set; } = 1500000m;
 
         /// <summary>Set to true by checkApprovalThreshold() when TotalCost > ApprovalThreshold.</summary>
         public bool RequiresApproval { get; set; }

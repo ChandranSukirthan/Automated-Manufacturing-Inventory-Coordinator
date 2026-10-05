@@ -215,7 +215,7 @@ export default function ReplenishmentRequestPage() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="quantity" className="mb-1.5 block text-sm font-semibold text-slate-300">Requested quantity (KG)</label>
+                  <label htmlFor="quantity" className="mb-1.5 block text-sm font-semibold text-slate-300">Requested quantity (material units)</label>
                   <input
                     id="quantity"
                     disabled={Boolean(activeAlert)}
@@ -231,8 +231,8 @@ export default function ReplenishmentRequestPage() {
 
                 {selectedLevel && (
                   <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm">
-                    <div><p className="text-xs text-slate-500">Current stock</p><p className="mt-1 font-bold text-white">{selectedLevel.currentStock} KG</p></div>
-                    <div><p className="text-xs text-slate-500">Reorder level</p><p className="mt-1 font-bold text-white">{selectedLevel.minimumStock} KG</p></div>
+                    <div><p className="text-xs text-slate-500">Current stock</p><p className="mt-1 font-bold text-white">{selectedLevel.currentStock} units</p></div>
+                    <div><p className="text-xs text-slate-500">Reorder level</p><p className="mt-1 font-bold text-white">{selectedLevel.minimumStock} units</p></div>
                     <div><p className="text-xs text-slate-500">Days remaining</p><p className="mt-1 font-bold text-amber-300">{selectedLevel.daysRemaining ?? 'Unknown'} days</p></div>
                     <div><p className="text-xs text-slate-500">Status</p><p className="mt-1 font-bold text-cyan-300">{selectedLevel.status || 'Unknown'}</p></div>
                   </div>
@@ -274,7 +274,7 @@ export default function ReplenishmentRequestPage() {
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-400" />
               <div className="min-w-0">
                 <h2 className="font-bold text-emerald-100">Replenishment request saved</h2>
-                <p className="mt-1 text-sm text-emerald-100/80">{workflowValue(result.alert, 'sku', 'sku', selectedSku)} has been recorded for {workflowValue(result.alert, 'quantityRequested', 'quantity_requested', quantity)} KG.</p>
+                <p className="mt-1 text-sm text-emerald-100/80">{workflowValue(result.alert, 'sku', 'sku', selectedSku)} has been recorded for {workflowValue(result.alert, 'quantityRequested', 'quantity_requested', quantity)} units.</p>
                 {result.workflow ? (
                   <p className="mt-3 rounded-lg border border-emerald-400/20 bg-slate-950/40 p-3 text-sm text-slate-300">
                     Workflow <strong className="font-mono text-cyan-300">{workflowValue(result.workflow, 'workflowId', 'workflow_id', 'active')}</strong> is {workflowValue(result.workflow, 'status', 'status', 'active')}. Approval: {workflowValue(result.workflow, 'approvalStatus', 'approval_status', 'pending')}.

@@ -13,7 +13,7 @@ public class SupplierMaterialQuote
     [Range(0, double.MaxValue)] public decimal AvailableQuantity { get; set; }
     [Range(0, 3650)] public int LeadTimeDays { get; set; }
     [Required, MaxLength(500)] public string QualityEvidence { get; set; } = "";
-    [Required, MaxLength(10)] public string Currency { get; set; } = "USD";
+    [Required, MaxLength(10)] public string Currency { get; set; } = "LKR";
     public bool IsActive { get; set; } = true;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

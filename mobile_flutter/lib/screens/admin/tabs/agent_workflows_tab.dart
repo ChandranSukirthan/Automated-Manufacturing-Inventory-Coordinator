@@ -253,7 +253,7 @@ class _AgentWorkflowsTabState extends State<AgentWorkflowsTab> {
                               ],
                             ),
                             Text(
-                              wf.createdAt.toLocal().toString().split('.')[0],
+                              wf.createdAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0],
                               style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                             ),
                           ],

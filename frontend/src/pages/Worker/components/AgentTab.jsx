@@ -1,3 +1,4 @@
+import { formatMoney } from '../../../utils/locale.js';
 import React, { useState } from 'react';
 import {
   Bot,
@@ -172,7 +173,7 @@ export default function AgentTab({
             </div>
             <div className="w-full sm:w-32">
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Quantity (KG)
+                Quantity (material units)
               </label>
               <input
                 type="number"
@@ -230,7 +231,7 @@ export default function AgentTab({
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
                 <span className="text-slate-500">Requires Approval</span>
                 <p className="font-bold text-amber-400 mt-1">
-                  {aiWorkflowResult.requires_approval ? 'Yes (> $5,000)' : 'No'}
+                  {aiWorkflowResult.requires_approval ? "Yes (> LKR 1,500,000)" : 'No'}
                 </p>
               </div>
               <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
@@ -252,10 +253,9 @@ export default function AgentTab({
                   <strong className="text-white font-mono">
                     {aiWorkflowResult.po_number}
                   </strong>{' '}
-                  for {aiWorkflowResult.quantity} units ($
-                  {aiWorkflowResult.total_amount?.toLocaleString(undefined, {
+                  for {aiWorkflowResult.quantity} units ({formatMoney(aiWorkflowResult.total_amount?.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
-                  })}
+                  }), 'LKR')}
                   ) has been routed to{' '}
                   <strong>Supply Chain Manager</strong>.
                 </p>
