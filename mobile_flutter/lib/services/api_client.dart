@@ -30,7 +30,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const requestTimeout = Duration(seconds: 15);
+  static const requestTimeout = Duration(seconds: 45);
 
   ApiClient({SessionStorage? storage, String? baseUrl, this.onSessionExpired})
       : storage = storage ?? SessionStorage(),

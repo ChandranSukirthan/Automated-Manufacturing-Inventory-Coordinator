@@ -512,7 +512,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
                         if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
-                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/approve", null);
+                        var aiBase = (_configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                        await http.PostAsync($"{aiBase}/api/workflows/{wfId}/approve", null);
                     }
                 }
             }
@@ -568,7 +569,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
                         if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
-                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/reject", null);
+                        var aiBase = (_configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                        await http.PostAsync($"{aiBase}/api/workflows/{wfId}/reject", null);
                     }
                 }
             }
