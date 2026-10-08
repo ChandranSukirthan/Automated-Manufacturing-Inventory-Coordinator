@@ -318,7 +318,7 @@ namespace ManufacturingCoordinator.Api.Services
             var aiBaseUrl = (_configuration?["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
             try
             {
-                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
                 var response = await httpClient.GetAsync($"{aiBaseUrl}/health");
                 if (response.IsSuccessStatusCode)
                 {

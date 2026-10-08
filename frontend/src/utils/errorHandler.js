@@ -22,7 +22,7 @@ export const parseErrorMessage = (err, defaultMsg = 'An error occurred. Please t
   if (err.response?.status >= 500) return 'The backend encountered an error. Please try again shortly.';
 
   if (err.message === 'Network Error' || err.code === 'ERR_NETWORK') {
-    return 'Network Error: Unable to connect to the backend server (http://localhost:5070). Please ensure the backend is running.';
+    return 'Network Error: Unable to connect to the backend server. Please ensure the backend service is running and reachable.';
   }
 
   return err.message || defaultMsg;
