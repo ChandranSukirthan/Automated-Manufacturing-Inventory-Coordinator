@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../models/procurement_models.dart';
 import '../models/purchase_order_models.dart';
 import 'api_client.dart';
@@ -25,6 +26,11 @@ class PurchaseOrderService {
       return PurchaseOrderDetail.fromJson(response);
     }
     throw const ApiException('Invalid purchase order response payload.');
+  }
+
+  /// GET /api/purchase-orders/{id}/pdf — download PO PDF document bytes
+  Future<Uint8List> getPurchaseOrderPdf(int id) async {
+    return await _api.getBytes('/purchase-orders/$id/pdf');
   }
 
   /// GET /api/purchase-orders/incoming-supplies — active deliveries for Floor Workers

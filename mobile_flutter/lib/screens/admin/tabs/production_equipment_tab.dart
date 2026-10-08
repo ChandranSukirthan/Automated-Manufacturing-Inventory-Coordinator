@@ -8,6 +8,7 @@ import '../../../widgets/admin/metric_gauge.dart';
 import '../subscreens/machine_detail_screen.dart';
 import '../subscreens/shift_detail_screen.dart';
 import '../../../widgets/admin/machine_form_dialog.dart';
+import '../../../widgets/admin/shift_form_dialog.dart';
 
 class ProductionEquipmentTab extends StatefulWidget {
   final List<MachineModel> machines;
@@ -31,6 +32,19 @@ class ProductionEquipmentTab extends StatefulWidget {
 
 class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
   int _selectedSection = 0; // 0: Machines, 1: Shifts
+
+  Future<void> _openShiftFormDialog([ShiftModel? shift]) async {
+    final result = await showDialog<ShiftModel>(
+      context: context,
+      builder: (_) => ShiftFormDialog(
+        shift: shift,
+        service: widget.service,
+      ),
+    );
+    if (result != null && mounted) {
+      await widget.onRefresh();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -362,13 +376,30 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
       ),
       const SizedBox(height: 16),
 
-      const Text(
-        'Manufacturing Shifts',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 15,
-        ),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Manufacturing Shifts',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _openShiftFormDialog(),
+            icon: const Icon(Icons.add_rounded, size: 16),
+            label: const Text('Add Shift'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF06B6D4),
+              foregroundColor: const Color(0xFF0B0F19),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
       ),
       const SizedBox(height: 10),
 
@@ -376,8 +407,8 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: AdminCard(
-            onTap: () {
-              Navigator.push(
+            onTap: () async {
+              final updated = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ShiftDetailScreen(
@@ -386,6 +417,9 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                   ),
                 ),
               );
+              if (updated == true && mounted) {
+                await widget.onRefresh();
+              }
             },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

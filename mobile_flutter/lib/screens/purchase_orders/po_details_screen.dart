@@ -22,6 +22,7 @@ class PODetailsScreen extends StatefulWidget {
 
 class _PODetailsScreenState extends State<PODetailsScreen> {
   bool _loading = true;
+  bool _downloadingPdf = false;
   String? _error;
   PurchaseOrderDetail? _po;
 
@@ -55,6 +56,80 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     }
   }
 
+  Future<void> _downloadPdf() async {
+    setState(() => _downloadingPdf = true);
+    try {
+      final bytes = await widget.service.getPurchaseOrderPdf(widget.poId);
+      if (!mounted) return;
+      setState(() => _downloadingPdf = false);
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.picture_as_pdf, color: Color(0xFFEF4444)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'PO #${_po?.poNumber ?? widget.poId}',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Official Purchase Order PDF generated and retrieved successfully!',
+                style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Document Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('Supplier: ${_po?.supplierName ?? "Approved Vendor"}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text('Total: ${_po?.currency ?? "LKR"} ${_po?.totalCost.toStringAsFixed(2) ?? "0.00"}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close', style: TextStyle(color: Color(0xFF06B6D4))),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _downloadingPdf = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download PDF: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const navyBg = Color(0xFF070E17);
@@ -71,6 +146,13 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
+          IconButton(
+            icon: _downloadingPdf
+                ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
+                : const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFEF4444)),
+            tooltip: 'Download PDF',
+            onPressed: _downloadingPdf ? null : _downloadPdf,
+          ),
           IconButton(icon: const Icon(Icons.inventory_2), tooltip: 'Delivery receipts', onPressed: () async {
             await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReceiveGoodsScreen(purchaseOrderId: widget.poId)));
             if (mounted) await _fetchDetails();

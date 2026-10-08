@@ -9,6 +9,7 @@ import '../services/api_client.dart';
 import '../services/inventory_api_service.dart';
 import '../services/quality_service.dart';
 import '../views/scanner_view.dart';
+import 'profile_screen.dart';
 
 class WorkerDashboardScreen extends StatefulWidget {
   const WorkerDashboardScreen({
@@ -351,7 +352,29 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  if (widget.appState != null) {
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(appState: widget.appState!),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.person_outline_rounded, size: 18),
+                label: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.w700)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF38BDF8),
+                  side: const BorderSide(color: Color(0xFF0284C7)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 10),
               FilledButton.icon(
                 onPressed: () async {
                   Navigator.pop(dialogContext);
@@ -593,6 +616,8 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
           _buildCompactHeaderBanner(),
           const SizedBox(height: 12),
           _buildTopKpiCards(),
+          const SizedBox(height: 14),
+          _buildUrgentReplenishmentCtaBanner(criticalMaterials.length),
           const SizedBox(height: 14),
 
           // Critical Stock Watchlist
@@ -841,6 +866,89 @@ class _WorkerDashboardScreenState extends State<WorkerDashboardScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUrgentReplenishmentCtaBanner(int criticalCount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: criticalCount > 0
+              ? [const Color(0xFF7F1D1D), const Color(0xFF991B1B)]
+              : [const Color(0xFF064E3B), const Color(0xFF065F46)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: criticalCount > 0
+              ? const Color(0xFFEF4444).withValues(alpha: 0.6)
+              : const Color(0xFF10B981).withValues(alpha: 0.6),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (criticalCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF10B981)).withValues(alpha: 0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              criticalCount > 0 ? Icons.flash_on_rounded : Icons.smart_toy_rounded,
+              color: criticalCount > 0 ? const Color(0xFFFCA5A5) : const Color(0xFF6EE7B7),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  criticalCount > 0
+                      ? 'Urgent Replenishment Required'
+                      : 'AI Autonomous Coordinator',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  criticalCount > 0
+                      ? '$criticalCount materials critical. Trigger AI multi-agent reorder pipeline.'
+                      : 'Zero stock bottlenecks detected. Tap to run floor inventory agent.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: () => setState(() => _index = 5),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+            label: const Text('Open Agent', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: criticalCount > 0 ? const Color(0xFF991B1B) : const Color(0xFF065F46),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              elevation: 0,
+            ),
           ),
         ],
       ),

@@ -3,6 +3,9 @@ import '../../../models/admin/machine_model.dart';
 import '../../../models/admin/shift_model.dart';
 import '../../../models/admin/workflow_model.dart';
 import '../../../models/admin/system_health_model.dart';
+import '../../../services/admin/admin_api_service.dart';
+import '../subscreens/user_management_screen.dart';
+import '../subscreens/audit_logs_screen.dart';
 import '../../../widgets/admin/admin_card.dart';
 import '../../../widgets/admin/status_chip.dart';
 import '../../../widgets/admin/metric_gauge.dart';
@@ -12,6 +15,7 @@ class AdminOverviewTab extends StatelessWidget {
   final List<ShiftModel> shifts;
   final List<WorkflowModel> workflows;
   final SystemHealthModel? health;
+  final AdminApiService? service;
   final bool loading;
   final Future<void> Function() onRefresh;
   final void Function(int index) onNavigateTab;
@@ -21,6 +25,7 @@ class AdminOverviewTab extends StatelessWidget {
     required this.shifts,
     required this.workflows,
     required this.health,
+    this.service,
     required this.loading,
     required this.onRefresh,
     required this.onNavigateTab,
@@ -264,6 +269,95 @@ class AdminOverviewTab extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // System Governance & Security Access
+          const Text(
+            'System Governance & Security',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: AdminCard(
+                  onTap: service != null
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => UserManagementScreen(service: service!),
+                            ),
+                          )
+                      : null,
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.manage_accounts_rounded, color: Color(0xFF06B6D4), size: 20),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'User Accounts',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Roles & access control',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: AdminCard(
+                  onTap: service != null
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AuditLogsScreen(service: service!),
+                            ),
+                          )
+                      : null,
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.security_rounded, color: Color(0xFF8B5CF6), size: 20),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Audit Trail',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Security logs & events',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
                       ),
                     ],
                   ),

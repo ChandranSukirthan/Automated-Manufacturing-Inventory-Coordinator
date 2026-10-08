@@ -4,6 +4,7 @@ import '../../../services/admin/admin_api_service.dart';
 import '../../../widgets/admin/admin_card.dart';
 import '../../../widgets/admin/status_chip.dart';
 import '../../../widgets/admin/metric_gauge.dart';
+import '../../../widgets/admin/shift_form_dialog.dart';
 
 class ShiftDetailScreen extends StatefulWidget {
   final ShiftModel shift;
@@ -22,11 +23,34 @@ class ShiftDetailScreen extends StatefulWidget {
 class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
   late ShiftModel _currentShift;
   bool _adjusting = false;
+  bool _hasChanged = false;
 
   @override
   void initState() {
     super.initState();
     _currentShift = widget.shift;
+  }
+
+  Future<void> _editShift() async {
+    final updated = await showDialog<ShiftModel>(
+      context: context,
+      builder: (_) => ShiftFormDialog(
+        shift: _currentShift,
+        service: widget.service,
+      ),
+    );
+    if (updated != null && mounted) {
+      setState(() {
+        _currentShift = updated;
+        _hasChanged = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shift details updated!'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+    }
   }
 
   Future<void> _adjustOutput() async {
@@ -43,6 +67,7 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
         setState(() {
           _currentShift = updated;
           _adjusting = false;
+          _hasChanged = true;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -66,15 +91,29 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0F19),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        title: Text(
-          _currentShift.name,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {},
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0B0F19),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0F172A),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context, _hasChanged),
+          ),
+          title: Text(
+            _currentShift.name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Color(0xFF06B6D4)),
+              tooltip: 'Edit Shift',
+              onPressed: _editShift,
+            ),
+          ],
         ),
-      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -130,7 +169,7 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _adjusting ? null : _adjustOutput,
             icon: _adjusting
@@ -147,10 +186,23 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _editShift,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Edit Shift Details'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF06B6D4),
+              side: const BorderSide(color: Color(0xFF06B6D4)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _specRow(String label, String value) {
     return Padding(

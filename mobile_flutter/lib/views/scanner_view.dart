@@ -388,47 +388,19 @@ class _ScannerViewState extends State<ScannerView> {
       await _scannerController.start();
       return;
     }
-    final useSku = await _showManualSkuDetails(matchingItem);
-    if (!mounted) return;
-    if (useSku == true) widget.controller.setSku(matchingItem.sku);
-    await _scannerController.start();
-  }
 
-  Future<bool?> _showManualSkuDetails(InventoryItemModel item) =>
-      showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.inventory_2_outlined, color: Color(0xFFFFD700)),
-              SizedBox(width: 10),
-              Text('Material selected'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _rollDetail('SKU', item.sku),
-              _rollDetail('Material', item.name),
-              _rollDetail('Current SKU stock', '${item.stockLevel}'),
-              _rollDetail('Reorder level', '${item.reorderThreshold}'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Use SKU'),
-            ),
-          ],
+    widget.controller.setSku(matchingItem.sku);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Selected material: ${matchingItem.name} (${matchingItem.sku})'),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 2),
         ),
       );
-
+    }
+    await _scannerController.start();
+  }
 }
 
 /// Owns the field controller for the manual-SKU route.  This ensures Flutter
