@@ -40,6 +40,7 @@ namespace backend.Dtos
         public decimal RemainingQuantity { get; set; }
         // Live SKU balance, after all received rolls and stock adjustments.
         public decimal CurrentSkuStock { get; set; }
+        public decimal ReorderThreshold { get; set; }
         public string Status { get; set; } = "In Stock";
         public DateTime ReceivedDate { get; set; } = DateTime.UtcNow;
     }
