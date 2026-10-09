@@ -598,11 +598,14 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
 
             if (roll == null) return null;
 
-            var currentSkuStock = await _context.InventoryItems
+            var inventoryItem = await _context.InventoryItems
                 .AsNoTracking()
                 .Where(item => item.Sku == roll.RawMaterial!.SkuCode)
-                .Select(item => (decimal?)item.StockLevel)
-                .FirstOrDefaultAsync() ?? 0m;
+                .Select(item => new { item.StockLevel, item.ReorderThreshold })
+                .FirstOrDefaultAsync();
+
+            var currentSkuStock = inventoryItem != null ? (decimal)inventoryItem.StockLevel : 0m;
+            var reorderThreshold = inventoryItem != null ? (decimal)inventoryItem.ReorderThreshold : 0m;
 
             return new QrLookupResultDto
             {
@@ -615,6 +618,7 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 InitialQuantity = roll.InitialQuantity,
                 RemainingQuantity = roll.CurrentQuantity,
                 CurrentSkuStock = currentSkuStock,
+                ReorderThreshold = reorderThreshold,
                 Status = roll.Status,
                 ReceivedDate = roll.ReceivedDate
             };

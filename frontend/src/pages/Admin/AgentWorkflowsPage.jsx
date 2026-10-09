@@ -15,7 +15,10 @@ import {
   Play,
   Check,
   X,
-  Sparkles
+  Sparkles,
+  Filter,
+  SlidersHorizontal,
+  ArrowUpDown
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/AdminLayout';
 import machineService from '../../services/machineService';
@@ -27,6 +30,12 @@ export default function AgentWorkflowsPage() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [approvalFilter, setApprovalFilter] = useState('ALL');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   // Action states
   const [actionLoading, setActionLoading] = useState({}); // { [wfId]: 'approve' | 'reject' }
@@ -119,7 +128,19 @@ export default function AgentWorkflowsPage() {
     }
   };
 
-  const getWorkflowStatusBadge = (status) => {
+  const getWorkflowStatusBadge = (status, approvalStatus, currentAgent) => {
+    const isApproved = approvalStatus === 1 || approvalStatus === 'Approved';
+    const isPendingApproval = status === 3 || status === 'WaitingForApproval';
+
+    // If approval has already been granted, it is actively running in Payment / Dispatch
+    if (isApproved && isPendingApproval) {
+      return (
+        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+          IN DISPATCH (PAYMENT)
+        </span>
+      );
+    }
+
     switch (status) {
       case 0:
       case 'Running':
@@ -154,11 +175,65 @@ export default function AgentWorkflowsPage() {
     }
   };
 
-  const filteredWorkflows = workflows.filter(w =>
-    w.workflowId.toLowerCase().includes(search.toLowerCase()) ||
-    w.objective.toLowerCase().includes(search.toLowerCase()) ||
-    w.currentAgent?.toLowerCase().includes(search.toLowerCase())
+  const normalizeStatus = (status, approvalStatus) => {
+    const isApproved = approvalStatus === 1 || approvalStatus === 'Approved';
+    if (isApproved && (status === 3 || status === 'WaitingForApproval')) {
+      return 'RUNNING';
+    }
+    if (status === 0 || status === 'Running') return 'RUNNING';
+    if (status === 1 || status === 'Completed') return 'COMPLETED';
+    if (status === 2 || status === 'Failed') return 'FAILED';
+    if (status === 3 || status === 'WaitingForApproval') return 'WAITING_FOR_APPROVAL';
+    return String(status || '').toUpperCase();
+  };
+
+  const normalizeApproval = (approval) => {
+    if (approval === 0 || approval === 'Pending') return 'Pending';
+    if (approval === 1 || approval === 'Approved') return 'Approved';
+    if (approval === 2 || approval === 'Rejected') return 'Rejected';
+    return approval ? String(approval) : 'None';
+  };
+
+  const totalCount = workflows.length;
+  const waitingCount = workflows.filter(w => normalizeStatus(w.status, w.approvalStatus) === 'WAITING_FOR_APPROVAL').length;
+  const runningCount = workflows.filter(w => normalizeStatus(w.status, w.approvalStatus) === 'RUNNING').length;
+  const completedCount = workflows.filter(w => normalizeStatus(w.status, w.approvalStatus) === 'COMPLETED').length;
+  const failedCount = workflows.filter(w => normalizeStatus(w.status, w.approvalStatus) === 'FAILED').length;
+
+  const availableTypes = Array.from(
+    new Set(
+      ['Procurement', 'Maintenance', 'Quality', ...workflows.map(w => w.workflowType).filter(Boolean)]
+    )
   );
+
+  const filteredWorkflows = workflows.filter(w => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q ||
+      w.workflowId.toLowerCase().includes(q) ||
+      (w.objective && w.objective.toLowerCase().includes(q)) ||
+      (w.currentAgent && w.currentAgent.toLowerCase().includes(q)) ||
+      (w.workflowType && w.workflowType.toLowerCase().includes(q));
+
+    const matchesStatus = statusFilter === 'ALL' || normalizeStatus(w.status, w.approvalStatus) === statusFilter;
+    const matchesType = typeFilter === 'ALL' || (w.workflowType || '').toLowerCase() === typeFilter.toLowerCase();
+    const matchesApproval = approvalFilter === 'ALL' || normalizeApproval(w.approvalStatus).toLowerCase() === approvalFilter.toLowerCase();
+
+    return matchesSearch && matchesStatus && matchesType && matchesApproval;
+  }).sort((a, b) => {
+    const timeA = new Date(a.startedAt || 0).getTime();
+    const timeB = new Date(b.startedAt || 0).getTime();
+    return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+  });
+
+  const hasActiveFilters = search.trim() !== '' || statusFilter !== 'ALL' || typeFilter !== 'ALL' || approvalFilter !== 'ALL';
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setStatusFilter('ALL');
+    setTypeFilter('ALL');
+    setApprovalFilter('ALL');
+    setSortOrder('desc');
+  };
 
   return (
     <AdminLayout 
@@ -198,6 +273,164 @@ export default function AgentWorkflowsPage() {
         </div>
       </div>
 
+      {/* Interactive Quick-Action Status Chips */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('ALL')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'ALL'
+              ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20'
+              : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 border border-white/10'
+          }`}
+        >
+          <span>All Workflows</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {totalCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('WAITING_FOR_APPROVAL')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'WAITING_FOR_APPROVAL'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
+              : 'bg-slate-900/60 hover:bg-slate-800 text-amber-300 border border-amber-500/30'
+          }`}
+        >
+          <Hourglass className="w-3.5 h-3.5" />
+          <span>Needs Approval</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'WAITING_FOR_APPROVAL' ? 'bg-black/20 text-slate-950' : 'bg-amber-500/20 text-amber-300'
+          }`}>
+            {waitingCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('RUNNING')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'RUNNING'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+              : 'bg-slate-900/60 hover:bg-slate-800 text-blue-300 border border-blue-500/30'
+          }`}
+        >
+          <Loader2 className={`w-3.5 h-3.5 ${runningCount > 0 ? 'animate-spin' : ''}`} />
+          <span>Running</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'RUNNING' ? 'bg-white/20 text-white' : 'bg-blue-500/20 text-blue-300'
+          }`}>
+            {runningCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('COMPLETED')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'COMPLETED'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-slate-900/60 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30'
+          }`}
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          <span>Completed</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'COMPLETED' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300'
+          }`}>
+            {completedCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setStatusFilter('FAILED')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+            statusFilter === 'FAILED'
+              ? 'bg-red-600 text-white shadow-md shadow-red-600/20'
+              : 'bg-slate-900/60 hover:bg-slate-800 text-red-300 border border-red-500/30'
+          }`}
+        >
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>Failed</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            statusFilter === 'FAILED' ? 'bg-white/20 text-white' : 'bg-red-500/20 text-red-300'
+          }`}>
+            {failedCount}
+          </span>
+        </button>
+      </div>
+
+      {/* Secondary Controls: Type, Approval, Sort, Summary */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/40 rounded-2xl border border-white/5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Workflow Type Selector */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-400">Type:</span>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="bg-slate-800 text-white text-xs rounded-xl px-2.5 py-1.5 border border-white/10 focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Types</option>
+              {availableTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Approval Status Selector */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <span className="text-slate-400">Approval:</span>
+            <select
+              value={approvalFilter}
+              onChange={(e) => setApprovalFilter(e.target.value)}
+              className="bg-slate-800 text-white text-xs rounded-xl px-2.5 py-1.5 border border-white/10 focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL">All Approvals</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+
+          {/* Sort Order */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="bg-slate-800 text-white text-xs rounded-xl px-2.5 py-1.5 border border-white/10 focus:ring-2 focus:ring-brand-500 focus:outline-none cursor-pointer"
+            >
+              <option value="desc">Newest First</option>
+              <option value="asc">Oldest First</option>
+            </select>
+          </div>
+
+          {/* Reset Filters button */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-3 h-3 text-slate-400" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+
+        {/* Counter Summary */}
+        <div className="text-xs text-slate-400 font-mono">
+          Showing <span className="font-bold text-white">{filteredWorkflows.length}</span> of {totalCount} pipelines
+        </div>
+      </div>
+
       {/* Notifications */}
       {successMsg && (
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center justify-between gap-3">
@@ -230,11 +463,27 @@ export default function AgentWorkflowsPage() {
           <div className="py-16 text-center text-slate-400 bg-slate-900/40 rounded-3xl border border-white/10">
             <Bot className="w-10 h-10 mx-auto mb-3 text-slate-600" />
             <p className="text-base font-semibold text-white">No agent workflows found</p>
-            <p className="text-xs text-slate-400 mt-1">Click "Request maintenance" above to launch a new autonomous coordination pipeline.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {hasActiveFilters 
+                ? 'No pipelines match your active search or filter selection.'
+                : 'Click "Request maintenance" above to launch a new autonomous coordination pipeline.'}
+            </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-brand-300 border border-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Reset all filters</span>
+              </button>
+            )}
           </div>
         ) : (
           filteredWorkflows.map((wf) => {
-            const isWaitingApproval = wf.workflowType === 'Maintenance' && (wf.status === 3 || wf.status === 'WaitingForApproval' || wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
+            const isWaitingApproval = wf.workflowType === 'Maintenance' && 
+              (wf.status === 3 || wf.status === 'WaitingForApproval') && 
+              (wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
               wf.status !== 1 && wf.status !== 'Completed' &&
               wf.status !== 2 && wf.status !== 'Failed';
             const isApproveLoading = actionLoading[wf.workflowId] === 'approve';
@@ -249,12 +498,17 @@ export default function AgentWorkflowsPage() {
                     : 'border-white/10 hover:border-brand-500/30'
                 }`}
               >
-                {/* Top Row: Workflow ID, Agent, Status */}
+                {/* Top Row: Workflow ID, Type, Agent, Status */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/10">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
                     <span className="font-mono text-base font-extrabold text-brand-400 bg-brand-500/10 px-3 py-1 rounded-xl border border-brand-500/20">
                       {wf.workflowId}
                     </span>
+                    {wf.workflowType && (
+                      <span className="text-xs font-semibold text-indigo-300 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20">
+                        {wf.workflowType}
+                      </span>
+                    )}
                     <div className="flex items-center gap-2 text-xs text-slate-300">
                       <span className="text-slate-500">Current Agent:</span>
                       <span className="font-semibold text-white bg-white/5 px-2.5 py-1 rounded-lg border border-white/5">
@@ -264,7 +518,7 @@ export default function AgentWorkflowsPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {getWorkflowStatusBadge(wf.status)}
+                    {getWorkflowStatusBadge(wf.status, wf.approvalStatus, wf.currentAgent)}
                     <div className="hidden sm:block pl-3 border-l border-white/10">
                       {getApprovalBadge(wf.approvalStatus)}
                     </div>

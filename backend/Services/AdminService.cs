@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using ManufacturingCoordinator.Data;
 using ManufacturingCoordinator.Api.DTOs.Administration;
 using ManufacturingCoordinator.Api.Helpers;
@@ -22,12 +23,14 @@ namespace ManufacturingCoordinator.Api.Services
         private readonly ApplicationDbContext _db;
         private readonly IPasswordHasher _passwordHasher;
         private readonly ManufacturingContext? _mfgContext;
+        private readonly IConfiguration? _configuration;
 
-        public AdminService(ApplicationDbContext db, IPasswordHasher passwordHasher, ManufacturingContext? mfgContext = null)
+        public AdminService(ApplicationDbContext db, IPasswordHasher passwordHasher, ManufacturingContext? mfgContext = null, IConfiguration? configuration = null)
         {
             _db = db;
             _passwordHasher = passwordHasher;
             _mfgContext = mfgContext;
+            _configuration = configuration;
         }
 
         // ========== User Management ==========
@@ -312,10 +315,11 @@ namespace ManufacturingCoordinator.Api.Services
             // 3. FastAPI & 4. Agentic AI — Ping Python microservice
             bool isAiOnline = false;
             string? aiErrorMessage = null;
+            var aiBaseUrl = (_configuration?["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
             try
             {
-                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-                var response = await httpClient.GetAsync("http://127.0.0.1:8000/health");
+                using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                var response = await httpClient.GetAsync($"{aiBaseUrl}/health");
                 if (response.IsSuccessStatusCode)
                 {
                     isAiOnline = true;
@@ -337,13 +341,13 @@ namespace ManufacturingCoordinator.Api.Services
                 {
                     Name = "FastAPI",
                     Status = "ONLINE",
-                    Message = "FastAPI service is running on port 8000."
+                    Message = $"FastAPI service is running on {aiBaseUrl}."
                 });
                 services.Add(new ServiceHealthDto
                 {
                     Name = "Agentic AI",
                     Status = "ONLINE",
-                    Message = "LangGraph Planner Agent is active."
+                    Message = "LangGraph Planner Agent is active and responsive."
                 });
             }
             else
@@ -352,7 +356,7 @@ namespace ManufacturingCoordinator.Api.Services
                 {
                     Name = "FastAPI",
                     Status = "OFFLINE",
-                    Message = aiErrorMessage ?? "FastAPI service is not reachable on port 8000."
+                    Message = aiErrorMessage ?? $"FastAPI service is not reachable on {aiBaseUrl}."
                 });
                 services.Add(new ServiceHealthDto
                 {

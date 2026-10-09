@@ -13,7 +13,8 @@ import {
   ChevronRight,
   ShieldCheck,
   UserCheck,
-  Sparkles
+  Sparkles,
+  Bot
 } from 'lucide-react';
 import useMobileNavigation from './useMobileNavigation';
 import { useAuth } from '../../context/useAuth';
@@ -88,6 +89,12 @@ export default function SCMLayout({ children, title, subtitle, actionButton }) {
       icon: <CheckSquare className="w-5 h-5" />,
       badge: pendingCount > 0 ? pendingCount : null,
       active: location.pathname === '/purchase-orders/approvals' || location.pathname === '/ai-approvals'
+    },
+    {
+      label: 'Agent Workflows',
+      path: '/agent-workflows',
+      icon: <Bot className="w-5 h-5" />,
+      active: location.pathname === '/agent-workflows'
     },
     {
       label: 'Analytics',

@@ -502,7 +502,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         var wf = await _context.AgentWorkflows.FirstOrDefaultAsync(w => w.WorkflowId == wfId);
                         if (wf != null)
                         {
-                            wf.Status = WorkflowStatus.WaitingForApproval;
+                            wf.Status = WorkflowStatus.Running;
                             wf.ApprovalStatus = ApprovalStatus.Approved;
                             wf.CurrentAgent = "Payment / Dispatch";
                             wf.CompletedAt = null;
@@ -512,7 +512,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
                         if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
-                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/approve", null);
+                        var aiBase = (_configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                        await http.PostAsync($"{aiBase}/api/workflows/{wfId}/approve", null);
                     }
                 }
             }
@@ -568,7 +569,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
                         var authorization = _httpContext?.HttpContext?.Request.Headers.Authorization.ToString();
                         if (!string.IsNullOrEmpty(authorization)) http.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authorization);
-                        await http.PostAsync($"http://localhost:8000/api/workflows/{wfId}/reject", null);
+                        var aiBase = (_configuration["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                        await http.PostAsync($"{aiBase}/api/workflows/{wfId}/reject", null);
                     }
                 }
             }
@@ -1255,10 +1257,11 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
                 else if (isQaPassed)
                 {
-                    existingWf.Status = WorkflowStatus.WaitingForApproval;
-                    existingWf.ApprovalStatus = po.ApprovedAt.HasValue ? ApprovalStatus.Approved : ApprovalStatus.Pending;
+                    var isApproved = po.ApprovedAt.HasValue || po.Status == PurchaseOrderStatus.Approved || po.Status == PurchaseOrderStatus.Payment;
+                    existingWf.Status = isApproved ? WorkflowStatus.Running : WorkflowStatus.WaitingForApproval;
+                    existingWf.ApprovalStatus = isApproved ? ApprovalStatus.Approved : ApprovalStatus.Pending;
                     existingWf.CompletedAt = null;
-                    existingWf.CurrentAgent = po.ApprovedAt.HasValue ? "Payment / Dispatch" : "Human Approval";
+                    existingWf.CurrentAgent = isApproved ? "Payment / Dispatch" : "Human Approval";
                     existingWf.FinalOutcome = $"PO {po.PoNumber} automated validation & safety checks passed (4/4)";
                 }
                 else

@@ -78,7 +78,10 @@ class _HomeShellState extends State<HomeShell> {
     }
 
     if (isFloorWorker) {
-      return WorkerDashboardScreen(qualityService: widget.qualityService);
+      return WorkerDashboardScreen(
+        qualityService: widget.qualityService,
+        appState: widget.appState,
+      );
     }
 
     final qaTitles = const [

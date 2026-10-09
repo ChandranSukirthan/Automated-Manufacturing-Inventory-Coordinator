@@ -33,6 +33,7 @@ import purchaseOrderService from '../../services/purchaseOrderService';
 import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import WorkflowActivity from '../../components/QA/WorkflowActivity';
+import agentWorkflowService from '../../services/agentWorkflowService';
 
 export default function AiApprovals() {
   const { user } = useAuth();
@@ -53,8 +54,9 @@ export default function AiApprovals() {
     || user.role === 3 || user.role === '3' || user.role === 'ITAdmin'
   );
 
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'awaiting_payment'
+  const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'awaiting_payment' | 'activity'
   const [approvedOrders, setApprovedOrders] = useState([]);
+  const [workflowCount, setWorkflowCount] = useState(0);
 
   const fetchPendingOrders = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -64,7 +66,7 @@ export default function AiApprovals() {
       const pendingSummaries = allOrders.filter((o) => o.status === 'PendingApproval');
       const awaitingSummaries = allOrders.filter((o) => o.status === 'Approved' || o.status === 'Payment');
 
-      const [detailedPending, detailedAwaiting] = await Promise.all([
+      const [detailedPending, detailedAwaiting, wfList] = await Promise.all([
         Promise.all(
           pendingSummaries.map(async (summary) => {
             try {
@@ -82,11 +84,13 @@ export default function AiApprovals() {
               return summary;
             }
           })
-        )
+        ),
+        agentWorkflowService.getWorkflows().catch(() => [])
       ]);
 
       setOrders(detailedPending);
       setApprovedOrders(detailedAwaiting);
+      if (Array.isArray(wfList)) setWorkflowCount(wfList.length);
     } catch (err) {
       setError(parseErrorMessage(err, 'Failed to fetch approval queue orders.'));
     } finally {
@@ -336,7 +340,6 @@ export default function AiApprovals() {
       subtitle="Automated inventory burn-rate validation, budget verification, and manager decision cockpit"
     >
       {/* Top Banner */}
-      <WorkflowActivity />
       <div className="p-6 rounded-2xl bg-gradient-to-r from-brand-950/80 via-slate-900 to-slate-900 border border-brand-800/40 backdrop-blur-sm space-y-2">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30">
@@ -378,12 +381,12 @@ export default function AiApprovals() {
         </div>
       )}
 
-      {/* Dual Tab Navigation: Pending Approval vs Approved & Awaiting Payment */}
-      <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+      {/* Tab Navigation: Pending Approval vs Approved & Awaiting Payment vs Replenishment Activity */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 pb-3">
         <button
           type="button"
           onClick={() => setActiveTab('pending')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'pending'
               ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30'
               : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800'
@@ -399,7 +402,7 @@ export default function AiApprovals() {
         <button
           type="button"
           onClick={() => setActiveTab('awaiting_payment')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             activeTab === 'awaiting_payment'
               ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg shadow-cyan-600/30'
               : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800'
@@ -409,6 +412,22 @@ export default function AiApprovals() {
           <span>Approved & Awaiting Payment (Stripe / Bank Slip)</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 border border-slate-700 font-mono">
             {approvedOrders.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('activity')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'activity'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30'
+              : 'text-slate-400 hover:text-white bg-slate-900/60 border border-slate-800'
+          }`}
+        >
+          <Activity className="w-4 h-4 text-purple-300" />
+          <span>Replenishment Workflow Activity</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/60 border border-slate-700 font-mono">
+            {workflowCount}
           </span>
         </button>
       </div>
@@ -525,6 +544,10 @@ export default function AiApprovals() {
             </div>
           </div>
         )
+      ) : activeTab === 'activity' ? (
+        <div className="space-y-4">
+          <WorkflowActivity />
+        </div>
       ) : orders.length === 0 ? (
         <div className="p-16 text-center bg-slate-900/30 rounded-2xl border border-slate-800 space-y-3">
           <CheckCircle2 className="w-12 h-12 text-emerald-500/80 mx-auto" />

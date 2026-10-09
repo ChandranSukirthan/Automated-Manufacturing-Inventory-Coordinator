@@ -63,6 +63,19 @@ class _ScannerViewState extends State<ScannerView> {
           _showInvalidCodeMessage('This QR code is not linked to a material SKU.');
           break;
         }
+
+        if (roll['reorderThreshold'] == null) {
+          try {
+            final items = await _inventoryApi.fetchInventory();
+            final match = items
+                .where((item) => _normalizeSku(item.sku) == _normalizeSku(sku))
+                .firstOrNull;
+            if (match != null) {
+              roll['reorderThreshold'] = match.reorderThreshold;
+            }
+          } catch (_) {}
+        }
+
         final useSku = await _showRollDetails(roll, scannedCode);
         if (!mounted) return;
         if (useSku == true) widget.controller.setSku(sku);
@@ -112,14 +125,19 @@ class _ScannerViewState extends State<ScannerView> {
           _rollDetail('Roll identifier', roll['rollIdentifier'] ?? scannedCode),
           _rollDetail('SKU', roll['skuCode'] ?? 'Unknown'),
           _rollDetail('Material', roll['materialName'] ?? 'Unknown'),
+          _rollDetail(
+            'Current SKU stock',
+            '${roll['currentSkuStock'] ?? 0}',
+          ),
+          if (roll['reorderThreshold'] != null)
+            _rollDetail(
+              'Reorder level',
+              '${roll['reorderThreshold']}',
+            ),
           _rollDetail('Initial quantity', '${roll['initialQuantity'] ?? 0}'),
           _rollDetail(
             'Remaining in this roll',
             '${roll['remainingQuantity'] ?? 0}',
-          ),
-          _rollDetail(
-            'Current SKU stock',
-            '${roll['currentSkuStock'] ?? 0}',
           ),
           _rollDetail('Status', roll['status'] ?? 'Unknown'),
         ],
@@ -388,14 +406,15 @@ class _ScannerViewState extends State<ScannerView> {
       await _scannerController.start();
       return;
     }
-    final useSku = await _showManualSkuDetails(matchingItem);
+
+    widget.controller.setSku(matchingItem.sku);
+    await _showManualSkuDetails(matchingItem);
     if (!mounted) return;
-    if (useSku == true) widget.controller.setSku(matchingItem.sku);
     await _scannerController.start();
   }
 
-  Future<bool?> _showManualSkuDetails(InventoryItemModel item) =>
-      showDialog<bool>(
+  Future<void> _showManualSkuDetails(InventoryItemModel item) =>
+      showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (dialogContext) => AlertDialog(
@@ -418,17 +437,12 @@ class _ScannerViewState extends State<ScannerView> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Use SKU'),
             ),
           ],
         ),
       );
-
 }
 
 /// Owns the field controller for the manual-SKU route.  This ensures Flutter

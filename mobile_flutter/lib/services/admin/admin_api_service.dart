@@ -2,6 +2,8 @@ import '../../models/admin/machine_model.dart';
 import '../../models/admin/shift_model.dart';
 import '../../models/admin/workflow_model.dart';
 import '../../models/admin/system_health_model.dart';
+import '../../models/admin/user_model.dart';
+import '../../models/admin/audit_log_model.dart';
 import '../api_client.dart';
 
 class AdminApiService {
@@ -95,6 +97,159 @@ class AdminApiService {
   Future<Map<String, dynamic>> adjustShiftOutput(String shiftId) async {
     final response = await apiClient.post('/shifts/$shiftId/adjust-output');
     return response is Map<String, dynamic> ? response : {};
+  }
+
+  Future<ShiftModel> createShift({
+    required String name,
+    required int productionTarget,
+    required int availableMaterial,
+    int actualOutput = 0,
+    int status = 0,
+    required DateTime startTime,
+    required DateTime endTime,
+    String? materialSku,
+    String? machineId,
+    double? materialPerUnit,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'productionTarget': productionTarget,
+      'availableMaterial': availableMaterial,
+      'actualOutput': actualOutput,
+      'status': status,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime.toIso8601String(),
+    };
+    if (materialSku != null && materialSku.isNotEmpty) {
+      body['materialSku'] = materialSku;
+    }
+    if (machineId != null && machineId.isNotEmpty) {
+      body['machineId'] = machineId;
+    }
+    if (materialPerUnit != null) {
+      body['materialPerUnit'] = materialPerUnit;
+    }
+
+    final response = await apiClient.post('/shifts', body);
+    return ShiftModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<ShiftModel> updateShift(
+    String id, {
+    required String name,
+    required int productionTarget,
+    required int availableMaterial,
+    int actualOutput = 0,
+    int status = 0,
+    required DateTime startTime,
+    required DateTime endTime,
+    String? materialSku,
+    String? machineId,
+    double? materialPerUnit,
+  }) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'productionTarget': productionTarget,
+      'availableMaterial': availableMaterial,
+      'actualOutput': actualOutput,
+      'status': status,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime.toIso8601String(),
+    };
+    if (materialSku != null && materialSku.isNotEmpty) {
+      body['materialSku'] = materialSku;
+    }
+    if (machineId != null && machineId.isNotEmpty) {
+      body['machineId'] = machineId;
+    }
+    if (materialPerUnit != null) {
+      body['materialPerUnit'] = materialPerUnit;
+    }
+
+    final response = await apiClient.put('/shifts/$id', body);
+    return ShiftModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  // ========== Users ==========
+
+  Future<List<UserModel>> getUsers() async {
+    final response = await apiClient.get('/admin/users');
+    if (response is List) {
+      return response
+          .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
+
+  Future<UserModel> createUser({
+    required String fullName,
+    required String email,
+    required String password,
+    required int role,
+  }) async {
+    final response = await apiClient.post('/admin/users', {
+      'fullName': fullName,
+      'email': email,
+      'password': password,
+      'role': role,
+    });
+    return UserModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<UserModel> updateUser(
+    String id, {
+    required String fullName,
+    required String email,
+  }) async {
+    final response = await apiClient.put('/admin/users/$id', {
+      'fullName': fullName,
+      'email': email,
+    });
+    return UserModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  Future<void> activateUser(String id) async {
+    await apiClient.put('/admin/users/$id/activate', {});
+  }
+
+  Future<void> deactivateUser(String id) async {
+    await apiClient.put('/admin/users/$id/deactivate', {});
+  }
+
+  Future<UserModel> assignRole(String id, int role) async {
+    final response = await apiClient.put('/admin/users/$id/role', {
+      'role': role,
+    });
+    return UserModel.fromJson(response as Map<String, dynamic>);
+  }
+
+  // ========== Audit Logs ==========
+
+  Future<List<AuditLogModel>> getAuditLogs({
+    String? userName,
+    String? action,
+    String? entity,
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    final queryParams = <String, String>{};
+    if (userName != null && userName.isNotEmpty) queryParams['userName'] = userName;
+    if (action != null && action.isNotEmpty) queryParams['action'] = action;
+    if (entity != null && entity.isNotEmpty) queryParams['entity'] = entity;
+    if (fromDate != null) queryParams['fromDate'] = fromDate.toIso8601String();
+    if (toDate != null) queryParams['toDate'] = toDate.toIso8601String();
+
+    final queryString = queryParams.isNotEmpty
+        ? '?${Uri(queryParameters: queryParams).query}'
+        : '';
+    final response = await apiClient.get('/admin/audit-logs$queryString');
+    if (response is List) {
+      return response
+          .map((item) => AuditLogModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
   }
 
   // ========== Agent Workflows ==========

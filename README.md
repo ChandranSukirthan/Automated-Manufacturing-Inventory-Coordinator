@@ -13,3 +13,5 @@ From the repository root, run `dotnet run --project backend/ManufacturingCoordin
 Both automatically detected low stock and a manual request can initiate procurement. Manual replenishment is allowed even when current stock is healthy. Only a fully validated and published proposal reaches manager review. Supplier selection is limited to three total attempts. QA holds and unavailable services require the appropriate corrective action; changing supplier does not resolve a quarantine.
 
 The current changes are on the existing `Merge` branch. They do not create separate student workflows or claim a cloud deployment.
+
+yes 

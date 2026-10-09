@@ -167,6 +167,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
         shifts: _shifts,
         workflows: _workflows,
         health: _health,
+        service: _service,
         loading: _loading,
         onRefresh: _loadAllData,
         onNavigateTab: (idx) => setState(() => _currentIndex = idx),

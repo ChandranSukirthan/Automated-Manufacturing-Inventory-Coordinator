@@ -10,6 +10,9 @@ import 'session_storage.dart';
 String get _defaultApiBaseUrl {
   const envUrl = String.fromEnvironment('API_BASE_URL');
   if (envUrl.isNotEmpty) return envUrl;
+  if (kReleaseMode) {
+    return 'https://amic-backend.onrender.com/api';
+  }
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     return 'http://10.0.2.2:5070/api';
   }
@@ -27,7 +30,7 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  static const requestTimeout = Duration(seconds: 15);
+  static const requestTimeout = Duration(seconds: 45);
 
   ApiClient({SessionStorage? storage, String? baseUrl, this.onSessionExpired})
       : storage = storage ?? SessionStorage(),

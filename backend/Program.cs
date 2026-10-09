@@ -52,9 +52,22 @@ builder.Configuration["EmailSettings:EmailPass"] = Env.GetString("EMAIL_PASS") ?
 
 builder.Configuration["JwtSettings:SecretKey"] = Env.GetString("JWT_SECRET_KEY") ?? builder.Configuration["JwtSettings:SecretKey"];
 builder.Configuration["JwtSettings:Issuer"] = Env.GetString("JWT_ISSUER") ?? builder.Configuration["JwtSettings:Issuer"];
-builder.Configuration["JwtSettings:Audience"] = Env.GetString("JWT_AUDIENCE") ?? builder.Configuration["JwtSettings:Audience"];
-
 builder.Configuration["StripeSettings:SecretKey"] = Env.GetString("STRIPE_SECRET_KEY") ?? builder.Configuration["StripeSettings:SecretKey"];
+
+// Resolve AgentServer (FastAPI) BaseUrl from deployment environment or .env
+var configuredAgentUrl = Env.GetString("AGENT_SERVER_URL")
+    ?? Env.GetString("AGENT_BASE_URL")
+    ?? Env.GetString("AI_BASE_URL")
+    ?? Env.GetString("AgentServer__BaseUrl")
+    ?? Environment.GetEnvironmentVariable("AGENT_SERVER_URL")
+    ?? Environment.GetEnvironmentVariable("AGENT_BASE_URL")
+    ?? Environment.GetEnvironmentVariable("AI_BASE_URL")
+    ?? Environment.GetEnvironmentVariable("AgentServer__BaseUrl");
+
+if (!string.IsNullOrWhiteSpace(configuredAgentUrl))
+{
+    builder.Configuration["AgentServer:BaseUrl"] = configuredAgentUrl.TrimEnd('/');
+}
 
 // Controllers with JSON String Enum conversion
 builder.Services.AddControllers()

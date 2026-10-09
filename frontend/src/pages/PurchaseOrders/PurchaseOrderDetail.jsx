@@ -805,7 +805,7 @@ export default function PurchaseOrderDetail() {
             <div className="flex items-center gap-2 shrink-0">
               {po.bankSlipUrl && (
                 <a
-                  href={po.bankSlipUrl.startsWith('http') ? po.bankSlipUrl : `http://localhost:5070${po.bankSlipUrl}`}
+                  href={po.bankSlipUrl.startsWith('http') ? po.bankSlipUrl : `${(import.meta.env.VITE_API_BASE_URL || 'http://localhost:5070/api').replace(/\/api\/?$/, '')}${po.bankSlipUrl.startsWith('/') ? '' : '/'}${po.bankSlipUrl}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-semibold border border-slate-700 transition-colors"
