@@ -11,5 +11,6 @@ namespace ManufacturingCoordinator.Api.Interfaces
         Task<ShiftDto> CreateAsync(CreateShiftDto dto);
         Task<ShiftDto> UpdateAsync(Guid id, UpdateShiftDto dto);
         Task<AdjustOutputResponseDto> AdjustOutputAsync(Guid shiftId);
+        Task DeleteAsync(Guid id);
     }
 }

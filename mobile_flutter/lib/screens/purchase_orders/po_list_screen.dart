@@ -1,28 +1,42 @@
+import 'dart:async';
 import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
 import 'po_details_screen.dart';
+import 'po_create_screen.dart';
 
 class POListScreen extends StatefulWidget {
   const POListScreen({
     required this.service,
     this.showAppBar = true,
+    this.isActive = true,
+    this.allowManagement = true,
+    this.allowApproval = false,
+    this.initialFilter = 'ALL',
     super.key,
   });
 
   final PurchaseOrderService service;
   final bool showAppBar;
+  final bool isActive;
+  final bool allowManagement;
+  final bool allowApproval;
+  final String initialFilter;
 
   @override
   State<POListScreen> createState() => _POListScreenState();
 }
 
-class _POListScreenState extends State<POListScreen> {
+class _POListScreenState extends State<POListScreen>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
+  bool _fetching = false;
   bool _loading = true;
   String? _error;
   List<PurchaseOrderSummary> _orders = [];
+  final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedFilter = 'ALL';
 
@@ -31,20 +45,64 @@ class _POListScreenState extends State<POListScreen> {
     'PendingApproval',
     'Approved',
     'Payment',
+    'PaymentPending',
+    'Paid',
+    'PaymentFailed',
     'Sent',
+    'SupplierNotified',
+    'InTransit',
+    'Delivered',
+    'Completed',
     'Draft',
     'Rejected',
+    'RevisionRequested',
   ];
 
   @override
   void initState() {
     super.initState();
+    _selectedFilter = _filters.contains(widget.initialFilter)
+        ? widget.initialFilter
+        : 'ALL';
+    WidgetsBinding.instance.addObserver(this);
     _fetchOrders();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (widget.isActive &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        _fetchOrders(showLoading: false);
+      }
+    });
   }
 
-  Future<void> _fetchOrders() async {
+  @override
+  void didUpdateWidget(covariant POListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _fetchOrders(showLoading: false);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      _fetchOrders(showLoading: false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _fetchOrders({bool showLoading = true}) async {
+    if (_fetching) return;
+    _fetching = true;
     setState(() {
-      _loading = true;
+      if (showLoading) _loading = true;
       _error = null;
     });
 
@@ -59,18 +117,24 @@ class _POListScreenState extends State<POListScreen> {
     } catch (err) {
       if (mounted) {
         setState(() {
-          _error = err.toString();
+          if (showLoading || _orders.isEmpty) _error = err.toString();
           _loading = false;
         });
       }
+    } finally {
+      _fetching = false;
     }
   }
 
   List<PurchaseOrderSummary> get _filteredOrders {
     return _orders.where((order) {
       final matchesSearch =
-          order.poNumber.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          order.supplierName.toLowerCase().contains(_searchQuery.toLowerCase());
+          order.poNumber.toLowerCase().contains(
+            _searchQuery.trim().toLowerCase(),
+          ) ||
+          order.supplierName.toLowerCase().contains(
+            _searchQuery.trim().toLowerCase(),
+          );
 
       final matchesFilter =
           _selectedFilter == 'ALL' ||
@@ -80,541 +144,389 @@ class _POListScreenState extends State<POListScreen> {
     }).toList();
   }
 
+  String _statusLabel(String status) => switch (status) {
+    'ALL' => 'All statuses',
+    'PendingApproval' => 'Pending Approval',
+    'RevisionRequested' => 'Revision Requested',
+    'Payment' => 'Payment Processing',
+    'PaymentPending' => 'Payment Pending',
+    'PaymentFailed' => 'Payment Failed',
+    'SupplierNotified' => 'Supplier Notified',
+    'InTransit' => 'In Transit',
+    _ => status,
+  };
+
+  String _paymentLabel(PurchaseOrderSummary order) {
+    final status = order.paymentStatusDisplay;
+    return switch (status.toLowerCase()) {
+      'succeeded' || 'paid' || 'settled' => 'Paid',
+      'requires_payment_method' => 'Payment method required',
+      'requires_action' => 'Action required',
+      'processing' => 'Processing',
+      'failed' => 'Failed',
+      'canceled' => 'Cancelled',
+      _ => status,
+    };
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _selectedFilter = 'ALL';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    const navyBg = Color(0xFF070E17);
     const cardBg = Color(0xFF0F1B2B);
-    const cyanAccent = Color(0xFF5CC8F8);
+    const accent = Color(0xFF5CC8F8);
+    final orders = _filteredOrders;
+    final hasFilters = _searchQuery.isNotEmpty || _selectedFilter != 'ALL';
 
     return Scaffold(
-      backgroundColor: navyBg,
+      backgroundColor: const Color(0xFF070E17),
       appBar: widget.showAppBar
-          ? AppBar(
-              backgroundColor: navyBg,
-              elevation: 0,
-              title: const Text(
-                'Purchase Orders',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.refresh_rounded,
-                    color: Colors.white70,
-                  ),
-                  onPressed: _fetchOrders,
-                  tooltip: 'Refresh',
-                ),
-              ],
-            )
+          ? AppBar(title: const Text('Purchase Orders'))
           : null,
       body: Column(
         children: [
-          if (!widget.showAppBar)
-            Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                tooltip: 'Refresh',
-                onPressed: _fetchOrders,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ),
-          Expanded(
-            child: Column(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+            child: Row(
               children: [
-                // Search & Filters bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
-                  ),
-                  child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                    decoration: InputDecoration(
-                      hintText: 'Search by PO# or Supplier...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      prefixIcon: const Icon(
-                        Icons.search_rounded,
-                        color: Colors.white54,
-                        size: 20,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      filled: true,
-                      fillColor: cardBg,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.08),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: cyanAccent),
-                      ),
+                const Expanded(
+                  child: Text(
+                    'Purchase Orders',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-
-                // Horizontal Filter Chips
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 4.0,
-                  ),
-                  child: Row(
-                    children: _filters.map((filter) {
-                      final isSelected = _selectedFilter == filter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: FilterChip(
-                          label: Text(
-                            filter == 'PendingApproval' ? 'Pending' : filter,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? const Color(0xFF070E17)
-                                  : Colors.white70,
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                          selected: isSelected,
-                          selectedColor: cyanAccent,
-                          backgroundColor: cardBg,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: BorderSide(
-                              color: isSelected
-                                  ? cyanAccent
-                                  : Colors.white.withValues(alpha: 0.08),
-                            ),
-                          ),
-                          showCheckmark: false,
-                          onSelected: (_) =>
-                              setState(() => _selectedFilter = filter),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                // Orders List
-                Expanded(
-                  child: _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _error != null
-                      ? StateMessage(
-                          message: _error!,
-                          icon: Icons.cloud_off,
-                          action: _fetchOrders,
-                        )
-                      : _filteredOrders.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.receipt_long_outlined,
-                                size: 48,
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'No purchase orders match your criteria.',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _fetchOrders,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(16.0),
-                            itemCount: _filteredOrders.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, idx) {
-                              final po = _filteredOrders[idx];
-                              return InkWell(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => PODetailsScreen(
-                                      service: widget.service,
-                                      poId: po.id,
-                                    ),
-                                  ),
-                                ),
-                                borderRadius: BorderRadius.circular(16),
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: cardBg,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.06,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            po.poNumber,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: po.statusColor.withValues(
-                                                alpha: 0.15,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: po.statusColor
-                                                    .withValues(alpha: 0.3),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              po.status,
-                                              style: TextStyle(
-                                                color: po.statusColor,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.business_outlined,
-                                            size: 16,
-                                            color: Colors.white38,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              po.supplierName,
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 13,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Divider(
-                                        color: Colors.white10,
-                                        height: 1,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.calendar_today_outlined,
-                                                size: 13,
-                                                color: Colors.white38,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${po.createdAt.year}-${po.createdAt.month.toString().padLeft(2, '0')}-${po.createdAt.day.toString().padLeft(2, '0')}',
-                                                style: const TextStyle(
-                                                  color: Colors.white38,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Text(
-                                            formatMoney(po.totalCost, currency: po.currency),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+                IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: _fetchOrders,
+                  icon: const Icon(Icons.refresh_rounded, color: accent),
                 ),
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _searchQuery = value),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              decoration: InputDecoration(
+                hintText: 'Search order number or supplier',
+                hintStyle: const TextStyle(color: Color(0xFF9DAEC2)),
+                prefixIcon: const Icon(Icons.search_rounded, color: accent),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      ),
+                filled: true,
+                fillColor: cardBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF26374B)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: accent),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: DropdownButtonFormField<String>(
+              key: const ValueKey('order-status-filter'),
+              initialValue: _selectedFilter,
+              isExpanded: true,
+              dropdownColor: cardBg,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                labelText: 'Order status',
+                labelStyle: const TextStyle(color: Color(0xFFB6C6DA)),
+                filled: true,
+                fillColor: cardBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              items: _filters
+                  .map(
+                    (status) => DropdownMenuItem(
+                      value: status,
+                      child: Text(_statusLabel(status)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) =>
+                  setState(() => _selectedFilter = value ?? 'ALL'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              children: [
+                Text(
+                  '${orders.length} of ${_orders.length} orders',
+                  style: const TextStyle(
+                    color: Color(0xFFB6C6DA),
+                    fontSize: 13,
+                  ),
+                ),
+                if (hasFilters)
+                  TextButton(
+                    onPressed: _clearFilters,
+                    child: const Text('Clear filters'),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? StateMessage(
+                    message: _error!,
+                    icon: Icons.cloud_off,
+                    action: _fetchOrders,
+                  )
+                : orders.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.receipt_long_outlined,
+                            color: Color(0xFF8CA2BC),
+                            size: 44,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            hasFilters
+                                ? 'No orders match your filters.'
+                                : 'No purchase orders yet.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFFB6C6DA),
+                              fontSize: 15,
+                            ),
+                          ),
+                          if (hasFilters)
+                            TextButton(
+                              onPressed: _clearFilters,
+                              child: const Text('Reset search and filters'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _fetchOrders,
+                    child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                      itemCount: orders.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      itemBuilder: (_, index) => _orderCard(orders[index]),
+                    ),
+                  ),
+          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreatePODialog,
-        backgroundColor: cyanAccent,
-        foregroundColor: const Color(0xFF070E17),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(
-          'Create PO',
-          style: TextStyle(fontWeight: FontWeight.bold),
+      floatingActionButton: widget.allowManagement
+          ? FloatingActionButton.extended(
+              onPressed: _showCreatePODialog,
+              backgroundColor: accent,
+              foregroundColor: const Color(0xFF070E17),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create PO'),
+            )
+          : null,
+    );
+  }
+
+  Widget _orderCard(PurchaseOrderSummary po) {
+    final payment = _paymentLabel(po);
+    final paymentColor = switch (payment) {
+      'Paid' => const Color(0xFF76E6B4),
+      'Failed' || 'Cancelled' => const Color(0xFFFF9A9A),
+      _ => const Color(0xFFECC879),
+    };
+    return Material(
+      color: const Color(0xFF0F1B2B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF26374B)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PODetailsScreen(
+                service: widget.service,
+                poId: po.id,
+                allowManagement: widget.allowManagement,
+                allowApproval: widget.allowApproval,
+              ),
+            ),
+          );
+          if (mounted) await _fetchOrders(showLoading: false);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                po.poNumber,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: po.statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _statusLabel(po.status),
+                  style: TextStyle(
+                    color: Color.lerp(po.statusColor, Colors.white, 0.3),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.business_outlined,
+                    size: 18,
+                    color: Color(0xFF9DAEC2),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      po.supplierName,
+                      style: const TextStyle(
+                        color: Color(0xFFD5DFEC),
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Divider(height: 1, color: Color(0xFF26374B)),
+              ),
+              _infoRow(
+                Icons.verified_outlined,
+                'Approval: ${po.approvalStatusDisplay}',
+                const Color(0xFFD5DFEC),
+              ),
+              const SizedBox(height: 10),
+              _infoRow(
+                Icons.payments_outlined,
+                'Payment: $payment',
+                paymentColor,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'ORDER TOTAL',
+                style: TextStyle(
+                  color: Color(0xFF9DAEC2),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                formatMoney(po.totalCost, currency: po.currency),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _infoRow(
+                Icons.calendar_today_outlined,
+                'Created ${po.createdAt.day.toString().padLeft(2, '0')}/${po.createdAt.month.toString().padLeft(2, '0')}/${po.createdAt.year}',
+                const Color(0xFFB6C6DA),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _showCreatePODialog() async {
-    final qtyController = TextEditingController(text: '1000');
-    final priceController = TextEditingController(text: '3.50');
-    final notesController = TextEditingController();
-    int selectedSupplierId = 1;
-    int selectedMaterialId = 1;
-
-    try {
-      final suppliers = await widget.service.getSuppliers();
-      if (suppliers.isNotEmpty) {
-        selectedSupplierId = suppliers.first.id;
-      }
-    } catch (_) {}
-
-    if (!mounted) return;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF0F1B2B),
-          title: const Row(
-            children: [
-              Icon(Icons.post_add_rounded, color: Color(0xFF5CC8F8)),
-              SizedBox(width: 8),
-              Text(
-                'Create Purchase Order',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Supplier ID',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                TextField(
-                  onChanged: (val) {
-                    final id = int.tryParse(val);
-                    if (id != null) selectedSupplierId = id;
-                  },
-                  keyboardType: TextInputType.number,
-                  controller: TextEditingController(
-                    text: selectedSupplierId.toString(),
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Enter Supplier ID (e.g. 1)',
-                    hintStyle: TextStyle(color: Colors.white38),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Raw Material ID',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const SizedBox(height: 4),
-                TextField(
-                  onChanged: (val) {
-                    final id = int.tryParse(val);
-                    if (id != null) selectedMaterialId = id;
-                  },
-                  keyboardType: TextInputType.number,
-                  controller: TextEditingController(
-                    text: selectedMaterialId.toString(),
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Enter Material ID (e.g. 1)',
-                    hintStyle: TextStyle(color: Colors.white38),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Quantity',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                          TextField(
-                            controller: qtyController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Unit Price (LKR )',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                          TextField(
-                            controller: priceController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Order Notes',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                TextField(
-                  controller: notesController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Optional notes or spec details...',
-                    hintStyle: TextStyle(color: Colors.white38),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF5CC8F8),
-                foregroundColor: const Color(0xFF070E17),
-              ),
-              child: const Text(
-                'Submit PO',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+  Widget _infoRow(IconData icon, String text, Color color) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 17, color: color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          text,
+          style: TextStyle(color: color, fontSize: 13, height: 1.4),
         ),
       ),
+    ],
+  );
+
+  Future<void> _showCreatePODialog() async {
+    final poId = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => POCreateScreen(service: widget.service),
+      ),
     );
-
-    if (result == true) {
-      final qty = double.tryParse(qtyController.text.trim()) ?? 1000;
-      final price = double.tryParse(priceController.text.trim()) ?? 3.50;
-
-      try {
-        final po = await widget.service.createPurchaseOrder({
-          'supplierId': selectedSupplierId,
-          'notes': notesController.text.trim(),
-          'lines': [
-            {
-              'rawMaterialId': selectedMaterialId,
-              'quantity': qty,
-              'unitPrice': price,
-              'totalPrice': qty * price,
-            },
-          ],
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Purchase Order ${po.poNumber} created successfully!',
-              ),
-              backgroundColor: const Color(0xFF10B981),
-            ),
-          );
-          _fetchOrders();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  PODetailsScreen(service: widget.service, poId: po.id),
-            ),
-          );
-        }
-      } catch (err) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to create PO: $err'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+    if (!mounted) return;
+    await _fetchOrders(showLoading: false);
+    if (poId != null && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PODetailsScreen(service: widget.service, poId: poId),
+        ),
+      );
+      if (mounted) await _fetchOrders(showLoading: false);
     }
   }
 }

@@ -45,6 +45,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (codeExists)
                 throw new InvalidOperationException($"Supplier code '{supplierCode}' is already in use.");
 
+            // Validate unique name
+            var nameClean = dto.Name.Trim();
+            var nameExists = await _context.Suppliers
+                .AnyAsync(s => s.Name.ToLower() == nameClean.ToLower());
+            if (nameExists)
+                throw new InvalidOperationException($"Supplier with name '{nameClean}' already exists.");
+
             // Validate unique email
             var emailClean = dto.ContactEmail.Trim().ToLowerInvariant();
             var emailExists = await _context.Suppliers
@@ -55,7 +62,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             var supplier = new Supplier
             {
                 SupplierCode = supplierCode,
-                Name = dto.Name.Trim(),
+                Name = nameClean,
                 ContactEmail = emailClean,
                 ContactPhone = dto.ContactPhone?.Trim() ?? string.Empty,
                 Address = dto.Address?.Trim() ?? string.Empty,
@@ -99,7 +106,16 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 supplier.ContactEmail = emailClean;
             }
 
-            supplier.Name = dto.Name.Trim();
+            var nameClean = dto.Name.Trim();
+            if (nameClean.ToLower() != supplier.Name.ToLower())
+            {
+                var nameExists = await _context.Suppliers
+                    .AnyAsync(s => s.Name.ToLower() == nameClean.ToLower() && s.Id != id);
+                if (nameExists)
+                    throw new InvalidOperationException($"Supplier with name '{nameClean}' already exists.");
+                supplier.Name = nameClean;
+            }
+
             supplier.ContactPhone = dto.ContactPhone?.Trim() ?? string.Empty;
             supplier.Address = dto.Address?.Trim() ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(dto.PaymentTerms))

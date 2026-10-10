@@ -9,6 +9,7 @@ import {
   FileText,
   Bot,
   PlusCircle,
+  Edit2,
 } from 'lucide-react';
 import inventoryService from '../../services/inventoryService';
 import { parseErrorMessage } from '../../utils/errorHandler';
@@ -22,6 +23,7 @@ import StockLevelsTab from '../Worker/components/StockLevelsTab';
 import AlertsTab from '../Worker/components/AlertsTab';
 import HistoryTab from '../Worker/components/HistoryTab';
 import AgentTab from '../Worker/components/AgentTab';
+import OverviewTab from '../Worker/components/OverviewTab';
 
 /* ================================================================
    WorkerDashboard — Thin orchestrator
@@ -55,15 +57,18 @@ export default function WorkerDashboard() {
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [tabChoice, setTabChoice] = useState(null);
+  const isDashboard = location.pathname.startsWith('/dashboard/worker');
   const routeTab = location.pathname.includes('/rolls') ? 'rolls'
     : location.pathname.includes('/stock-levels') ? 'stock-levels'
     : location.pathname.includes('/low-stock') ? 'alerts'
-    : location.pathname.includes('/history') ? 'history' : 'inventory';
+    : location.pathname.includes('/history') ? 'history'
+    : isDashboard ? 'overview' : 'inventory';
   const activeTab = tabChoice?.path === location.pathname ? tabChoice.tab : routeTab;
   const setActiveTab = (tab) => setTabChoice({ path: location.pathname, tab });
 
   // Modals
   const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({
     rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0,
   });
@@ -141,6 +146,19 @@ export default function WorkerDashboard() {
   // ── Event handlers (unchanged logic) ────────────────────────
   const handleAddItem = async (e) => {
     e.preventDefault();
+    const stockLevel = Number(newItem.stockLevel);
+    const reorderThreshold = Number(newItem.reorderThreshold);
+
+    if (isNaN(stockLevel) || stockLevel <= 0) {
+      setError('Current stock must be greater than zero when adding an item.');
+      return;
+    }
+
+    if (isNaN(reorderThreshold) || reorderThreshold < 0) {
+      setError('Reorder level cannot be negative.');
+      return;
+    }
+
     try {
       const material = rawMaterials.find((value) => value.id === Number(newItem.rawMaterialId));
       if (!material?.packagingTypeId) throw new Error('Select a material with a reconciled packaging type.');
@@ -148,8 +166,8 @@ export default function WorkerDashboard() {
         rawMaterialId: material.id,
         packagingTypeId: material.packagingTypeId,
         skuNumber: Number(newItem.skuNumber),
-        stockLevel: Number(newItem.stockLevel),
-        reorderThreshold: Number(newItem.reorderThreshold),
+        stockLevel,
+        reorderThreshold,
       });
       setShowAddItemModal(false);
       setNewItem({ rawMaterialId: '', skuNumber: '', stockLevel: 0, reorderThreshold: 0 });
@@ -174,6 +192,29 @@ export default function WorkerDashboard() {
       loadData();
     } catch (err) {
       setError(parseErrorMessage(err, 'Failed to delete item.'));
+    }
+  };
+
+  const handleEditItem = async (e) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    try {
+      await inventoryService.updateItem(editingItem.id, {
+        id: editingItem.id,
+        sku: editingItem.sku,
+        name: editingItem.name,
+        category: editingItem.category,
+        packagingTypeId: editingItem.packagingTypeId,
+        rawMaterialId: editingItem.rawMaterialId,
+        skuNumber: editingItem.skuNumber,
+        stockLevel: Number(editingItem.stockLevel),
+        reorderThreshold: Number(editingItem.reorderThreshold),
+      });
+      setEditingItem(null);
+      showNotification('Inventory item updated successfully!');
+      loadData();
+    } catch (err) {
+      setError(parseErrorMessage(err, 'Failed to update inventory item'));
     }
   };
 
@@ -331,13 +372,24 @@ export default function WorkerDashboard() {
 
   // ── Render ──────────────────────────────────────────────────
   return (
-    <RoleLayout title="Floor Worker Console" subtitle="Inventory and stock logistics" loading={loading} onRefresh={loadData}>
+    <RoleLayout
+      title={isDashboard ? 'Floor Worker Dashboard' : 'Floor Worker Console'}
+      subtitle={isDashboard ? 'Live operational overview, urgent stock alerts, and quick actions' : 'Inventory and stock logistics'}
+      loading={loading}
+      onRefresh={loadData}
+    >
 
       <main className="worker-dashboard flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-400">Floor operations</p>
-          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">Inventory workspace</h2>
-          <p className="text-sm leading-6 text-slate-400">Manage materials, track warehouse stock and review replenishment activity.</p>
+          <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+            {isDashboard ? 'Operations Dashboard' : 'Inventory Workspace'}
+          </h2>
+          <p className="text-sm leading-6 text-slate-400">
+            {isDashboard
+              ? 'Real-time overview of warehouse stock, active alerts, quick floor actions, and recent activity.'
+              : 'Manage materials catalogue, track inventory rolls, monitor burn rate, and log alerts.'}
+          </p>
         </div>
         {/* Banner messages */}
         {error && (
@@ -380,52 +432,70 @@ export default function WorkerDashboard() {
           onTabChange={handleTabChange}
         />
 
-        {/* Tab navigation */}
-        <div className="worker-tabs rounded-2xl border border-slate-800 bg-slate-900/70 overflow-x-auto p-1.5">
-          <div className="flex gap-1 min-w-max">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              const count = tab.countKey ? tabCounts[tab.countKey] : null;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border transition whitespace-nowrap ${
-                    isActive
-                      ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 shadow-sm'
-                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                  {count !== null && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                      isActive ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800 text-slate-500'
-                    }`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Active tab content */}
-        {activeTab === 'inventory' && (
-          <InventoryTab
-            loading={loading}
-            filteredItems={filteredItems}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
+        {isDashboard ? (
+          <OverviewTab
+            items={items}
+            rolls={rolls}
             alerts={alerts}
-            triggeringAi={triggeringAi}
-            onTriggerAi={handleTriggerAiWorkflow}
-            onDeleteItem={handleDeleteItem}
+            stockLevels={stockLevels}
+            lowStockItems={lowStockItems}
+            activeAlerts={activeAlerts}
             onShowAddModal={() => setShowAddItemModal(true)}
+            onShowAlertModal={() => setShowAddAlertModal(true)}
+            onTriggerAi={handleTriggerAiWorkflow}
+            onUpdateAlertStatus={handleUpdateAlertStatus}
+            triggeringAi={triggeringAi}
+            loading={loading}
           />
-        )}
+        ) : (
+          <>
+            {/* Tab navigation */}
+            <div className="worker-tabs rounded-2xl border border-slate-800 bg-slate-900/70 overflow-x-auto p-1.5">
+              <div className="flex gap-1 min-w-max">
+                {TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  const count = tab.countKey ? tabCounts[tab.countKey] : null;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleTabChange(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-xl border transition whitespace-nowrap ${
+                        isActive
+                          ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 shadow-sm'
+                          : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                      {count !== null && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                          isActive ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-800 text-slate-500'
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Active tab content */}
+            {activeTab === 'inventory' && (
+              <InventoryTab
+                loading={loading}
+                filteredItems={filteredItems}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                alerts={alerts}
+                triggeringAi={triggeringAi}
+                onTriggerAi={handleTriggerAiWorkflow}
+                onDeleteItem={handleDeleteItem}
+                onEditItem={(item) => setEditingItem({ ...item })}
+                onShowAddModal={() => setShowAddItemModal(true)}
+              />
+            )}
 
         {activeTab === 'rolls' && (
           <RollsTab
@@ -492,6 +562,8 @@ export default function WorkerDashboard() {
             onTriggerAi={handleTriggerAiWorkflow}
           />
         )}
+          </>
+        )}
 
         {/* ── Modal: Add Stock Item ────────────────────────── */}
         {showAddItemModal && (
@@ -551,6 +623,82 @@ export default function WorkerDashboard() {
                   <button type="submit"
                     className="flex-1 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs rounded-xl transition">
                     Create Item
+                  </button>
+                </div>
+              </form>
+            </div>
+          </ModalOverlay>
+        )}
+
+        {/* ── Modal: Edit Catalog Item ───────────────────────── */}
+        {editingItem && (
+          <ModalOverlay className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="worker-dashboard-modal bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl tab-slide-in">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Edit Catalog Item</h3>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">{editingItem.sku} — {editingItem.name}</p>
+                </div>
+              </div>
+              <form onSubmit={handleEditItem} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">SKU Code</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingItem.sku || ''}
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-400 font-mono cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Item Name</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editingItem.name || ''}
+                    className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-400 cursor-not-allowed"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">Current Stock (Units)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={editingItem.stockLevel}
+                      onChange={(e) => setEditingItem({ ...editingItem, stockLevel: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">Reorder Level (Units)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      required
+                      value={editingItem.reorderThreshold}
+                      onChange={(e) => setEditingItem({ ...editingItem, reorderThreshold: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem(null)}
+                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-bold text-xs rounded-xl transition shadow-lg shadow-cyan-500/20"
+                  >
+                    Save Changes
                   </button>
                 </div>
               </form>

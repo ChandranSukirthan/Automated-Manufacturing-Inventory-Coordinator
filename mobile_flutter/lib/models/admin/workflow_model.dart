@@ -5,7 +5,10 @@ class WorkflowModel {
   final String workflowType;
   final String? machineId;
   final int? purchaseOrderId;
-  bool get canAuthorizeMaintenance => workflowType == "Maintenance" && isWaitingForApproval && approvalStatus == "Pending";
+  bool get canAuthorize =>
+      status == 'WaitingForApproval' && approvalStatus == 'Pending';
+  bool get canAuthorizeMaintenance =>
+      workflowType == 'Maintenance' && canAuthorize;
   final String currentAgent;
   final String status;
   final String approvalStatus;
@@ -38,6 +41,18 @@ class WorkflowModel {
     required this.updatedAt,
   });
 
+  static String _enumLabel(
+    dynamic value,
+    List<String> labels,
+    String fallback,
+  ) {
+    final index = int.tryParse(value?.toString() ?? '');
+    if (index != null && index >= 0 && index < labels.length) {
+      return labels[index];
+    }
+    return value?.toString() ?? fallback;
+  }
+
   factory WorkflowModel.fromJson(Map<String, dynamic> json) {
     List<WorkflowStepModel> stepList = [];
     if (json['steps'] is List) {
@@ -47,18 +62,38 @@ class WorkflowModel {
     }
 
     final details = json['details'];
-    if (stepList.isEmpty && details is Map && details['completed_steps'] is List) {
+    if (stepList.isEmpty &&
+        details is Map &&
+        details['completed_steps'] is List) {
       final completed = details['completed_steps'] as List;
-      stepList = List.generate(completed.length, (i) => WorkflowStepModel(stepNumber: i + 1,
-        agentName: 'Recorded stage', status: 'Completed', output: completed[i].toString()));
+      stepList = List.generate(
+        completed.length,
+        (i) => WorkflowStepModel(
+          stepNumber: i + 1,
+          agentName: 'Recorded stage',
+          status: 'Completed',
+          output: completed[i].toString(),
+        ),
+      );
     }
     final idStr = json['id']?.toString() ?? '';
     final wfId = json['workflowId']?.toString() ?? idStr;
-    final statusStr = json['status']?.toString() ?? 'Pending';
-    final approvalStr = json['approvalStatus']?.toString() ?? 
-        (json['isWaitingForApproval'] == true ? 'Waiting For Approval' : 'Pending');
-    final waiting = json['isWaitingForApproval'] as bool? ??
-        (approvalStr.toLowerCase().contains('waiting') || statusStr.toLowerCase().contains('waiting'));
+    final statusStr = _enumLabel(json['status'], [
+      'Running',
+      'Completed',
+      'Failed',
+      'WaitingForApproval',
+    ], 'Pending');
+    final approvalStr = _enumLabel(json['approvalStatus'], [
+      'Pending',
+      'Approved',
+      'Rejected',
+      'RevisionRequested',
+    ], 'Pending');
+    final waiting =
+        json['isWaitingForApproval'] as bool? ??
+        (approvalStr.toLowerCase().contains('waiting') ||
+            statusStr.toLowerCase().contains('waiting'));
 
     return WorkflowModel(
       id: idStr,
@@ -70,38 +105,45 @@ class WorkflowModel {
       currentAgent: json['currentAgent']?.toString() ?? 'Planner',
       status: statusStr,
       approvalStatus: approvalStr,
-      finalOutcome: json['finalOutcome']?.toString() ?? json['result']?.toString(),
+      finalOutcome:
+          json['finalOutcome']?.toString() ?? json['result']?.toString(),
       currentStep: (json['currentStep'] as num?)?.toInt() ?? 0,
       totalSteps: (json['totalSteps'] as num?)?.toInt() ?? stepList.length,
       steps: stepList,
       isWaitingForApproval: waiting,
       createdAt: json['startedAt'] != null
           ? DateTime.tryParse(json['startedAt'].toString()) ?? DateTime.now()
-          : (json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now() : DateTime.now()),
+          : (json['createdAt'] != null
+                ? DateTime.tryParse(json['createdAt'].toString()) ??
+                      DateTime.now()
+                : DateTime.now()),
       updatedAt: json['completedAt'] != null
           ? DateTime.tryParse(json['completedAt'].toString()) ?? DateTime.now()
-          : (json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'].toString()) ?? DateTime.now() : DateTime.now()),
+          : (json['updatedAt'] != null
+                ? DateTime.tryParse(json['updatedAt'].toString()) ??
+                      DateTime.now()
+                : DateTime.now()),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'workflowType': workflowType,
-        'machineId': machineId,
-        'purchaseOrderId': purchaseOrderId,
-        'workflowId': workflowId,
-        'objective': objective,
-        'currentAgent': currentAgent,
-        'status': status,
-        'approvalStatus': approvalStatus,
-        'finalOutcome': finalOutcome,
-        'currentStep': currentStep,
-        'totalSteps': totalSteps,
-        'steps': steps.map((s) => s.toJson()).toList(),
-        'isWaitingForApproval': isWaitingForApproval,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'workflowType': workflowType,
+    'machineId': machineId,
+    'purchaseOrderId': purchaseOrderId,
+    'workflowId': workflowId,
+    'objective': objective,
+    'currentAgent': currentAgent,
+    'status': status,
+    'approvalStatus': approvalStatus,
+    'finalOutcome': finalOutcome,
+    'currentStep': currentStep,
+    'totalSteps': totalSteps,
+    'steps': steps.map((s) => s.toJson()).toList(),
+    'isWaitingForApproval': isWaitingForApproval,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 }
 
 class WorkflowStepModel {
@@ -132,10 +174,10 @@ class WorkflowStepModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'stepNumber': stepNumber,
-        'agentName': agentName,
-        'status': status,
-        'output': output,
-        'executedAt': executedAt?.toIso8601String(),
-      };
+    'stepNumber': stepNumber,
+    'agentName': agentName,
+    'status': status,
+    'output': output,
+    'executedAt': executedAt?.toIso8601String(),
+  };
 }

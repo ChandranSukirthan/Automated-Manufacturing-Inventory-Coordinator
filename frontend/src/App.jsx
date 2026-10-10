@@ -183,7 +183,7 @@ function App() {
           <Route
             path="/agent-workflows"
             element={
-              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'ITAdmin']}>
+              <ProtectedRoute allowedRoles={['FloorWorker', 'SupplyChainManager', 'QualityInspector', 'ITAdmin', 0, 1, 2, 3]}>
                 <AgentWorkflowMonitor />
               </ProtectedRoute>
             }

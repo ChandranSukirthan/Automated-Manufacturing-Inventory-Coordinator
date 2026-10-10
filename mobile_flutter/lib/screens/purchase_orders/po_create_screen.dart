@@ -2,649 +2,413 @@ import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/inventory_api_service.dart';
 import '../../services/purchase_order_service.dart';
+import '../../utils/locale.dart';
 
 class POCreateScreen extends StatefulWidget {
   const POCreateScreen({
     required this.service,
+    this.initialSupplierId,
+    this.initialMaterialId,
+    this.initialQuantity,
+    this.initialPrice,
+    this.initialBudget,
+    this.initialCurrency = 'LKR',
+    this.procurementId,
+    this.candidateId,
     this.materialId,
     this.sku,
     this.quantity,
     super.key,
   });
-
   final PurchaseOrderService service;
+  final int? initialSupplierId, initialMaterialId, procurementId, candidateId;
+  final double? initialQuantity, initialPrice, initialBudget;
+  final String initialCurrency;
   final int? materialId;
   final String? sku;
   final num? quantity;
-
   @override
   State<POCreateScreen> createState() => _POCreateScreenState();
 }
 
-class _LineItemDraft {
-  int? rawMaterialId;
-  final TextEditingController descriptionController = TextEditingController();
-  final TextEditingController quantityController = TextEditingController(text: '100');
-  final TextEditingController unitPriceController = TextEditingController(text: '15.00');
-
+class _OrderLineInput {
+  _OrderLineInput({this.materialId, double? quantity, double? price})
+    : quantity = TextEditingController(text: quantity?.toString() ?? ''),
+      price = TextEditingController(text: price?.toString() ?? '');
+  int? materialId;
+  final TextEditingController quantity, price;
+  final description = TextEditingController();
+  double get total =>
+      (double.tryParse(quantity.text) ?? 0) *
+      (double.tryParse(price.text) ?? 0);
   void dispose() {
-    descriptionController.dispose();
-    quantityController.dispose();
-    unitPriceController.dispose();
-  }
-
-  double get subtotal {
-    final qty = double.tryParse(quantityController.text) ?? 0.0;
-    final price = double.tryParse(unitPriceController.text) ?? 0.0;
-    return qty * price;
+    quantity.dispose();
+    price.dispose();
+    description.dispose();
   }
 }
 
 class _POCreateScreenState extends State<POCreateScreen> {
-  final _inventoryService = InventoryApiService();
-  bool _loading = true;
-  bool _submitting = false;
-
+  final _form = GlobalKey<FormState>();
+  final _budget = TextEditingController();
+  final _notes = TextEditingController();
+  final _shipping = TextEditingController(text: '0');
+  final _lines = <_OrderLineInput>[];
   List<SupplierSummary> _suppliers = [];
   List<RawMaterialModel> _materials = [];
-  int? _selectedSupplierId;
-
-  final List<_LineItemDraft> _lineItems = [];
-  final _budgetController = TextEditingController(text: '25000.00');
-  final _shippingController = TextEditingController(text: '0.00');
-  final _notesController = TextEditingController(
-    text: 'Standard replenishing purchase order generated from mobile',
-  );
+  int? _supplierId;
+  String _currency = 'LKR';
+  bool _loading = true, _saving = false;
+  String? _error;
+  double get _total => _lines.fold(0, (sum, line) => sum + line.total);
 
   @override
   void initState() {
     super.initState();
-    final initialLine = _LineItemDraft();
-    if (widget.quantity != null) {
-      initialLine.quantityController.text = widget.quantity.toString();
+    _currency = widget.initialCurrency;
+    _budget.text = widget.initialBudget?.toString() ?? '';
+    if (widget.procurementId != null) {
+      _notes.text =
+          'Customised from procurement request ${widget.procurementId}.';
     }
-    _lineItems.add(initialLine);
-    _loadData();
+    _lines.add(
+      _OrderLineInput(
+        materialId: widget.initialMaterialId ?? widget.materialId,
+        quantity: widget.initialQuantity ?? widget.quantity?.toDouble(),
+        price: widget.initialPrice,
+      ),
+    );
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      if (widget.procurementId != null) {
+        final request = await widget.service.getProcurementById(
+          widget.procurementId!,
+        );
+        if (request == null) {
+          throw StateError('Unable to load the procurement request.');
+        }
+        if (request.generatedPurchaseOrderId != null) {
+          if (mounted) {
+            Navigator.pop(context, request.generatedPurchaseOrderId);
+          }
+          return;
+        }
+      }
+      final suppliers = await widget.service.getSuppliers();
+      final materials = await widget.service.getRawMaterials();
+      if (!mounted) return;
+      setState(() {
+        _suppliers = suppliers.where((s) => s.isActive).toList();
+        _materials = materials;
+        if (_lines.first.materialId == null && widget.sku != null) {
+          final matches = materials.where((m) => m.skuCode == widget.sku);
+          if (matches.isNotEmpty) _lines.first.materialId = matches.first.id;
+        }
+        _supplierId = _suppliers.any((s) => s.id == widget.initialSupplierId)
+            ? widget.initialSupplierId
+            : null;
+        for (final line in _lines) {
+          if (!_materials.any((m) => m.id == line.materialId)) {
+            line.materialId = null;
+          }
+        }
+        _loading = false;
+        if (_suppliers.isEmpty || _materials.isEmpty) {
+          _error =
+              'Active suppliers and materials must be available before creating an order. Retry loading.';
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Unable to load order options: $error';
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    for (final line in _lineItems) {
+    _budget.dispose();
+    _notes.dispose();
+    _shipping.dispose();
+    for (final line in _lines) {
       line.dispose();
     }
-    _budgetController.dispose();
-    _shippingController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _loading = true);
+  String? _positive(String? value) {
+    final number = double.tryParse((value ?? '').trim());
+    return number == null || !number.isFinite || number <= 0
+        ? 'Enter a positive number.'
+        : null;
+  }
+
+  Future<void> _save(bool submit) async {
+    if (_saving || !_form.currentState!.validate()) return;
+    if (_total + double.parse(_shipping.text.trim()) >
+        double.parse(_budget.text.trim())) {
+      setState(() => _error = 'Order total exceeds the budget limit.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
-      final results = await Future.wait([
-        widget.service.getSuppliers(),
-        _inventoryService.fetchRawMaterials(),
-      ]);
-
-      if (mounted) {
-        final suppliers = results[0] as List<SupplierSummary>;
-        final materials = results[1] as List<RawMaterialModel>;
-
-        setState(() {
-          _suppliers = suppliers;
-          _materials = materials;
-          _selectedSupplierId = suppliers.isNotEmpty ? suppliers.first.id : null;
-
-          if (_lineItems.isNotEmpty && materials.isNotEmpty) {
-            if (widget.materialId != null && materials.any((m) => m.id == widget.materialId)) {
-              _lineItems.first.rawMaterialId = widget.materialId;
-            } else if (widget.sku != null && materials.any((m) => m.skuCode == widget.sku)) {
-              final match = materials.firstWhere((m) => m.skuCode == widget.sku);
-              _lineItems.first.rawMaterialId = match.id;
-            } else {
-              _lineItems.first.rawMaterialId = materials.first.id;
-            }
+      var po = await widget.service.createPurchaseOrder({
+        'supplierId': _supplierId,
+        'currency': _currency,
+        'budgetLimit': double.parse(_budget.text.trim()),
+        'notes': _notes.text.trim(),
+        if (widget.procurementId != null)
+          'procurementRequestId': widget.procurementId,
+        if (widget.candidateId != null) 'candidateId': widget.candidateId,
+        'lines': [
+          for (final line in _lines)
+            {
+              'rawMaterialId': line.materialId,
+              'description': line.description.text.trim(),
+              'quantity': double.parse(line.quantity.text.trim()),
+              'unitPrice': double.parse(line.price.text.trim()),
+            },
+        ],
+      });
+      if (submit && po.status.toLowerCase() == 'draft') {
+        try {
+          po = await widget.service.submitPurchaseOrder(po.id);
+        } catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Draft saved. Submission failed: $error. You can retry from order details.',
+                ),
+              ),
+            );
           }
-          _updateBudgetRecommendation();
-          _loading = false;
-        });
+        }
       }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  double get _subtotal {
-    double total = 0;
-    for (final line in _lineItems) {
-      total += line.subtotal;
-    }
-    return total;
-  }
-
-  double get _totalCost {
-    final shipping = double.tryParse(_shippingController.text) ?? 0.0;
-    return _subtotal + shipping;
-  }
-
-  void _updateBudgetRecommendation() {
-    final total = _totalCost;
-    final recommended = (total * 1.15).clamp(1000.0, 10000000.0);
-    _budgetController.text = recommended.toStringAsFixed(2);
-  }
-
-  void _addLineItem() {
-    setState(() {
-      final line = _LineItemDraft();
-      if (_materials.isNotEmpty) {
-        line.rawMaterialId = _materials.first.id;
-      }
-      _lineItems.add(line);
-      _updateBudgetRecommendation();
-    });
-  }
-
-  void _removeLineItem(int index) {
-    if (_lineItems.length <= 1) return;
-    setState(() {
-      final removed = _lineItems.removeAt(index);
-      removed.dispose();
-      _updateBudgetRecommendation();
-    });
-  }
-
-  Future<void> _createPo() async {
-    if (_selectedSupplierId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a supplier.'), backgroundColor: Colors.red),
-      );
-      return;
-    }
-
-    for (int i = 0; i < _lineItems.length; i++) {
-      final line = _lineItems[i];
-      if (line.rawMaterialId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please select a material for line #${i + 1}.'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-      final qty = double.tryParse(line.quantityController.text) ?? 0;
-      if (qty <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Quantity for line #${i + 1} must be > 0.'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-      final price = double.tryParse(line.unitPriceController.text) ?? 0;
-      if (price <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unit price for line #${i + 1} must be > 0.'), backgroundColor: Colors.red),
-        );
-        return;
-      }
-    }
-
-    final budget = double.tryParse(_budgetController.text) ?? 0;
-    if (budget < _totalCost) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Budget limit must be at least total cost (LKR ${_totalCost.toStringAsFixed(2)}).'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _submitting = true);
-    try {
-      final shipping = double.tryParse(_shippingController.text) ?? 0.0;
-      final poData = {
-        'supplierId': _selectedSupplierId,
-        'currency': 'LKR',
-        'budgetLimit': budget,
-        'shipping': shipping,
-        'notes': _notesController.text.trim().isNotEmpty
-            ? _notesController.text.trim()
-            : 'Manual Purchase Order generated from mobile',
-        'lines': _lineItems.map((line) {
-          final mat = _materials.firstWhere(
-            (m) => m.id == line.rawMaterialId,
-            orElse: () => _materials.first,
-          );
-          final desc = line.descriptionController.text.trim().isNotEmpty
-              ? line.descriptionController.text.trim()
-              : '${mat.name} (${mat.skuCode})';
-          return {
-            'rawMaterialId': line.rawMaterialId,
-            'description': desc,
-            'quantity': double.parse(line.quantityController.text),
-            'unitPrice': double.parse(line.unitPriceController.text),
-          };
-        }).toList(),
-      };
-
-      final createdPo = await widget.service.createPurchaseOrder(poData);
-
+      if (mounted) Navigator.pop(context, po.id);
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Draft Purchase Order Created! Please submit for approval.'),
-            backgroundColor: Color(0xFF10B981),
-          ),
-        );
-        Navigator.pop(context, createdPo);
+        setState(() => _error = 'Unable to create purchase order: $error');
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to create PO: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
-        setState(() => _submitting = false);
-      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    const navyBg = Color(0xFF0B0F19);
-    const cardBg = Color(0xFF0F172A);
-    const borderColor = Color(0xFF1E293B);
-
-    return Scaffold(
-      backgroundColor: navyBg,
-      appBar: AppBar(
-        title: const Text('Create Purchase Order', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        backgroundColor: cardBg,
-        elevation: 0,
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF06B6D4)))
-          : ListView(
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Create Purchase Order')),
+    body: _loading
+        ? const Center(child: CircularProgressIndicator())
+        : Form(
+            key: _form,
+            child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Supplier Selection Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
+                if (_error != null) ...[
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.storefront_rounded, color: Color(0xFF06B6D4), size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Supplier Details',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Select Approved Vendor *',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                      ),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<int>(
-                        initialValue: _selectedSupplierId,
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                        items: _suppliers
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s.id,
-                                child: Text('${s.name} (${s.isActive ? "Active" : "Inactive"})'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) => setState(() => _selectedSupplierId = val),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: const Color(0xFF0B0F19),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF334155)),
+                  if (_suppliers.isEmpty || _materials.isEmpty)
+                    TextButton(
+                      onPressed: _load,
+                      child: const Text('Retry loading'),
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                DropdownButtonFormField<int>(
+                  key: const ValueKey('po-supplier'),
+                  initialValue: _supplierId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Supplier *'),
+                  items: _suppliers
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s.id,
+                          child: Text(
+                            s.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                    ],
+                      )
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (id) => setState(() => _supplierId = id),
+                  validator: (id) =>
+                      id == null ? 'Select an active supplier.' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: _currency,
+                  decoration: const InputDecoration(labelText: 'Currency'),
+                  items: {'LKR', 'EUR', 'GBP', widget.initialCurrency}
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _currency = value!),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _budget,
+                  enabled: !_saving,
+                  validator: _positive,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Budget limit ($_currency) *',
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Order Lines Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
+                TextFormField(
+                  controller: _notes,
+                  enabled: !_saving,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: 'Order notes'),
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _shipping,
+                  enabled: !_saving,
+                  decoration: InputDecoration(
+                    labelText: 'Estimated shipping ($_currency)',
+                    helperText:
+                        'Budget planning estimate; the purchase order records item costs.',
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.list_alt_rounded, color: Color(0xFF10B981), size: 18),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Order Lines (${_lineItems.length})',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                          TextButton.icon(
-                            onPressed: _addLineItem,
-                            icon: const Icon(Icons.add_circle_outline, size: 16, color: Color(0xFF06B6D4)),
-                            label: const Text('Add Line', style: TextStyle(color: Color(0xFF06B6D4), fontSize: 12)),
-                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      ..._lineItems.asMap().entries.map((entry) {
-                        final idx = entry.key;
-                        final line = entry.value;
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0B0F19),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF334155)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Item #${idx + 1}',
-                                    style: const TextStyle(color: Color(0xFF06B6D4), fontWeight: FontWeight.bold, fontSize: 12),
-                                  ),
-                                  if (_lineItems.length > 1)
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 18),
-                                      onPressed: () => _removeLineItem(idx),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-
-                              // Material Dropdown
-                              const Text('Raw Material *', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                              const SizedBox(height: 4),
-                              DropdownButtonFormField<int>(
-                                initialValue: line.rawMaterialId,
-                                dropdownColor: const Color(0xFF1E293B),
-                                style: const TextStyle(color: Colors.white, fontSize: 12),
-                                isExpanded: true,
-                                items: _materials
-                                    .map(
-                                      (m) => DropdownMenuItem(
-                                        value: m.id,
-                                        child: Text(
-                                          '${m.name} [${m.skuCode}] (${m.unitOfMeasure})',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (val) {
-                                  setState(() {
-                                    line.rawMaterialId = val;
-                                  });
-                                },
-                                decoration: InputDecoration(
-                                  filled: true,
-                                  fillColor: const Color(0xFF0F172A),
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                    borderSide: const BorderSide(color: Color(0xFF334155)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Qty & Unit Price Row
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text('Quantity *', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                                        const SizedBox(height: 4),
-                                        TextFormField(
-                                          controller: line.quantityController,
-                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                                          onChanged: (_) => setState(_updateBudgetRecommendation),
-                                          decoration: InputDecoration(
-                                            filled: true,
-                                            fillColor: const Color(0xFF0F172A),
-                                            isDense: true,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(6),
-                                              borderSide: const BorderSide(color: Color(0xFF334155)),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text('Unit Price (LKR) *', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                                        const SizedBox(height: 4),
-                                        TextFormField(
-                                          controller: line.unitPriceController,
-                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                                          onChanged: (_) => setState(_updateBudgetRecommendation),
-                                          decoration: InputDecoration(
-                                            filled: true,
-                                            fillColor: const Color(0xFF0F172A),
-                                            isDense: true,
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(6),
-                                              borderSide: const BorderSide(color: Color(0xFF334155)),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        const Text('Subtotal', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'LKR ${line.subtotal.toStringAsFixed(2)}',
-                                          style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
                   ),
+                  validator: (value) {
+                    final amount = double.tryParse((value ?? '').trim());
+                    return amount == null || !amount.isFinite || amount < 0
+                        ? 'Enter a non-negative amount.'
+                        : null;
+                  },
                 ),
                 const SizedBox(height: 16),
-
-                // Financial Overview & Budget Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.account_balance_wallet_outlined, color: Color(0xFFF59E0B), size: 18),
-                          SizedBox(width: 8),
-                          Text(
-                            'Financial Summary & Cap',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Lines Subtotal:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                          Text('LKR ${_subtotal.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Estimated Shipping:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                          SizedBox(
-                            width: 100,
-                            child: TextFormField(
-                              controller: _shippingController,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
-                              onChanged: (_) => setState(_updateBudgetRecommendation),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: const Color(0xFF0B0F19),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFF334155)),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(color: Color(0xFF334155), height: 1),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total Estimated Order Cost:', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          Text(
-                            'LKR ${_totalCost.toStringAsFixed(2)}',
-                            style: const TextStyle(color: Color(0xFF06B6D4), fontWeight: FontWeight.w800, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      const Text('Budget Ceiling Limit (LKR) *', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _budgetController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: const Color(0xFF0B0F19),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF334155)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text('Order Notes & Instructions', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                      const SizedBox(height: 4),
-                      TextFormField(
-                        controller: _notesController,
-                        maxLines: 2,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Notes for supplier...',
-                          hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFF0B0F19),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF334155)),
-                          ),
-                        ),
-                      ),
-                    ],
+                for (var index = 0; index < _lines.length; index++)
+                  _lineCard(_lines[index], index),
+                TextButton.icon(
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() => _lines.add(_OrderLineInput())),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add item'),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Order total: ${formatMoney(_total, currency: _currency)}',
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 24),
-
-                ElevatedButton.icon(
-                  onPressed: _submitting ? null : _createPo,
-                  icon: _submitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0B0F19)),
-                        )
-                      : const Icon(Icons.send_rounded, size: 18),
-                  label: Text(
-                    _submitting ? 'Creating PO...' : 'Create Draft Purchase Order',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: const Color(0xFF06B6D4),
-                    foregroundColor: const Color(0xFF0B0F19),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: _saving || _suppliers.isEmpty || _materials.isEmpty
+                      ? null
+                      : () => _save(false),
+                  child: Text(_saving ? 'Saving…' : 'Save draft'),
+                ),
+                OutlinedButton(
+                  onPressed: _saving || _suppliers.isEmpty || _materials.isEmpty
+                      ? null
+                      : () => _save(true),
+                  child: const Text('Save and submit for approval'),
                 ),
               ],
             ),
-    );
-  }
+          ),
+  );
+  Widget _lineCard(_OrderLineInput line, int index) => Card(
+    key: ObjectKey(line),
+    margin: const EdgeInsets.only(bottom: 16),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Item ${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (_lines.length > 1)
+                IconButton(
+                  tooltip: 'Remove item',
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() => _lines.remove(line));
+                          line.dispose();
+                        },
+                  icon: const Icon(Icons.delete_outline),
+                ),
+            ],
+          ),
+          DropdownButtonFormField<int>(
+            initialValue: line.materialId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Material *'),
+            items: _materials
+                .map(
+                  (m) => DropdownMenuItem(
+                    value: m.id,
+                    child: Text(
+                      '${m.name} (${m.skuCode})',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: _saving
+                ? null
+                : (id) => setState(() => line.materialId = id),
+            validator: (id) => id == null ? 'Select a material.' : null,
+          ),
+          TextFormField(
+            controller: line.description,
+            enabled: !_saving,
+            decoration: const InputDecoration(labelText: 'Item description'),
+          ),
+          TextFormField(
+            controller: line.quantity,
+            enabled: !_saving,
+            validator: _positive,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Quantity *'),
+            onChanged: (_) => setState(() {}),
+          ),
+          TextFormField(
+            controller: line.price,
+            enabled: !_saving,
+            validator: _positive,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: 'Unit price ($_currency) *'),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+    ),
+  );
 }

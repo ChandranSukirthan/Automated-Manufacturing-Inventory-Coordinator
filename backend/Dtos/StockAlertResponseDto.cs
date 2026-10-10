@@ -16,6 +16,11 @@ namespace backend.Dtos
 
         // Supply Chain Manager fields
         public int? MaterialId { get; set; }
+        public int? RawMaterialId
+        {
+            get => MaterialId;
+            set => MaterialId = value;
+        }
         public string MaterialName { get; set; } = string.Empty;
         public decimal CurrentStock { get; set; }
         public decimal RequiredQuantity { get; set; }

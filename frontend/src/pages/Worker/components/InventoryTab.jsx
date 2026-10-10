@@ -6,7 +6,8 @@ import {
   Clock,
   Trash2,
   Package,
-  PlusCircle
+  PlusCircle,
+  Edit2
 } from 'lucide-react';
 import { TableSkeleton } from './SkeletonLoader';
 import EmptyState from './EmptyState';
@@ -44,6 +45,7 @@ export default function InventoryTab({
   triggeringAi,
   onTriggerAi,
   onDeleteItem,
+  onEditItem,
   onShowAddModal,
 }) {
   return (
@@ -174,6 +176,16 @@ export default function InventoryTab({
                                 Reorder via AI
                               </button>
                             ))}
+                          {onEditItem && (
+                            <button
+                              onClick={() => onEditItem(item)}
+                              aria-label={`Edit ${item.sku}`}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 transition"
+                              title="Edit Item"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => onDeleteItem(item.id)}
                             aria-label={`Delete ${item.sku}`}

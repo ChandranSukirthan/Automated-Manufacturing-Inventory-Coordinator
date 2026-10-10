@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+const _settledStatuses = {'paid', 'sent', 'suppliernotified', 'intransit', 'delivered', 'completed'};
+const _approvedStatuses = {'approved', 'payment', 'paymentpending', 'paymentfailed', ..._settledStatuses};
+
 /// Represents a 10-step lifecycle state of a Purchase Order
 enum POLifecycleStep {
   lowStockSubmitted('Low Stock Submitted', 'Warehouse stock breached safety threshold'),
@@ -30,6 +33,8 @@ class PurchaseOrderSummary {
     required this.requiresApproval,
     required this.createdAt,
     required this.updatedAt,
+    this.approvedByName,
+    this.stripePaymentStatus,
   });
 
   final int id;
@@ -41,6 +46,25 @@ class PurchaseOrderSummary {
   final bool requiresApproval;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? approvedByName;
+  final String? stripePaymentStatus;
+
+  String get approvalStatusDisplay {
+    if (approvedByName?.isNotEmpty == true) return 'Approved by $approvedByName';
+    if (_approvedStatuses.contains(status.toLowerCase())) return 'Approved';
+    if (status.toLowerCase() == 'pendingapproval') return 'Pending approval';
+    if (status.toLowerCase() == 'rejected') return 'Rejected';
+    if (status.toLowerCase() == 'revisionrequested') return 'Revision requested';
+    return requiresApproval ? 'Approval required' : 'Not yet approved';
+  }
+
+  String get paymentStatusDisplay {
+    if (stripePaymentStatus?.isNotEmpty == true) return stripePaymentStatus!;
+    if (_settledStatuses.contains(status.toLowerCase())) return 'Settled';
+    if (status.toLowerCase() == 'paymentfailed') return 'Failed';
+    if ({'payment', 'paymentpending'}.contains(status.toLowerCase())) return 'Processing';
+    return 'Not paid';
+  }
 
   factory PurchaseOrderSummary.fromJson(Map<String, dynamic> json) {
     return PurchaseOrderSummary(
@@ -53,6 +77,8 @@ class PurchaseOrderSummary {
       requiresApproval: json['requiresApproval'] as bool? ?? false,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? DateTime.now(),
+      approvedByName: json['approvedByName'] as String?,
+      stripePaymentStatus: json['stripePaymentStatus'] as String?,
     );
   }
 
@@ -65,8 +91,20 @@ class PurchaseOrderSummary {
       case 'approved':
         return POLifecycleStep.approved;
       case 'payment':
+      case 'paymentpending':
+        return {'paid', 'succeeded'}.contains(stripePaymentStatus?.toLowerCase())
+            ? POLifecycleStep.paymentSuccessful
+            : POLifecycleStep.paymentProcessing;
+      case 'paymentfailed':
         return POLifecycleStep.paymentProcessing;
+      case 'paid':
+        return POLifecycleStep.paymentSuccessful;
+      case 'suppliernotified':
+        return POLifecycleStep.supplierNotified;
       case 'sent':
+      case 'intransit':
+      case 'delivered':
+      case 'completed':
         return POLifecycleStep.orderSent;
       case 'rejected':
       case 'revisionrequested':
@@ -79,14 +117,21 @@ class PurchaseOrderSummary {
   Color get statusColor {
     switch (status.toLowerCase()) {
       case 'approved':
+      case 'paid':
         return const Color(0xFF10B981);
       case 'sent':
+      case 'suppliernotified':
+      case 'intransit':
+      case 'delivered':
+      case 'completed':
         return const Color(0xFF06B6D4);
       case 'pendingapproval':
         return const Color(0xFFF59E0B);
       case 'payment':
+      case 'paymentpending':
         return const Color(0xFF8B5CF6);
       case 'rejected':
+      case 'paymentfailed':
         return const Color(0xFFEF4444);
       case 'draft':
       default:
@@ -306,10 +351,20 @@ class PurchaseOrderDetail {
       case 'approved':
         return POLifecycleStep.approved;
       case 'payment':
-        return (stripePaymentStatus?.toLowerCase() == 'succeeded')
+        return {'paid', 'succeeded'}.contains(stripePaymentStatus?.toLowerCase())
             ? POLifecycleStep.paymentSuccessful
             : POLifecycleStep.paymentProcessing;
+      case 'paymentpending':
+      case 'paymentfailed':
+        return POLifecycleStep.paymentProcessing;
+      case 'paid':
+        return POLifecycleStep.paymentSuccessful;
+      case 'suppliernotified':
+        return POLifecycleStep.supplierNotified;
       case 'sent':
+      case 'intransit':
+      case 'delivered':
+      case 'completed':
         return POLifecycleStep.orderSent;
       case 'rejected':
       case 'revisionrequested':
@@ -323,7 +378,7 @@ class PurchaseOrderDetail {
     if (approvedByName != null && approvedByName!.isNotEmpty) {
       return 'Approved by $approvedByName';
     }
-    if (status.toLowerCase() == 'approved' || status.toLowerCase() == 'sent' || status.toLowerCase() == 'payment') {
+    if (_approvedStatuses.contains(status.toLowerCase())) {
       return 'Approved';
     }
     if (status.toLowerCase() == 'pendingapproval') {
@@ -342,13 +397,14 @@ class PurchaseOrderDetail {
     if (stripePaymentStatus != null && stripePaymentStatus!.isNotEmpty) {
       return stripePaymentStatus!;
     }
-    if (status.toLowerCase() == 'sent') {
+    if (_settledStatuses.contains(status.toLowerCase())) {
       return 'Settled';
     }
-    if (status.toLowerCase() == 'payment') {
+    if (status.toLowerCase() == 'paymentfailed') return 'Failed';
+    if ({'payment', 'paymentpending'}.contains(status.toLowerCase())) {
       return 'Processing';
     }
-    return 'Pending Approval';
+    return status.toLowerCase() == 'approved' ? 'Awaiting Payment' : 'Pending Approval';
   }
 
   String get supplierNotificationDisplay {
@@ -437,18 +493,21 @@ class SupplierSummary {
   const SupplierSummary({
     required this.id,
     required this.name,
+    this.supplierCode,
     required this.contactPerson,
     required this.email,
     required this.phone,
-    required this.rating,
+    this.rating = 0.0,
     required this.paymentTerms,
     required this.isActive,
     this.address = '',
     this.leadTimeDays = 5,
+    this.createdAt,
   });
 
   final int id;
   final String name;
+  final String? supplierCode;
   final String contactPerson;
   final String email;
   final String phone;
@@ -457,19 +516,22 @@ class SupplierSummary {
   final bool isActive;
   final String address;
   final int leadTimeDays;
+  final DateTime? createdAt;
 
   factory SupplierSummary.fromJson(Map<String, dynamic> json) {
     return SupplierSummary(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? 'Unknown',
+      id: json['id'] as int? ?? json['supplierId'] as int? ?? 0,
+      name: json['name'] as String? ?? json['supplierName'] as String? ?? 'Unknown',
+      supplierCode: json['supplierCode'] as String? ?? 'SUP-${json['id'] ?? 0}',
       contactPerson: json['contactPerson'] as String? ?? json['contactName'] as String? ?? '',
       email: json['email'] as String? ?? json['contactEmail'] as String? ?? '',
       phone: json['phone'] as String? ?? json['contactPhone'] as String? ?? '',
-      rating: (json['rating'] as num? ?? 4.5).toDouble(),
-      paymentTerms: json['paymentTerms'] as String? ?? 'Net30',
+      rating: (json['rating'] as num? ?? 0.0).toDouble(),
+      paymentTerms: json['paymentTerms'] as String? ?? 'Net 30',
       isActive: json['isActive'] as bool? ?? true,
       address: json['address'] as String? ?? '',
       leadTimeDays: json['leadTimeDays'] as int? ?? 5,
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
     );
   }
 }
@@ -539,7 +601,7 @@ class StockAlertItem {
       status: json['status'] as String? ?? 'Active',
       workerId: json['workerId'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
-      rawMaterialId: json['rawMaterialId'] as int?,
+      rawMaterialId: (json['rawMaterialId'] as num?)?.toInt() ?? (json['materialId'] as num?)?.toInt(),
       materialName: json['materialName'] as String? ?? json['sku'] as String? ?? 'Raw Material',
       currentStock: (json['currentStock'] as num?)?.toDouble(),
       safetyStock: (json['safetyStock'] as num?)?.toDouble(),

@@ -14,6 +14,11 @@ const quarantineService = {
   release: async (id, data) => {
     const response = await api.post(`/quarantine/${id}/release`, data || {});
     return response.data;
+  },
+
+  releaseAllForDefect: async (defectId, data) => {
+    const response = await api.post(`/quarantine/defect/${defectId}/release-all`, data || {});
+    return response.data;
   }
 };
 

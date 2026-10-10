@@ -63,7 +63,7 @@ namespace ManufacturingCoordinator.Api.Services
             if (shift == null)
                 throw new AuthException("Shift not found.", HttpStatusCode.NotFound);
 
-            await ValidateContext(dto.MaterialSku, dto.MachineId, dto.MaterialPerUnit, dto.StartTime, dto.EndTime);
+            await ValidateContext(dto.MaterialSku, dto.MachineId, dto.MaterialPerUnit, dto.StartTime, dto.EndTime, id);
             // Re-enforce production adjustment business rule on update
             var adjustedOutput = Adjusted(dto.ProductionTarget, dto.AvailableMaterial, dto.MaterialPerUnit);
 
@@ -81,6 +81,16 @@ namespace ManufacturingCoordinator.Api.Services
             await _db.SaveChangesAsync();
 
             return MapToDto(shift);
+        }
+
+        public async Task DeleteAsync(Guid id)
+        {
+            var shift = await _db.Shifts.FindAsync(id);
+            if (shift == null)
+                throw new AuthException("Shift not found.", HttpStatusCode.NotFound);
+
+            _db.Shifts.Remove(shift);
+            await _db.SaveChangesAsync();
         }
 
         public async Task<AdjustOutputResponseDto> AdjustOutputAsync(Guid shiftId)
@@ -114,7 +124,7 @@ namespace ManufacturingCoordinator.Api.Services
         private static int Adjusted(int target, int available, decimal? conversion) =>
             conversion.HasValue ? (int)Math.Min(target, decimal.Floor(available / conversion.Value)) : Math.Min(target, available);
 
-        private async Task ValidateContext(string? sku, Guid? machineId, decimal? conversion, DateTime start, DateTime end)
+        private async Task ValidateContext(string? sku, Guid? machineId, decimal? conversion, DateTime start, DateTime end, Guid? currentShiftId = null)
         {
             if (end <= start) throw new AuthException("Shift end must be after its start.", HttpStatusCode.BadRequest);
             if (conversion.HasValue && (conversion <= 0 || string.IsNullOrWhiteSpace(sku)))
@@ -123,6 +133,17 @@ namespace ManufacturingCoordinator.Api.Services
                 throw new AuthException("Select an existing material and its material-per-output conversion.", HttpStatusCode.BadRequest);
             if (machineId.HasValue && !await _db.Machines.AnyAsync(m => m.Id == machineId))
                 throw new AuthException("The selected machine does not exist.", HttpStatusCode.BadRequest);
+
+            if (machineId.HasValue)
+            {
+                var hasOverlap = await _db.Shifts
+                    .AnyAsync(s => s.MachineId == machineId.Value && (!currentShiftId.HasValue || s.Id != currentShiftId.Value) &&
+                                   s.StartTime < end && s.EndTime > start);
+                if (hasOverlap)
+                {
+                    throw new AuthException("Another shift is already scheduled on this machine during this time window.", HttpStatusCode.Conflict);
+                }
+            }
         }
 
         private static ShiftDto MapToDto(Shift shift)

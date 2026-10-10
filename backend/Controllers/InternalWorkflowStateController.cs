@@ -84,6 +84,21 @@ public sealed class InternalWorkflowStateController(ApplicationDbContext db, ICo
             validation["manualResolutionStatus"] ??= validation["qualitySafetyStatus"]?.GetValue<string>() is "CLEAR" or "PASSED" ? "NOT_REQUIRED" : "PENDING_REVIEW";
             workflow.ValidationResults = validation.ToJsonString();
         }
+        if (!string.IsNullOrWhiteSpace(workflow.StateJson))
+        {
+            try
+            {
+                var existingState = JsonNode.Parse(workflow.StateJson)?.AsObject();
+                if (existingState != null)
+                {
+                    if (existingState["worker_id"] != null && state["worker_id"] == null)
+                        state["worker_id"] = existingState["worker_id"]!.DeepClone();
+                    if (existingState["initiator_id"] != null && state["initiator_id"] == null)
+                        state["initiator_id"] = existingState["initiator_id"]!.DeepClone();
+                }
+            }
+            catch { }
+        }
         workflow.StateJson = state.ToJsonString();
         await db.SaveChangesAsync(cancellationToken);
         return Ok(new { workflowId, synchronized = true });

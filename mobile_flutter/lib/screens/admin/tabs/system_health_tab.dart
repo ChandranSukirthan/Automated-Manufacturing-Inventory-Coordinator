@@ -17,60 +17,8 @@ class SystemHealthTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final overall = health?.overallStatus ?? 'ONLINE';
-
-    // Ensure all 6 prompt required services are represented
-    final defaultServices = [
-      ServiceHealthItem(
-        name: 'ASP.NET Core API Gateway',
-        status: 'ONLINE',
-        message: 'Port 5070 • Operational & serving requests',
-      ),
-      ServiceHealthItem(
-        name: 'PostgreSQL Database',
-        status: 'ONLINE',
-        message: 'Port 5432 • All connection pools healthy',
-      ),
-      ServiceHealthItem(
-        name: 'FastAPI Microservice',
-        status: 'ONLINE',
-        message: 'Port 8000 • Python runtime ready',
-      ),
-      ServiceHealthItem(
-        name: 'Agentic AI Planner',
-        status: 'ONLINE',
-        message: 'LangGraph multi-agent coordinator active',
-      ),
-      ServiceHealthItem(
-        name: 'Stripe Billing Gateway',
-        status: 'ONLINE',
-        message: 'Webhook listening • API operational',
-      ),
-      ServiceHealthItem(
-        name: 'SendGrid Email Relay',
-        status: 'ONLINE',
-        message: 'Notification delivery queues optimal',
-      ),
-    ];
-
-    // Overlay live items from API if returned
-    final displayServices = List<ServiceHealthItem>.from(defaultServices);
-    if (health != null && health!.services.isNotEmpty) {
-      for (final liveSvc in health!.services) {
-        final lower = liveSvc.name.toLowerCase();
-        for (int i = 0; i < displayServices.length; i++) {
-          final target = displayServices[i].name.toLowerCase();
-          if ((lower.contains('asp') && target.contains('asp')) ||
-              (lower.contains('sql') && target.contains('postgre')) ||
-              (lower.contains('fastapi') && target.contains('fastapi')) ||
-              ((lower.contains('agent') || lower.contains('ai')) && target.contains('agentic'))) {
-            displayServices[i] = liveSvc;
-            break;
-          }
-        }
-      }
-    }
-
+    final overall = health?.overallStatus ?? 'UNKNOWN';
+    final displayServices = health?.services ?? <ServiceHealthItem>[];
     return RefreshIndicator(
       onRefresh: onRefresh,
       color: const Color(0xFF06B6D4),
@@ -79,17 +27,31 @@ class SystemHealthTab extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
+          if (displayServices.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Service health could not be confirmed. Refresh to retry.',
+                style: TextStyle(color: Colors.amber),
+              ),
+            ),
           // Header Status Banner
           AdminCard(
             backgroundColor: overall == 'ONLINE'
                 ? const Color(0xFF064E3B).withValues(alpha: 0.25)
                 : const Color(0xFF7F1D1D).withValues(alpha: 0.25),
-            borderColor: overall == 'ONLINE' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            borderColor: overall == 'ONLINE'
+                ? const Color(0xFF10B981)
+                : const Color(0xFFEF4444),
             child: Row(
               children: [
                 Icon(
-                  overall == 'ONLINE' ? Icons.check_circle_rounded : Icons.warning_rounded,
-                  color: overall == 'ONLINE' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  overall == 'ONLINE'
+                      ? Icons.check_circle_rounded
+                      : Icons.warning_rounded,
+                  color: overall == 'ONLINE'
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFEF4444),
                   size: 32,
                 ),
                 const SizedBox(width: 14),
@@ -108,9 +70,14 @@ class SystemHealthTab extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         overall == 'ONLINE'
-                            ? 'All 6 distributed system nodes operating within normal SLA'
-                            : 'One or more subsystem dependencies are unreachable',
-                        style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+                            ? 'Reported services are online'
+                            : overall == 'UNKNOWN'
+                            ? 'Service health has not been confirmed'
+                            : 'Review the reported service status below',
+                        style: const TextStyle(
+                          color: Color(0xFFCBD5E1),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -143,7 +110,8 @@ class SystemHealthTab extends StatelessWidget {
             IconData icon;
             if (svc.name.toLowerCase().contains('asp')) {
               icon = Icons.dns_rounded;
-            } else if (svc.name.toLowerCase().contains('postgre') || svc.name.toLowerCase().contains('sql')) {
+            } else if (svc.name.toLowerCase().contains('postgre') ||
+                svc.name.toLowerCase().contains('sql')) {
               icon = Icons.storage_rounded;
             } else if (svc.name.toLowerCase().contains('fastapi')) {
               icon = Icons.bolt_rounded;
@@ -166,7 +134,11 @@ class SystemHealthTab extends StatelessWidget {
                         color: const Color(0xFF0F172A),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(icon, color: const Color(0xFF06B6D4), size: 22),
+                      child: Icon(
+                        icon,
+                        color: const Color(0xFF06B6D4),
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -184,7 +156,10 @@ class SystemHealthTab extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             svc.message,
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                            style: const TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),

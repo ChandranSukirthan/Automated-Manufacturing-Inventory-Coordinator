@@ -36,6 +36,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   List<InventoryItemModel> _items = [];
   List<RawMaterialModel> _materials = [];
   List<InventoryRollModel> _rolls = [];
+  List<DefectReport> _defects = [];
   String? _skuCode;
   String _severity = 'LOW';
   String _status = 'Open';
@@ -51,6 +52,33 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
   QualityRecommendation? _recommendation;
 
   bool get _isEditing => widget.defect != null;
+
+  Map<String, DefectReport> get _activeDefectRollsMap {
+    final map = <String, DefectReport>{};
+    for (final d in _defects) {
+      if (_isEditing && widget.defect?.id == d.id) continue;
+      final statusUpper = d.status.trim().toUpperCase();
+      if (statusUpper == 'RESOLVED' || statusUpper == 'CLOSED') continue;
+      for (final rollId in d.affectedInventory) {
+        if (rollId.trim().isNotEmpty) {
+          map[rollId.trim().toUpperCase()] = d;
+        }
+      }
+    }
+    return map;
+  }
+
+  String? _getRollDefectConflictInfo(InventoryRollModel roll) {
+    final rollId = (roll.rollIdentifier.isNotEmpty ? roll.rollIdentifier : roll.id).trim().toUpperCase();
+    final existing = _activeDefectRollsMap[rollId];
+    if (existing != null) {
+      return 'Active Defect (${existing.status.isNotEmpty ? existing.status : 'Open'})';
+    }
+    if (roll.status == 'Quarantined') {
+      return 'Quarantined';
+    }
+    return null;
+  }
 
   List<RawMaterialModel> get _createdMaterials {
     final materialBySku = {
@@ -108,12 +136,14 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
         _inventory.fetchOwnedInventory(),
         _inventory.fetchRawMaterials(),
         _inventory.fetchOwnedRolls(),
+        widget.service.getDefects().catchError((_) => <DefectReport>[]),
       ]);
       if (!mounted) return;
       setState(() {
         _items = results[0] as List<InventoryItemModel>;
         _materials = results[1] as List<RawMaterialModel>;
         _rolls = results[2] as List<InventoryRollModel>;
+        _defects = results[3] as List<DefectReport>;
         _loadingInventory = false;
       });
       await _restoreDefectSelection();
@@ -165,6 +195,22 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
     if (requireRolls && _selectedRolls.isEmpty) {
       return 'Select at least one inventory roll or click "Activate Agent" to evaluate affected rolls.';
     }
+    for (final rollId in _selectedRolls) {
+      final cleanId = rollId.trim().toUpperCase();
+      if (_activeDefectRollsMap.containsKey(cleanId)) {
+        return 'Inventory roll "$rollId" already has an active defect report. It cannot be reported again until the previous report is resolved or deleted.';
+      }
+      final matched = _rolls
+          .where((r) =>
+              (r.rollIdentifier.isNotEmpty ? r.rollIdentifier : r.id)
+                  .trim()
+                  .toUpperCase() ==
+              cleanId)
+          .firstOrNull;
+      if (matched?.status == 'Quarantined') {
+        return 'Inventory roll "$rollId" is already quarantined and cannot be reported again.';
+      }
+    }
     if (_description.text.trim().isEmpty) return 'Description is required.';
     return null;
   }
@@ -202,11 +248,25 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
       if (mounted) {
         setState(() {
           _recommendation = recommendation;
-          // Auto-select recommended rolls
+          // Auto-select recommended rolls (excluding rolls already in active defect reports or quarantined)
           if (recommendation.affectedInventory.isNotEmpty) {
+            final activeMap = _activeDefectRollsMap;
+            final availableRecommended = recommendation.affectedInventory.where((rollId) {
+              final cleanId = rollId.trim().toUpperCase();
+              if (activeMap.containsKey(cleanId)) return false;
+              final matched = _rolls
+                  .where((r) =>
+                      (r.rollIdentifier.isNotEmpty ? r.rollIdentifier : r.id)
+                          .trim()
+                          .toUpperCase() ==
+                      cleanId)
+                  .firstOrNull;
+              if (matched?.status == 'Quarantined') return false;
+              return true;
+            });
             _selectedRolls = {
               ..._selectedRolls,
-              ...recommendation.affectedInventory,
+              ...availableRecommended,
             };
           }
         });
@@ -403,7 +463,7 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Rolls Selection Checkbox List
+                        // Rolls Selection Checkbox List (Displayed only after AI Agent activation or in edit mode)
                         if (_recommendation != null || _isEditing) ...[
                           const Divider(height: 24, color: Color(0xFF1E293B)),
                           const Text(
@@ -430,43 +490,133 @@ class _DefectFormScreenState extends State<DefectFormScreen> {
                                 ),
                               ),
                             )
-                          else
+                          else ...[
                             ...rolls.map((roll) {
-                              final selected = _selectedRolls.contains(roll.rollIdentifier);
-                              return Material(
-                                color: Colors.transparent,
-                                child: CheckboxListTile(
-                                  value: selected,
-                                  activeColor: AppColors.primary,
-                                  onChanged: (val) => setState(() {
-                                    if (val == true) {
-                                      _selectedRolls.add(roll.rollIdentifier);
-                                    } else {
-                                      _selectedRolls.remove(roll.rollIdentifier);
-                                    }
-                                  }),
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(
-                                    roll.rollIdentifier.isNotEmpty
-                                        ? roll.rollIdentifier
-                                        : roll.id,
-                                    style: const TextStyle(
-                                      color: Color(0xFF67E8F9),
-                                      fontFamily: 'monospace',
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                    ),
+                              final rollId = roll.rollIdentifier.isNotEmpty
+                                  ? roll.rollIdentifier
+                                  : roll.id;
+                              final conflictLabel = _getRollDefectConflictInfo(roll);
+                              final isConflict = conflictLabel != null;
+                              final selected = _selectedRolls.contains(rollId);
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                decoration: BoxDecoration(
+                                  color: isConflict
+                                      ? const Color(0x1F0F172A)
+                                      : selected
+                                          ? const Color(0x1E3B82F6)
+                                          : const Color(0x0AFFFFFF),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isConflict
+                                        ? const Color(0x33EF4444)
+                                        : selected
+                                            ? const Color(0x663B82F6)
+                                            : const Color(0x1F334155),
                                   ),
-                                  subtitle: Text(
-                                    'Raw Material: ${selectedMaterial?.name ?? ''} · ${roll.currentQuantity} / ${roll.initialQuantity} units — ${roll.status}',
-                                    style: const TextStyle(
-                                      color: AppColors.mutedText,
-                                      fontSize: 11,
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: CheckboxListTile(
+                                    value: isConflict ? false : selected,
+                                    activeColor: AppColors.primary,
+                                    onChanged: isConflict
+                                        ? null
+                                        : (val) => setState(() {
+                                            if (val == true) {
+                                              _selectedRolls.add(rollId);
+                                            } else {
+                                              _selectedRolls.remove(rollId);
+                                            }
+                                          }),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 2,
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            rollId,
+                                            style: TextStyle(
+                                              color: isConflict
+                                                  ? const Color(0xFF64748B)
+                                                  : const Color(0xFF67E8F9),
+                                              fontFamily: 'monospace',
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                              decoration: isConflict
+                                                  ? TextDecoration.lineThrough
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isConflict)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0x26EF4444),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              border: Border.all(
+                                                color: const Color(0x4DEF4444),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              conflictLabel,
+                                              style: const TextStyle(
+                                                color: Color(0xFFF87171),
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Raw Material: ${selectedMaterial?.name ?? ''} · ${roll.currentQuantity} / ${roll.initialQuantity} units — ${roll.status}',
+                                          style: const TextStyle(
+                                            color: AppColors.mutedText,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        if (isConflict)
+                                          const Padding(
+                                            padding: EdgeInsets.only(top: 3),
+                                            child: Text(
+                                              'Already reported as defect. Delete or resolve prior report to re-select.',
+                                              style: TextStyle(
+                                                color: Color(0xFFF87171),
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               );
                             }),
+                            const Padding(
+                              padding: EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Review or adjust the rolls selected for this defect report. Rolls with active defect reports cannot be re-selected.',
+                                style: TextStyle(
+                                  color: AppColors.mutedText,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ],
                     ),

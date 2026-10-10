@@ -141,6 +141,12 @@ namespace ManufacturingCoordinator.Api.Services
             }
             if (legacy != null) legacy.Status = InventoryStatus.Available;
 
+            // If all quarantine holds for this defect report are now released, mark the defect report as Resolved
+            if (quarantine.DefectReport != null && !await _db.Quarantines.AnyAsync(q => q.Id != id && q.DefectReportId == quarantine.DefectReportId && q.Status == QuarantineStatus.Active))
+            {
+                quarantine.DefectReport.Status = DefectStatus.Resolved;
+            }
+
             if (!string.IsNullOrWhiteSpace(resolutionNote))
             {
                 quarantine.Reason = $"{quarantine.Reason} | Resolution: {resolutionNote.Trim()}";
@@ -219,6 +225,21 @@ namespace ManufacturingCoordinator.Api.Services
             await _db.SaveChangesAsync();
 
             return ToDto(quarantine);
+        }
+
+        public async Task<IReadOnlyList<QuarantineDto>> ReleaseAllForDefectAsync(Guid defectId, string? resolutionNote, string? resolvedBy)
+        {
+            var activeQuarantines = await _db.Quarantines
+                .Where(q => q.DefectReportId == defectId && q.Status == QuarantineStatus.Active)
+                .ToListAsync();
+
+            var releasedList = new List<QuarantineDto>();
+            foreach (var q in activeQuarantines)
+            {
+                var released = await ReleaseAsync(q.Id, resolutionNote, resolvedBy);
+                if (released != null) releasedList.Add(released);
+            }
+            return releasedList;
         }
 
         private static bool HasExactIdentifier(string value, string identifier) =>

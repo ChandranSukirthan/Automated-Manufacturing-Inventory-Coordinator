@@ -15,6 +15,7 @@ vi.mock('../../services/inventoryService', () => ({
     getAlerts: vi.fn(),
     createAlert: vi.fn(),
     triggerWorkflow: vi.fn(),
+    updateAlertStatus: vi.fn(),
   },
 }));
 
@@ -114,5 +115,21 @@ describe('ReplenishmentRequestPage', () => {
 
     await waitFor(() => expect(inventoryService.getStockLevels).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole('option', { name: /RM-STEEL-001/i })).toBeInTheDocument();
+  });
+
+  it('allows worker to dismiss an active alert to edit the requested quantity', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    inventoryService.getAlerts
+      .mockResolvedValueOnce([{ id: 9, sku: criticalMaterial.skuCode, quantityRequested: 800, status: 'Pending' }])
+      .mockResolvedValueOnce([]);
+    inventoryService.updateAlertStatus.mockResolvedValue(true);
+
+    renderPage();
+    const dismissBtn = await screen.findByRole('button', { name: /Dismiss \/ Clear to edit/i });
+    expect(dismissBtn).toBeInTheDocument();
+    fireEvent.click(dismissBtn);
+
+    await waitFor(() => expect(inventoryService.updateAlertStatus).toHaveBeenCalledWith(9, 'Dismissed'));
+    expect(await screen.findByRole('button', { name: /Submit and start AI workflow/i })).toBeInTheDocument();
   });
 });

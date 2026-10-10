@@ -112,6 +112,29 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         /// <summary>
+        /// DELETE /api/procurement/{id} or /api/procurement-requests/{id} — Cancel and remove an unfulfilled procurement request.
+        /// </summary>
+        [HttpDelete("{id:int}")]
+        [HttpDelete("/api/procurement-requests/{id:int}")]
+        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> DeleteRequest(int id)
+        {
+            try
+            {
+                var deleted = await _procurementService.DeleteRequestAsync(id);
+                if (!deleted) return NotFound(new { message = $"Procurement request {id} not found." });
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// POST /api/procurement/{id}/create-draft-po — Create Draft PO from a specific validated candidate.
         /// </summary>
         [HttpPost("{id:int}/create-draft-po")]

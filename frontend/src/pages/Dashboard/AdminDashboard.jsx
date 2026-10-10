@@ -57,14 +57,25 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
+  // Status normalizers to capture AI workflows & standard PO states
+  const isPending = (status) => {
+    const s = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+    return s === 'pendingapproval' || s === 'waitingforapproval' || s === 'pending';
+  };
+  const isApproved = (status) => String(status || '').toLowerCase().replace(/[^a-z]/g, '') === 'approved';
+  const isDraft = (status) => String(status || '').toLowerCase().replace(/[^a-z]/g, '') === 'draft';
+  const isRejected = (status) => String(status || '').toLowerCase().replace(/[^a-z]/g, '') === 'rejected';
+  const isRevision = (status) => String(status || '').toLowerCase().replace(/[^a-z]/g, '') === 'revisionrequested';
+  const isSent = (status) => String(status || '').toLowerCase().replace(/[^a-z]/g, '') === 'sent';
+
   // 13 Metrics required for Supply Chain Manager
   const totalOrders = orders.length;
-  const draftOrders = orders.filter((o) => o.status === 'Draft');
-  const pendingOrders = orders.filter((o) => o.status === 'PendingApproval');
-  const approvedOrders = orders.filter((o) => o.status === 'Approved');
-  const rejectedOrders = orders.filter((o) => o.status === 'Rejected');
-  const revisionOrders = orders.filter((o) => o.status === 'RevisionRequested');
-  const sentOrders = orders.filter((o) => o.status === 'Sent');
+  const draftOrders = orders.filter((o) => isDraft(o.status));
+  const pendingOrders = orders.filter((o) => isPending(o.status));
+  const approvedOrders = orders.filter((o) => isApproved(o.status));
+  const rejectedOrders = orders.filter((o) => isRejected(o.status));
+  const revisionOrders = orders.filter((o) => isRevision(o.status));
+  const sentOrders = orders.filter((o) => isSent(o.status));
 
   const totalPurchaseValue = orders.filter(o => (o.currency || 'LKR').toUpperCase() === 'LKR').reduce((sum, o) => sum + (o.totalCost || 0), 0);
   const pendingApprovalAmount = pendingOrders.filter(o => (o.currency || 'LKR').toUpperCase() === 'LKR').reduce((sum, o) => sum + (o.totalCost || 0), 0);

@@ -7,8 +7,10 @@ namespace ManufacturingCoordinator.Api.Interfaces
 {
     public interface IMaintenanceService
     {
+        Task<List<MaintenanceLogDto>> GetAllAsync();
         Task<List<MaintenanceLogDto>> GetByMachineIdAsync(Guid machineId);
         Task<MaintenanceLogDto> CreateAsync(CreateMaintenanceLogDto dto);
         Task<MaintenanceLogDto> UpdateAsync(Guid id, UpdateMaintenanceLogDto dto);
+        Task DeleteAsync(Guid id);
     }
 }

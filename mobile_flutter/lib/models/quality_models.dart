@@ -19,6 +19,8 @@ class QualitySummary {
   final int affectedInventory;
   final int releasedInventory;
 
+  int get quarantinedRolls => quarantinedBatches;
+
   factory QualitySummary.fromJson(Map<String, dynamic> json) => QualitySummary(
     totalDefects: json['totalDefects'] as int? ?? 0,
     highSeverityDefects: json['highSeverityDefects'] as int? ?? 0,

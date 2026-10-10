@@ -195,7 +195,13 @@ export default function PurchaseOrderList() {
         if (!matchesSearch) return false;
 
         if (statusFilter !== 'all') {
-          if (o.status.toLowerCase() !== statusFilter.toLowerCase()) return false;
+          const cleanStatus = (o.status || '').toLowerCase().replace(/[^a-z]/g, '');
+          const cleanFilter = statusFilter.toLowerCase().replace(/[^a-z]/g, '');
+          if (cleanFilter === 'pendingapproval') {
+            if (cleanStatus !== 'pendingapproval' && cleanStatus !== 'waitingforapproval' && cleanStatus !== 'pending') return false;
+          } else if (cleanStatus !== cleanFilter) {
+            return false;
+          }
         }
 
         if (supplierFilter !== 'all') {
@@ -241,9 +247,14 @@ export default function PurchaseOrderList() {
     return filteredOrders.slice(start, start + itemsPerPage);
   }, [filteredOrders, currentPage]);
 
+  const isPending = (status) => {
+    const s = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+    return s === 'pendingapproval' || s === 'waitingforapproval' || s === 'pending';
+  };
+
   // Top Metrics
   const totalCount = orders.length;
-  const pendingCount = orders.filter((o) => o.status === 'PendingApproval').length;
+  const pendingCount = orders.filter((o) => isPending(o.status)).length;
   const approvedSentCount = orders.filter(
     (o) => o.status === 'Approved' || o.status === 'Sent' || o.status === 'Payment'
   ).length;

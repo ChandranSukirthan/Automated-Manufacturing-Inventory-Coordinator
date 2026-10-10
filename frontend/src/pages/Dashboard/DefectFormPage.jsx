@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -68,6 +68,7 @@ export default function DefectFormPage() {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [rawMaterials, setRawMaterials] = useState([]);
   const [inventoryRolls, setInventoryRolls] = useState([]);
+  const [existingDefects, setExistingDefects] = useState([]);
   const [selectedInventory, setSelectedInventory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingInventory, setLoadingInventory] = useState(true);
@@ -80,14 +81,16 @@ export default function DefectFormPage() {
   useEffect(() => {
     const loadInventory = async () => {
       try {
-        const [items, materials, rolls] = await Promise.all([
+        const [items, materials, rolls, defects] = await Promise.all([
           inventoryService.getItems(),
           inventoryService.getRawMaterials(),
           inventoryService.getRolls(),
+          defectService.getAll().catch(() => []),
         ]);
         setInventoryItems(items || []);
         setRawMaterials(materials || []);
         setInventoryRolls(Array.from(new Map((rolls || []).map((roll) => [roll.rollIdentifier, { ...roll, id: roll.rollIdentifier }])).values()));
+        setExistingDefects(Array.isArray(defects) ? defects : []);
       } catch (err) {
         setError(parseErrorMessage(err, 'Unable to load FloorWorker inventory.'));
       } finally {
@@ -124,6 +127,36 @@ export default function DefectFormPage() {
     load();
   }, [id, isEdit, inventoryRolls, inventoryItems, rawMaterials]);
 
+  // Active defects map: rolls that already have an Open or InReview defect report
+  const activeDefectRollsMap = useMemo(() => {
+    const map = new Map();
+    (existingDefects || []).forEach((d) => {
+      if (isEdit && d.id === id) return;
+      const statusUpper = String(d.status || '').toUpperCase();
+      if (statusUpper === 'RESOLVED' || statusUpper === 'CLOSED') return;
+
+      const affected = Array.isArray(d.affectedInventory) ? d.affectedInventory : [];
+      affected.forEach((rollId) => {
+        if (rollId && rollId.trim()) {
+          map.set(rollId.trim().toUpperCase(), d);
+        }
+      });
+    });
+    return map;
+  }, [existingDefects, isEdit, id]);
+
+  const getRollDefectConflictInfo = (roll) => {
+    const rollId = (roll.rollIdentifier || roll.id || '').trim().toUpperCase();
+    const existing = activeDefectRollsMap.get(rollId);
+    if (existing) {
+      return `Active Defect (${existing.status || 'Open'})`;
+    }
+    if (roll.status === 'Quarantined') {
+      return 'Quarantined';
+    }
+    return null;
+  };
+
   const createdMaterials = getCreatedMaterials(inventoryItems, rawMaterials);
   const inspectableMaterials = createdMaterials.filter((material) =>
     inventoryRolls.some((roll) => roll.rawMaterialId === material.id)
@@ -147,6 +180,16 @@ export default function DefectFormPage() {
     if (!form.skuCode) return 'Inventory roll SKU is required.';
     if (requireInventory && selectedInventory.length === 0) {
       return 'Select at least one inventory roll or click "Activate Agent" to evaluate affected rolls.';
+    }
+    for (const rollId of selectedInventory) {
+      const cleanId = rollId.trim().toUpperCase();
+      if (activeDefectRollsMap.has(cleanId)) {
+        return `Inventory roll "${rollId}" already has an active defect report. It cannot be reported again until the previous report is resolved or deleted.`;
+      }
+      const matched = inventoryRolls.find((r) => (r.rollIdentifier || r.id || '').toUpperCase() === cleanId);
+      if (matched?.status === 'Quarantined') {
+        return `Inventory roll "${rollId}" is already quarantined and cannot be reported again.`;
+      }
     }
     if (!form.description.trim()) return 'Description is required.';
     return '';
@@ -199,10 +242,18 @@ export default function DefectFormPage() {
       const recommendation = await defectService.analyzeWithAi(payload);
       setAiRecommendation(recommendation);
 
-      // Auto-select recommended rolls if provided by the agent
+      // Auto-select recommended rolls if provided by the agent (excluding any rolls already in active defect reports or quarantined)
       if (recommendation?.affectedInventory && Array.isArray(recommendation.affectedInventory)) {
+        const availableRecommended = recommendation.affectedInventory.filter((rollId) => {
+          const cleanId = (rollId || '').trim().toUpperCase();
+          if (activeDefectRollsMap.has(cleanId)) return false;
+          const matched = inventoryRolls.find((r) => (r.rollIdentifier || r.id || '').toUpperCase() === cleanId);
+          if (matched?.status === 'Quarantined') return false;
+          return true;
+        });
+
         setSelectedInventory((prev) => {
-          const combined = Array.from(new Set([...prev, ...recommendation.affectedInventory]));
+          const combined = Array.from(new Set([...prev, ...availableRecommended]));
           return combined;
         });
       }
@@ -320,8 +371,8 @@ export default function DefectFormPage() {
           />
         </label>
 
-        {/* Rolls Selection Section (Displayed when AI recommendation is received or when editing) */}
-        {(aiRecommendation || isEdit) && (
+        {/* Rolls Selection Section (Displayed only after AI Agent activation or in edit mode) */}
+        {(Boolean(aiRecommendation) || isEdit) && (
           <div className="pt-2 border-t border-slate-800/80">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
               Select Inventory Rolls
@@ -332,41 +383,67 @@ export default function DefectFormPage() {
                   No current inventory rolls found for this SKU.
                 </p>
               ) : (
-                skuRolls.map((roll) => (
-                  <label
-                    key={roll.id}
-                    className={`flex gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-all ${
-                      selectedInventory.includes(roll.id)
-                        ? 'bg-blue-600/15 border-blue-500/40 text-white'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-200 hover:border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedInventory.includes(roll.id)}
-                      onChange={(event) =>
-                        setSelectedInventory((current) =>
-                          event.target.checked
-                            ? [...current, roll.id]
-                            : current.filter((v) => v !== roll.id)
-                        )
-                      }
-                      className="mt-1 accent-blue-500 w-4 h-4 rounded"
-                    />
-                    <span className="min-w-0">
-                      <span className="block font-mono text-cyan-300 font-bold truncate">
-                        {roll.rollIdentifier || roll.id}
+                skuRolls.map((roll) => {
+                  const conflictLabel = getRollDefectConflictInfo(roll);
+                  const isConflict = Boolean(conflictLabel);
+                  const isSelected = selectedInventory.includes(roll.id);
+
+                  return (
+                    <label
+                      key={roll.id}
+                      className={`flex gap-3 rounded-xl border p-3 text-sm transition-all ${
+                        isConflict
+                          ? 'bg-slate-950/70 border-rose-900/30 text-slate-500 cursor-not-allowed opacity-75'
+                          : isSelected
+                          ? 'bg-blue-600/15 border-blue-500/40 text-white cursor-pointer'
+                          : 'bg-slate-950/40 border-slate-800 text-slate-200 hover:border-slate-700 cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={isConflict}
+                        checked={isSelected}
+                        onChange={(event) => {
+                          if (isConflict) return;
+                          setSelectedInventory((current) =>
+                            event.target.checked
+                              ? [...current, roll.id]
+                              : current.filter((v) => v !== roll.id)
+                          );
+                        }}
+                        className={`mt-1 w-4 h-4 rounded ${
+                          isConflict
+                            ? 'cursor-not-allowed accent-slate-600'
+                            : 'cursor-pointer accent-blue-500'
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`block font-mono font-bold truncate ${isConflict ? 'text-slate-400 line-through' : 'text-cyan-300'}`}>
+                            {roll.rollIdentifier || roll.id}
+                          </span>
+                          {isConflict && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-rose-500/15 text-rose-400 border border-rose-500/30 whitespace-nowrap">
+                              {conflictLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className="block text-xs text-slate-400 mt-0.5">
+                          Batch: {roll.batchId || 'Unassigned'} · Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units — {roll.status}
+                        </span>
+                        {isConflict && (
+                          <span className="block text-[11px] text-rose-400/90 mt-1">
+                            Already reported as defect. Delete or resolve prior report to re-select.
+                          </span>
+                        )}
                       </span>
-                      <span className="block text-xs text-slate-400 mt-0.5">
-                        Batch: {roll.batchId || 'Unassigned'} · Raw Material: {form.rawMaterialName} · {roll.currentQuantity} / {roll.initialQuantity} units — {roll.status}
-                      </span>
-                    </span>
-                  </label>
-                ))
+                    </label>
+                  );
+                })
               )}
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              Review or adjust the rolls selected for this defect report.
+              Review or adjust the rolls selected for this defect report. Rolls with active defect reports cannot be re-selected.
             </p>
           </div>
         )}

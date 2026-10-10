@@ -98,7 +98,10 @@ class ApiClient {
     String? rootUrl,
   ]) async {
     final session = await storage.read();
-    final headers = <String, String>{'Content-Type': 'application/json'};
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'X-Platform': 'mobile',
+    };
     if (session != null && session.accessToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer ${session.accessToken}';
     }

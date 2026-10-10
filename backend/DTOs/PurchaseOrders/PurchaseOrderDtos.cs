@@ -60,9 +60,8 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         [MaxLength(10)]
         public string Currency { get; set; } = "LKR";
 
-        [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Budget limit must be greater than zero.")]
-        public decimal BudgetLimit { get; set; }
+        [Range(0, double.MaxValue, ErrorMessage = "Budget limit must be greater than or equal to zero.")]
+        public decimal BudgetLimit { get; set; } = 0m;
 
         [MaxLength(1000)]
         public string? Notes { get; set; }
@@ -75,6 +74,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
         [Required]
         [MinLength(1, ErrorMessage = "At least one order line is required.")]
+        [MaxLength(100, ErrorMessage = "A purchase order cannot contain more than 100 order lines.")]
         public List<OrderLineDto> Lines { get; set; } = new();
     }
 
@@ -95,6 +95,7 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
         [Required]
         [MinLength(1, ErrorMessage = "At least one order line is required.")]
+        [MaxLength(100, ErrorMessage = "A purchase order cannot contain more than 100 order lines.")]
         public List<OrderLineDto> Lines { get; set; } = new();
     }
 
@@ -158,6 +159,8 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
         public List<OrderLineResponseDto> OrderLines { get; set; } = new();
         public List<PurchaseOrderApprovalDto> Approvals { get; set; } = new();
         public List<PaymentTransactionDto> Transactions { get; set; } = new();
+        public string? WorkflowId { get; set; }
+        public bool IsAutoTriggered { get; set; }
         public string? QualitySafetyStatus { get; set; }
         public string? ManualResolutionStatus { get; set; }
         public string? ManualResolutionNote { get; set; }

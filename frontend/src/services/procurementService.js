@@ -133,6 +133,11 @@ export const procurementService = {
       `/procurement/${id}/generate-draft-po?candidateId=${candidateId}`
     );
     return response.data;
+  },
+
+  async deleteRequest(id) {
+    const response = await api.delete(`/procurement/${id}`);
+    return response.data;
   }
 };
 

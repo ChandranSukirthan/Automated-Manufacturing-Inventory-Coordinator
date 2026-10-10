@@ -17,6 +17,15 @@ public sealed class SupplierQuotesController(ApplicationDbContext db) : Controll
     [HttpPost]
     public async Task<IActionResult> Create(int supplierId, SupplierMaterialQuote quote)
     {
+        if (quote.UnitPrice <= 0)
+            return BadRequest(new { message = "Unit price must be greater than zero." });
+        if (quote.MinimumOrderQuantity < 0)
+            return BadRequest(new { message = "Minimum order quantity cannot be negative." });
+        if (quote.LeadTimeDays < 0)
+            return BadRequest(new { message = "Lead time cannot be negative." });
+        if (quote.AvailableQuantity < 0)
+            return BadRequest(new { message = "Available quantity cannot be negative." });
+
         if (!await db.Suppliers.AnyAsync(s => s.Id == supplierId && s.IsActive) ||
             !await db.RawMaterials.AnyAsync(m => m.Id == quote.RawMaterialId))
             return BadRequest(new { message = "Choose an active supplier and an existing material." });
@@ -31,6 +40,15 @@ public sealed class SupplierQuotesController(ApplicationDbContext db) : Controll
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int supplierId, int id, SupplierMaterialQuote quote)
     {
+        if (quote.UnitPrice <= 0)
+            return BadRequest(new { message = "Unit price must be greater than zero." });
+        if (quote.MinimumOrderQuantity < 0)
+            return BadRequest(new { message = "Minimum order quantity cannot be negative." });
+        if (quote.LeadTimeDays < 0)
+            return BadRequest(new { message = "Lead time cannot be negative." });
+        if (quote.AvailableQuantity < 0)
+            return BadRequest(new { message = "Available quantity cannot be negative." });
+
         var existing = await db.SupplierMaterialQuotes.SingleOrDefaultAsync(q => q.Id == id && q.SupplierId == supplierId);
         if (existing == null) return NotFound();
         if (quote.RawMaterialId != existing.RawMaterialId)

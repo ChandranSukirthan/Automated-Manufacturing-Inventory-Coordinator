@@ -93,6 +93,50 @@ namespace ManufacturingCoordinator.Api.Services
 
             var affectedInventory = dto.AffectedInventory?.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList()
                 ?? new List<string>();
+
+            // Ensure no selected roll is already associated with an active (open/in-review) defect report or active quarantine
+            if (affectedInventory.Count > 0)
+            {
+                var activeReports = await _db.DefectReports
+                    .Where(d => d.Status != DefectStatus.Resolved && d.Status != DefectStatus.Closed)
+                    .ToListAsync();
+
+                var activeQuarantineRolls = await _db.Quarantines
+                    .Where(q => q.Status == QuarantineStatus.Active)
+                    .Select(q => q.InventoryRollId.ToUpper())
+                    .ToListAsync();
+                var activeQuarantineSet = activeQuarantineRolls.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var conflictingRolls = new List<string>();
+                foreach (var rollId in affectedInventory)
+                {
+                    var cleanId = rollId.Trim().ToUpperInvariant();
+                    if (activeQuarantineSet.Contains(cleanId))
+                    {
+                        conflictingRolls.Add(rollId);
+                        continue;
+                    }
+
+                    foreach (var activeReport in activeReports)
+                    {
+                        var existingRolls = DeserializeInventory(activeReport.AffectedInventoryJson);
+                        if (existingRolls.Any(r => r.Trim().Equals(cleanId, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            conflictingRolls.Add(rollId);
+                            break;
+                        }
+                    }
+                }
+
+                if (conflictingRolls.Count > 0)
+                {
+                    var rollListStr = string.Join(", ", conflictingRolls.Distinct());
+                    throw new AuthException(
+                        $"Inventory roll(s) [{rollListStr}] already have an active defect report or quarantine. A new defect report cannot be created for these rolls until the existing report is resolved or deleted.",
+                        HttpStatusCode.Conflict);
+                }
+            }
+
             // Legacy batch reports retain the one-report-per-batch rule. A
             // floor-worker SKU report is an independent incident and may be
             // submitted before a physical roll or production batch exists.
@@ -199,7 +243,50 @@ namespace ManufacturingCoordinator.Api.Services
             report.Status = status;
             if (dto.AffectedInventory != null)
             {
-                report.AffectedInventoryJson = JsonSerializer.Serialize(dto.AffectedInventory);
+                var newRolls = dto.AffectedInventory.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+                if (newRolls.Count > 0)
+                {
+                    var otherActiveReports = await _db.DefectReports
+                        .Where(d => d.Id != id && d.Status != DefectStatus.Resolved && d.Status != DefectStatus.Closed)
+                        .ToListAsync();
+
+                    var activeQuarantineRolls = await _db.Quarantines
+                        .Where(q => q.DefectReportId != id && q.Status == QuarantineStatus.Active)
+                        .Select(q => q.InventoryRollId.ToUpper())
+                        .ToListAsync();
+                    var activeQuarantineSet = activeQuarantineRolls.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    var conflictingRolls = new List<string>();
+                    foreach (var rollId in newRolls)
+                    {
+                        var cleanId = rollId.Trim().ToUpperInvariant();
+                        if (activeQuarantineSet.Contains(cleanId))
+                        {
+                            conflictingRolls.Add(rollId);
+                            continue;
+                        }
+
+                        foreach (var otherReport in otherActiveReports)
+                        {
+                            var existingRolls = DeserializeInventory(otherReport.AffectedInventoryJson);
+                            if (existingRolls.Any(r => r.Trim().Equals(cleanId, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                conflictingRolls.Add(rollId);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (conflictingRolls.Count > 0)
+                    {
+                        var rollListStr = string.Join(", ", conflictingRolls.Distinct());
+                        throw new AuthException(
+                            $"Inventory roll(s) [{rollListStr}] already have an active defect report or quarantine. A defect report cannot be assigned to these rolls until the existing report is resolved or deleted.",
+                            HttpStatusCode.Conflict);
+                    }
+                }
+
+                report.AffectedInventoryJson = JsonSerializer.Serialize(newRolls);
             }
 
             await _db.SaveChangesAsync();
@@ -224,9 +311,15 @@ namespace ManufacturingCoordinator.Api.Services
             var report = await _db.DefectReports.FirstOrDefaultAsync(d => d.Id == id);
             if (report == null) return false;
 
-            if (await _db.Quarantines.AnyAsync(q => q.DefectReportId == id))
+            if (await _db.Quarantines.AnyAsync(q => q.DefectReportId == id && q.Status == QuarantineStatus.Active))
             {
-                throw new AuthException("A defect with quarantine history cannot be deleted.", HttpStatusCode.Conflict);
+                throw new AuthException("Cannot delete defect report while items are actively held in quarantine. Please release the quarantine hold first.", HttpStatusCode.Conflict);
+            }
+
+            var historicalQuarantines = await _db.Quarantines.Where(q => q.DefectReportId == id).ToListAsync();
+            if (historicalQuarantines.Count > 0)
+            {
+                _db.Quarantines.RemoveRange(historicalQuarantines);
             }
 
             _db.DefectReports.Remove(report);

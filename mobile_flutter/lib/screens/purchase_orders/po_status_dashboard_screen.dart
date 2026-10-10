@@ -7,14 +7,17 @@ import 'po_details_screen.dart';
 import 'po_list_screen.dart';
 import 'procurement_details_screen.dart';
 import 'supplier_status_screen.dart';
+import 'ai_workflow_status_screen.dart';
 
 class POStatusDashboardScreen extends StatefulWidget {
   const POStatusDashboardScreen({
     required this.service,
+    this.onNavigateTab,
     super.key,
   });
 
   final PurchaseOrderService service;
+  final ValueChanged<int>? onNavigateTab;
 
   @override
   State<POStatusDashboardScreen> createState() => _POStatusDashboardScreenState();
@@ -26,6 +29,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
   List<PurchaseOrderSummary> _orders = [];
   List<SupplierSummary> _suppliers = [];
   List<StockAlertItem> _stockAlerts = [];
+  List<AgentWorkflowItem> _agentWorkflows = [];
 
   @override
   void initState() {
@@ -43,12 +47,14 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
       final orders = await widget.service.getPurchaseOrders();
       final suppliers = await widget.service.getSuppliers();
       final alerts = await widget.service.getStockAlerts();
+      final workflows = await widget.service.getAgentWorkflows().catchError((_) => <AgentWorkflowItem>[]);
 
       if (mounted) {
         setState(() {
           _orders = orders;
           _suppliers = suppliers;
           _stockAlerts = alerts;
+          _agentWorkflows = workflows;
           _loading = false;
         });
       }
@@ -91,12 +97,27 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
 
     // Calculations matching React Web AdminDashboard.jsx
     final totalOrders = _orders.length;
+    bool isPending(String? st) {
+      if (st == null) return false;
+      final s = st.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+      return s == 'pendingapproval' || s == 'waitingforapproval' || s == 'pending';
+    }
+    bool isApproved(String? st) {
+      if (st == null) return false;
+      final s = st.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+      return s == 'approved' || s == 'payment' || s == 'paymentpending';
+    }
+
     final draftOrders = _orders.where((o) => o.status.toLowerCase() == 'draft').toList();
-    final pendingOrders = _orders.where((o) => o.status.toLowerCase() == 'pendingapproval').toList();
-    final approvedOrders = _orders.where((o) => o.status.toLowerCase() == 'approved').toList();
+    final pendingOrders = _orders.where((o) => isPending(o.status)).toList();
+    final approvedOrders = _orders.where((o) => isApproved(o.status)).toList();
     final rejectedOrders = _orders.where((o) => o.status.toLowerCase() == 'rejected').toList();
     final revisionOrders = _orders.where((o) => o.status.toLowerCase() == 'revisionrequested').toList();
     final sentOrders = _orders.where((o) => o.status.toLowerCase() == 'sent').toList();
+
+    final pendingWorkflows = _agentWorkflows.where((w) =>
+        w.status.toLowerCase().contains('waiting') ||
+        w.approvalStatus.toLowerCase().contains('pending')).toList();
 
     final totalPurchaseValue = _orders.where((o) => o.currency.toUpperCase() == 'LKR').fold<double>(0, (sum, o) => sum + o.totalCost);
     final pendingApprovalAmount = pendingOrders.where((o) => o.currency.toUpperCase() == 'LKR').fold<double>(0, (sum, o) => sum + o.totalCost);
@@ -154,7 +175,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
               const SizedBox(height: 16),
 
               // ── 5. Urgent Executive Approvals Queue ──
-              _buildApprovalsQueue(cardBg, amberAccent, pendingOrders),
+              _buildApprovalsQueue(cardBg, amberAccent, pendingOrders, pendingWorkflows),
               const SizedBox(height: 16),
 
               // ── 6. Low Stock Replenishment Alerts ──
@@ -305,7 +326,13 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
           icon: Icons.payments_outlined,
           color: cyanAccent,
           cardBg: cardBg,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => POListScreen(service: widget.service))),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(1);
+            } else {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => POListScreen(service: widget.service)));
+            }
+          },
         ),
         _buildKpiCard(
           title: 'Pending Approvals',
@@ -323,7 +350,13 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
           icon: Icons.business_outlined,
           color: emeraldAccent,
           cardBg: cardBg,
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SupplierStatusScreen(service: widget.service))),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(4);
+            } else {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => SupplierStatusScreen(service: widget.service)));
+            }
+          },
         ),
         _buildKpiCard(
           title: 'Low Stock Alerts',
@@ -332,7 +365,13 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
           icon: Icons.warning_amber_rounded,
           color: lowStockCount > 0 ? roseAccent : emeraldAccent,
           cardBg: cardBg,
-          onTap: () => _showLowStockReorderDialog(),
+          onTap: () {
+            if (widget.onNavigateTab != null) {
+              widget.onNavigateTab!(6);
+            } else {
+              _showLowStockReorderDialog();
+            }
+          },
         ),
       ],
     );
@@ -446,7 +485,13 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                 desc: 'Market research & MOQ',
                 icon: Icons.auto_awesome,
                 color: const Color(0xFFA855F7),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProcurementDetailsScreen(service: widget.service))),
+                onTap: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(3);
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => ProcurementDetailsScreen(service: widget.service)));
+                  }
+                },
               ),
               _buildActionButton(
                 label: '+ Create PO',
@@ -475,6 +520,24 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                 icon: Icons.credit_card,
                 color: const Color(0xFF6366F1),
                 onTap: _showStripeSettlementDialog,
+              ),
+              _buildActionButton(
+                label: 'AI Workflows',
+                desc: 'Replenishment activities',
+                icon: Icons.psychology_outlined,
+                color: const Color(0xFF06B6D4),
+                onTap: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(2);
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AIWorkflowStatusScreen(service: widget.service),
+                      ),
+                    ).then((_) => _loadData());
+                  }
+                },
               ),
             ],
           ),
@@ -608,7 +671,14 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
   }
 
   // ── Approvals Queue ──
-  Widget _buildApprovalsQueue(Color cardBg, Color amberAccent, List<PurchaseOrderSummary> pendingOrders) {
+  Widget _buildApprovalsQueue(
+    Color cardBg,
+    Color amberAccent,
+    List<PurchaseOrderSummary> pendingOrders,
+    List<AgentWorkflowItem> pendingWorkflows,
+  ) {
+    final totalPending = pendingOrders.length + pendingWorkflows.length;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -627,7 +697,7 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
                   Icon(Icons.pending_actions_rounded, color: amberAccent, size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    'Pending Approvals Queue (${pendingOrders.length})',
+                    'Pending Approvals Queue ($totalPending)',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ],
@@ -639,14 +709,113 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          if (pendingOrders.isEmpty)
+
+          if (pendingWorkflows.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Row(
+                children: [
+                  const Icon(Icons.auto_awesome, color: Color(0xFF06B6D4), size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'AI Replenishment Proposals (${pendingWorkflows.length})',
+                    style: const TextStyle(color: Color(0xFF06B6D4), fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            ...pendingWorkflows.take(3).map((wf) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF06B6D4).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF06B6D4).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                wf.workflowId,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                                ),
+                                child: Text(
+                                  wf.status,
+                                  style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            wf.objective,
+                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (wf.purchaseOrderId > 0) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PODetailsScreen(service: widget.service, poId: wf.purchaseOrderId),
+                            ),
+                          ).then((_) => _loadData());
+                        } else {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AIWorkflowStatusScreen(service: widget.service),
+                            ),
+                          ).then((_) => _loadData());
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(
+                        wf.purchaseOrderId > 0 ? 'Review PO' : 'Inspect',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (pendingOrders.isNotEmpty) const Divider(color: Colors.white12, height: 16),
+          ],
+
+          if (pendingOrders.isEmpty && pendingWorkflows.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12.0),
               child: Center(
-                child: Text('No orders waiting for executive approval.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                child: Text('No orders or replenishment workflows waiting for executive approval.', style: TextStyle(color: Colors.white38, fontSize: 12)),
               ),
             )
-          else
+          else if (pendingOrders.isNotEmpty)
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -790,7 +959,13 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
             children: [
               const Text('Recent Purchase Orders', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
               TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => POListScreen(service: widget.service))),
+                onPressed: () {
+                  if (widget.onNavigateTab != null) {
+                    widget.onNavigateTab!(1);
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => POListScreen(service: widget.service)));
+                  }
+                },
                 child: const Text('All Orders →', style: TextStyle(color: Color(0xFF5CC8F8), fontSize: 12)),
               ),
             ],
@@ -855,26 +1030,39 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
   // ── Helper Actions ──
 
   void _openPendingApprovals() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => POListScreen(service: widget.service),
-      ),
-    );
+    if (widget.onNavigateTab != null) {
+      widget.onNavigateTab!(2);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => POListScreen(service: widget.service),
+        ),
+      );
+    }
   }
 
   Future<void> _handleInstantReplenish(StockAlertItem alert) async {
     final qty = alert.quantityRequested > 0 ? alert.quantityRequested : 500;
+    const unitPrice = 3.50;
+    final totalCost = qty * unitPrice;
+    final budgetLimit = (totalCost * 1.5).clamp(5000.0, 10000000.0);
+    final activeSupplierId = _suppliers.where((s) => s.isActive).isNotEmpty
+        ? _suppliers.firstWhere((s) => s.isActive).id
+        : (_suppliers.isNotEmpty ? _suppliers.first.id : 1);
+
     try {
       final po = await widget.service.createPurchaseOrder({
-        'supplierId': _suppliers.isNotEmpty ? _suppliers.first.id : 1,
+        'supplierId': activeSupplierId,
+        'currency': 'LKR',
+        'budgetLimit': budgetLimit,
         'notes': 'Auto-replenish stock alert for SKU ${alert.sku}',
         'lines': [
           {
             'rawMaterialId': alert.rawMaterialId ?? 1,
             'quantity': qty.toDouble(),
-            'unitPrice': 3.50,
-            'totalPrice': qty * 3.50,
+            'unitPrice': unitPrice,
+            'totalPrice': totalCost,
           }
         ],
       });
@@ -1023,17 +1211,21 @@ class _POStatusDashboardScreenState extends State<POStatusDashboardScreen> {
     if (result == true) {
       final qty = double.tryParse(qtyController.text.trim()) ?? 1000;
       final price = double.tryParse(priceController.text.trim()) ?? 3.50;
+      final totalCost = qty * price;
+      final budgetLimit = (totalCost * 1.5).clamp(5000.0, 10000000.0);
 
       try {
         final po = await widget.service.createPurchaseOrder({
           'supplierId': selectedSupplierId,
+          'currency': 'LKR',
+          'budgetLimit': budgetLimit,
           'notes': notesController.text.trim(),
           'lines': [
             {
               'rawMaterialId': selectedMaterialId,
               'quantity': qty,
               'unitPrice': price,
-              'totalPrice': qty * price,
+              'totalPrice': totalCost,
             }
           ],
         });

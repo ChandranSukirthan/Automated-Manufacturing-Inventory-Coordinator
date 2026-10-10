@@ -12,7 +12,8 @@ import {
   User, 
   Loader2,
   X,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import AdminLayout from '../../components/Layout/RoleLayout';
 import machineService from '../../services/machineService';
@@ -114,6 +115,20 @@ export default function MaintenancePage() {
       setError(err.response?.data?.message || 'Failed to submit maintenance log.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteLog = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this maintenance record?')) return;
+    try {
+      await maintenanceService.delete(id);
+      setSuccess('Maintenance record deleted successfully.');
+      if (selectedMachineId) {
+        const updatedLogs = await maintenanceService.getByMachineId(selectedMachineId);
+        setLogs(updatedLogs);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete maintenance record.');
     }
   };
 
@@ -311,9 +326,18 @@ export default function MaintenancePage() {
                     <p className="text-sm text-slate-200 font-medium">{log.description}</p>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-950/40 px-3 py-1.5 rounded-xl border border-white/5 shrink-0 self-start sm:self-auto">
-                    <User className="w-3.5 h-3.5 text-brand-400" />
-                    <span>{log.performedBy}</span>
+                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-950/40 px-3 py-1.5 rounded-xl border border-white/5">
+                      <User className="w-3.5 h-3.5 text-brand-400" />
+                      <span>{log.performedBy}</span>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteLog(log.id)}
+                      title="Delete maintenance record"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/10 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}

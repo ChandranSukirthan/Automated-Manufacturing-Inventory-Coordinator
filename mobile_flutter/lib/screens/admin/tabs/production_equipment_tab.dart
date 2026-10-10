@@ -36,10 +36,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
   Future<void> _openShiftFormDialog([ShiftModel? shift]) async {
     final result = await showDialog<ShiftModel>(
       context: context,
-      builder: (_) => ShiftFormDialog(
-        shift: shift,
-        service: widget.service,
-      ),
+      builder: (_) => ShiftFormDialog(shift: shift, service: widget.service),
     );
     if (result != null && mounted) {
       await widget.onRefresh();
@@ -73,13 +70,17 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _selectedSection == 0 ? const Color(0xFF06B6D4) : Colors.transparent,
+                        color: _selectedSection == 0
+                            ? const Color(0xFF06B6D4)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Equipment (${widget.machines.length})',
                         style: TextStyle(
-                          color: _selectedSection == 0 ? const Color(0xFF0B0F19) : Colors.white70,
+                          color: _selectedSection == 0
+                              ? const Color(0xFF0B0F19)
+                              : Colors.white70,
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -95,13 +96,17 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _selectedSection == 1 ? const Color(0xFF06B6D4) : Colors.transparent,
+                        color: _selectedSection == 1
+                            ? const Color(0xFF06B6D4)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Production & Shifts (${widget.shifts.length})',
                         style: TextStyle(
-                          color: _selectedSection == 1 ? const Color(0xFF0B0F19) : Colors.white70,
+                          color: _selectedSection == 1
+                              ? const Color(0xFF0B0F19)
+                              : Colors.white70,
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -114,7 +119,10 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
           ),
           const SizedBox(height: 16),
 
-          if (_selectedSection == 0) ..._buildMachinesList() else ..._buildShiftsList(),
+          if (_selectedSection == 0)
+            ..._buildMachinesList()
+          else
+            ..._buildShiftsList(),
         ],
       ),
     );
@@ -156,7 +164,10 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                 ),
                 Text(
                   '${widget.machines.length} active machines registered',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -170,8 +181,13 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF06B6D4),
                 foregroundColor: const Color(0xFF0B0F19),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
@@ -194,7 +210,7 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
             padding: const EdgeInsets.only(bottom: 12),
             child: AdminCard(
               onTap: () async {
-                final changed = await Navigator.push(
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => MachineDetailScreen(
@@ -203,109 +219,140 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                     ),
                   ),
                 );
-                if (changed == true && mounted) {
+                if (mounted) {
                   widget.onRefresh();
                 }
               },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      machine.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                  StatusChip(status: machine.status),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Icon(Icons.location_on_outlined, color: Color(0xFF64748B), size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    machine.location,
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  ),
-                  const Spacer(),
-                  if (machine.isMaintenanceDue)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF78350F).withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'SERVICE DUE',
-                        style: TextStyle(
-                          color: Color(0xFFF59E0B),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          machine.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF064E3B).withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(4),
+                      StatusChip(status: machine.status),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        color: Color(0xFF64748B),
+                        size: 14,
                       ),
-                      child: const Text(
-                        'OK',
-                        style: TextStyle(
-                          color: Color(0xFF10B981),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
+                      const SizedBox(width: 4),
+                      Text(
+                        machine.location,
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
                         ),
                       ),
-                    ),
+                      const Spacer(),
+                      if (machine.isMaintenanceDue)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF78350F,
+                            ).withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'SERVICE DUE',
+                            style: TextStyle(
+                              color: Color(0xFFF59E0B),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF064E3B,
+                            ).withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'OK',
+                            style: TextStyle(
+                              color: Color(0xFF10B981),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  MetricGauge(
+                    label: 'Operational Uptime',
+                    value: machine.uptimeHours,
+                    maxValue: machine.maintenanceIntervalHours > 0
+                        ? machine.maintenanceIntervalHours
+                        : 100,
+                    unit: 'h / ${machine.maintenanceIntervalHours.toInt()}h',
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Uptime: ${machine.uptimeHours.toStringAsFixed(1)}h',
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        'Remaining: ${machine.remainingHours.toStringAsFixed(1)}h',
+                        style: TextStyle(
+                          color: machine.remainingHours < 20
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              MetricGauge(
-                label: 'Operational Uptime',
-                value: machine.uptimeHours,
-                maxValue: machine.maintenanceIntervalHours > 0 ? machine.maintenanceIntervalHours : 100,
-                unit: 'h / ${machine.maintenanceIntervalHours.toInt()}h',
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Uptime: ${machine.uptimeHours.toStringAsFixed(1)}h',
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  ),
-                  Text(
-                    'Remaining: ${machine.remainingHours.toStringAsFixed(1)}h',
-                    style: TextStyle(
-                      color: machine.remainingHours < 20 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }),
-  ];
-}
+            ),
+          );
+        }),
+    ];
+  }
 
   List<Widget> _buildShiftsList() {
     if (widget.shifts.isEmpty) {
-      return [const AdminCard(child: Text('No production shift is available. Create a shift or refresh the schedule.', style: TextStyle(color: Colors.white70)))];
+      return [
+        const AdminCard(
+          child: Text(
+            'No production shift is available. Create a shift or refresh the schedule.',
+            style: TextStyle(color: Colors.white70),
+          ),
+        ),
+      ];
     }
     final activeShift = widget.shifts.firstWhere(
       (s) => s.status == 'Active' || s.status == 'InProgress',
@@ -325,7 +372,11 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.factory_rounded, color: Color(0xFF06B6D4), size: 20),
+                    Icon(
+                      Icons.factory_rounded,
+                      color: Color(0xFF06B6D4),
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'Production Dashboard',
@@ -345,8 +396,14 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
             // Production Status Specs
             _specRow('Current Shift', activeShift.name),
             _specRow('Production Status', activeShift.status),
-            _specRow('Production Target', '${activeShift.targetOutput.toInt()} units'),
-            _specRow('Adjusted Output', '${activeShift.adjustedOutput.toInt()} units'),
+            _specRow(
+              'Production Target',
+              '${activeShift.targetOutput.toInt()} units',
+            ),
+            _specRow(
+              'Adjusted Output',
+              '${activeShift.adjustedOutput.toInt()} units',
+            ),
 
             const SizedBox(height: 12),
             const Divider(color: Color(0xFF334155), height: 1),
@@ -355,7 +412,11 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
             // Available Material Section
             const Row(
               children: [
-                Icon(Icons.inventory_2_outlined, color: Color(0xFF10B981), size: 16),
+                Icon(
+                  Icons.inventory_2_outlined,
+                  color: Color(0xFF10B981),
+                  size: 16,
+                ),
                 SizedBox(width: 6),
                 Text(
                   'Available Material',
@@ -396,7 +457,10 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
               foregroundColor: const Color(0xFF0B0F19),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               visualDensity: VisualDensity.compact,
-              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -411,10 +475,8 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
               final updated = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ShiftDetailScreen(
-                    shift: shift,
-                    service: widget.service,
-                  ),
+                  builder: (_) =>
+                      ShiftDetailScreen(shift: shift, service: widget.service),
                 ),
               );
               if (updated == true && mounted) {
@@ -443,11 +505,18 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.access_time_rounded, color: Color(0xFF64748B), size: 14),
+                    const Icon(
+                      Icons.access_time_rounded,
+                      color: Color(0xFF64748B),
+                      size: 14,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${shift.startTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)} - ${shift.endTime.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().substring(11, 16)}',
-                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 12,
+                      ),
                     ),
                     const Spacer(),
                     Text(
@@ -466,7 +535,10 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
                   children: [
                     Text(
                       'Production Status: ${shift.status}',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 11,
+                      ),
                     ),
                     Text(
                       'Adjusted Output: ${shift.adjustedOutput.toInt()}u',
@@ -492,7 +564,10 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+          Text(
+            label,
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+          ),
           Text(
             value,
             style: const TextStyle(
@@ -512,13 +587,18 @@ class _ProductionEquipmentTabState extends State<ProductionEquipmentTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(material, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+          Text(
+            material,
+            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12),
+          ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: const Color(0xFF064E3B).withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+              border: Border.all(
+                color: const Color(0xFF10B981).withValues(alpha: 0.4),
+              ),
             ),
             child: Text(
               quantity,

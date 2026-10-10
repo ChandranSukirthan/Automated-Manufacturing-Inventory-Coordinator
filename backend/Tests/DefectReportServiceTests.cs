@@ -214,4 +214,138 @@ public class DefectReportServiceTests
 
         Assert.Equal(["ROLL21", "ROLL22"], created.Select(item => item.InventoryRollId));
     }
+
+    [Fact]
+    public async Task CreateAsync_WhenRollAlreadyInActiveDefectReport_ThrowsConflictException()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        db.Batches.Add(new Batch
+        {
+            Id = "BATCH100",
+            ProductType = ProductType.Bottle,
+            InventoryRolls = new List<InventoryRoll>()
+        });
+        db.DefectReports.Add(new DefectReport
+        {
+            BatchId = "BATCH100",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.HIGH,
+            Description = "Active defect on roll",
+            Status = DefectStatus.Open,
+            AffectedInventoryJson = "[\"ROLL-ACTIVE-01\"]"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new DefectReportService(db);
+        var dto = new CreateDefectReportDto
+        {
+            BatchId = "BATCH100",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.MEDIUM,
+            Description = "Duplicate defect attempt on same roll",
+            AffectedInventory = ["ROLL-ACTIVE-01"],
+            Status = DefectStatus.Open
+        };
+
+        var ex = await Assert.ThrowsAsync<AuthException>(() => service.CreateAsync(dto, null));
+        Assert.Contains("already have an active defect report or quarantine", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPreviousDefectResolvedOrClosed_AllowsCreation()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        db.Batches.Add(new Batch
+        {
+            Id = "BATCH200",
+            ProductType = ProductType.Bottle,
+            InventoryRolls = new List<InventoryRoll>()
+        });
+        db.Batches.Add(new Batch
+        {
+            Id = "BATCH201",
+            ProductType = ProductType.Bottle,
+            InventoryRolls = new List<InventoryRoll>()
+        });
+        db.DefectReports.Add(new DefectReport
+        {
+            BatchId = "BATCH200",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.LOW,
+            Description = "Previously resolved defect",
+            Status = DefectStatus.Resolved,
+            AffectedInventoryJson = "[\"ROLL-RESOLVED-01\"]"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new DefectReportService(db);
+        var dto = new CreateDefectReportDto
+        {
+            BatchId = "BATCH201",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.HIGH,
+            Description = "New defect after resolution",
+            AffectedInventory = ["ROLL-RESOLVED-01"],
+            Status = DefectStatus.Open
+        };
+
+        var created = await service.CreateAsync(dto, null);
+        Assert.NotNull(created);
+        Assert.Contains("ROLL-RESOLVED-01", created.AffectedInventory);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WhenPreviousDefectDeleted_AllowsCreation()
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var db = new ApplicationDbContext(options);
+        db.Batches.Add(new Batch
+        {
+            Id = "BATCH300",
+            ProductType = ProductType.Bottle,
+            InventoryRolls = new List<InventoryRoll>()
+        });
+        var initialDefect = new DefectReport
+        {
+            BatchId = "BATCH300",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.MEDIUM,
+            Description = "Old defect to be deleted",
+            Status = DefectStatus.Open,
+            AffectedInventoryJson = "[\"ROLL-DELETED-01\"]"
+        };
+        db.DefectReports.Add(initialDefect);
+        await db.SaveChangesAsync();
+
+        var service = new DefectReportService(db);
+        // Delete the initial defect report
+        var deleted = await service.DeleteAsync(initialDefect.Id);
+        Assert.True(deleted);
+
+        // Now creating for the same roll should succeed
+        var dto = new CreateDefectReportDto
+        {
+            BatchId = "BATCH300",
+            ProductType = ProductType.Bottle,
+            Severity = DefectSeverity.LOW,
+            Description = "New defect after deletion",
+            AffectedInventory = ["ROLL-DELETED-01"],
+            Status = DefectStatus.Open
+        };
+
+        var created = await service.CreateAsync(dto, null);
+        Assert.NotNull(created);
+        Assert.Contains("ROLL-DELETED-01", created.AffectedInventory);
+    }
 }

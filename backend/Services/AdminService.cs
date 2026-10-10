@@ -124,6 +124,16 @@ namespace ManufacturingCoordinator.Api.Services
             if (user == null)
                 throw new AuthException("User not found.", HttpStatusCode.NotFound);
 
+            if (user.Role == UserRole.ITAdmin)
+            {
+                var otherActiveAdmins = await _db.Users
+                    .CountAsync(u => u.Role == UserRole.ITAdmin && u.IsActive && u.Id != id);
+                if (otherActiveAdmins == 0)
+                {
+                    throw new AuthException("Cannot deactivate the last active IT Admin account.", HttpStatusCode.BadRequest);
+                }
+            }
+
             user.IsActive = false;
             user.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
@@ -134,6 +144,16 @@ namespace ManufacturingCoordinator.Api.Services
             var user = await _db.Users.FindAsync(id);
             if (user == null)
                 throw new AuthException("User not found.", HttpStatusCode.NotFound);
+
+            if (user.Role == UserRole.ITAdmin && dto.Role != UserRole.ITAdmin)
+            {
+                var otherActiveAdmins = await _db.Users
+                    .CountAsync(u => u.Role == UserRole.ITAdmin && u.IsActive && u.Id != id);
+                if (otherActiveAdmins == 0)
+                {
+                    throw new AuthException("Cannot reassign the role of the last active IT Admin account.", HttpStatusCode.BadRequest);
+                }
+            }
 
             user.Role = dto.Role;
             if (dto.Role != UserRole.FloorWorker)
@@ -212,21 +232,108 @@ namespace ManufacturingCoordinator.Api.Services
         {
             var w = await _db.AgentWorkflows.SingleOrDefaultAsync(x => x.WorkflowId == workflowId)
                 ?? throw new AuthException("Workflow was not found.", HttpStatusCode.NotFound);
-            if (w.WorkflowType != "Maintenance")
-                throw new AuthException("Procurement approval belongs to the Supply Chain Manager. Open the linked purchase order.", HttpStatusCode.Forbidden);
+
             if (w.ApprovalStatus == ApprovalStatus.Approved) return MapWorkflow(w);
-            if (w.Status != WorkflowStatus.WaitingForApproval || !w.MachineId.HasValue)
-                throw new AuthException("Only a pending maintenance request with an exact machine ID can be approved.", HttpStatusCode.Conflict);
-            var machine = await _db.Machines.FindAsync(w.MachineId.Value)
-                ?? throw new AuthException("The target machine was not found.", HttpStatusCode.NotFound);
-            machine.Status = MachineStatus.UnderMaintenance;
-            machine.UpdatedAt = DateTime.UtcNow;
-            w.Status = WorkflowStatus.Completed;
-            w.ApprovalStatus = ApprovalStatus.Approved;
-            w.CurrentAgent = "Maintenance Authorization";
-            w.CompletedAt = DateTime.UtcNow;
-            w.FinalOutcome = $"Maintenance authorized for {machine.Name}. Equipment is under maintenance; record the actual service after completion.";
+            if (w.ApprovalStatus == ApprovalStatus.Rejected)
+                throw new AuthException("Cannot approve a workflow that has already been rejected.", HttpStatusCode.Conflict);
+
+            if (w.WorkflowType == "Maintenance")
+            {
+                if (w.MachineId.HasValue)
+                {
+                    var machine = await _db.Machines.FindAsync(w.MachineId.Value);
+                    if (machine != null)
+                    {
+                        machine.Status = MachineStatus.UnderMaintenance;
+                        machine.UpdatedAt = DateTime.UtcNow;
+                        w.FinalOutcome = $"Maintenance authorized for {machine.Name}. Equipment is under maintenance; record the actual service after completion.";
+                    }
+                    else
+                    {
+                        w.FinalOutcome = "Maintenance authorized by IT Admin.";
+                    }
+                }
+                else
+                {
+                    w.FinalOutcome = "Maintenance authorized by IT Admin.";
+                }
+
+                w.Status = WorkflowStatus.Completed;
+                w.ApprovalStatus = ApprovalStatus.Approved;
+                w.CurrentAgent = "Maintenance Authorization";
+                w.CompletedAt = DateTime.UtcNow;
+            }
+            else if (w.WorkflowType == "Procurement")
+            {
+                // IT Admin has authority to approve agentic workflows, but NOT execute payment.
+                // Moves workflow to Approved and updates linked PO to Approved (awaiting SCM payment).
+                w.ApprovalStatus = ApprovalStatus.Approved;
+                w.Status = WorkflowStatus.Running;
+                w.CurrentAgent = "Payment / Dispatch";
+                w.CompletedAt = null;
+
+                PurchaseOrder? po = null;
+                if (w.PurchaseOrderId.HasValue)
+                {
+                    po = await _db.PurchaseOrders.Include(p => p.Supplier).FirstOrDefaultAsync(p => p.Id == w.PurchaseOrderId.Value);
+                }
+                if (po == null)
+                {
+                    po = await _db.PurchaseOrders.Include(p => p.Supplier).FirstOrDefaultAsync(p => p.Notes != null && p.Notes.Contains(w.WorkflowId));
+                }
+
+                if (po != null)
+                {
+                    w.PurchaseOrderId = po.Id;
+                    if (po.Status == PurchaseOrderStatus.Draft || po.Status == PurchaseOrderStatus.PendingApproval)
+                    {
+                        po.Status = PurchaseOrderStatus.Approved;
+                        po.ApprovedAt = DateTime.UtcNow;
+                        po.UpdatedAt = DateTime.UtcNow;
+
+                        _db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                        {
+                            PurchaseOrderId = po.Id,
+                            Action = "Approved",
+                            Notes = "Proposal approved by IT Admin. Awaiting Supply Chain Manager payment settlement.",
+                            Timestamp = DateTime.UtcNow
+                        });
+                    }
+
+                    w.FinalOutcome = $"Procurement proposal authorized by IT Admin for PO {po.PoNumber}. Purchase Order approved and awaiting Supply Chain Manager payment settlement.";
+                }
+                else
+                {
+                    w.FinalOutcome = "Procurement workflow authorized by IT Admin. Awaiting payment settlement.";
+                }
+            }
+            else
+            {
+                // Generic or Quality workflow authorization
+                w.Status = WorkflowStatus.Completed;
+                w.ApprovalStatus = ApprovalStatus.Approved;
+                w.CurrentAgent = "Admin Authorization";
+                w.CompletedAt = DateTime.UtcNow;
+                if (string.IsNullOrWhiteSpace(w.FinalOutcome))
+                {
+                    w.FinalOutcome = $"{w.WorkflowType} workflow authorized by IT Admin.";
+                }
+            }
+
             await _db.SaveChangesAsync();
+
+            // Notify AI server if available (fire-and-forget)
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var aiBase = (_configuration?["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                await http.PostAsync($"{aiBase}/api/workflows/{w.WorkflowId}/approve", null);
+            }
+            catch
+            {
+                // Best-effort notification
+            }
+
             return MapWorkflow(w);
         }
 
@@ -234,15 +341,70 @@ namespace ManufacturingCoordinator.Api.Services
         {
             var w = await _db.AgentWorkflows.SingleOrDefaultAsync(x => x.WorkflowId == workflowId)
                 ?? throw new AuthException("Workflow was not found.", HttpStatusCode.NotFound);
-            if (w.WorkflowType != "Maintenance")
-                throw new AuthException("Procurement decisions belong to the Supply Chain Manager.", HttpStatusCode.Forbidden);
-            if (w.Status != WorkflowStatus.WaitingForApproval)
-                throw new AuthException("Only a pending maintenance request can be rejected.", HttpStatusCode.Conflict);
-            w.Status = WorkflowStatus.Failed;
-            w.ApprovalStatus = ApprovalStatus.Rejected;
-            w.CompletedAt = DateTime.UtcNow;
-            w.FinalOutcome = "Maintenance request rejected by IT Admin.";
+
+            if (w.ApprovalStatus == ApprovalStatus.Rejected) return MapWorkflow(w);
+            if (w.ApprovalStatus == ApprovalStatus.Approved)
+                throw new AuthException("Cannot reject an already approved workflow.", HttpStatusCode.Conflict);
+
+            if (w.WorkflowType == "Maintenance")
+            {
+                w.Status = WorkflowStatus.Failed;
+                w.ApprovalStatus = ApprovalStatus.Rejected;
+                w.CompletedAt = DateTime.UtcNow;
+                w.FinalOutcome = "Maintenance request rejected by IT Admin.";
+            }
+            else if (w.WorkflowType == "Procurement")
+            {
+                PurchaseOrder? po = null;
+                if (w.PurchaseOrderId.HasValue)
+                {
+                    po = await _db.PurchaseOrders.FirstOrDefaultAsync(p => p.Id == w.PurchaseOrderId.Value);
+                }
+                if (po == null)
+                {
+                    po = await _db.PurchaseOrders.FirstOrDefaultAsync(p => p.Notes != null && p.Notes.Contains(w.WorkflowId));
+                }
+
+                if (po != null && po.Status != PurchaseOrderStatus.Paid && po.Status != PurchaseOrderStatus.Sent && po.Status != PurchaseOrderStatus.Delivered && po.Status != PurchaseOrderStatus.Completed)
+                {
+                    po.Status = PurchaseOrderStatus.Rejected;
+                    po.UpdatedAt = DateTime.UtcNow;
+                    _db.PurchaseOrderApprovals.Add(new PurchaseOrderApproval
+                    {
+                        PurchaseOrderId = po.Id,
+                        Action = "Rejected",
+                        Notes = "Proposal rejected by IT Admin.",
+                        Timestamp = DateTime.UtcNow
+                    });
+                }
+
+                w.Status = WorkflowStatus.Failed;
+                w.ApprovalStatus = ApprovalStatus.Rejected;
+                w.CompletedAt = DateTime.UtcNow;
+                w.FinalOutcome = "Procurement proposal rejected by IT Admin.";
+            }
+            else
+            {
+                w.Status = WorkflowStatus.Failed;
+                w.ApprovalStatus = ApprovalStatus.Rejected;
+                w.CompletedAt = DateTime.UtcNow;
+                w.FinalOutcome = $"{w.WorkflowType} workflow rejected by IT Admin.";
+            }
+
             await _db.SaveChangesAsync();
+
+            // Notify AI server if available (fire-and-forget)
+            try
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                var aiBase = (_configuration?["AgentServer:BaseUrl"] ?? "http://localhost:8000").TrimEnd('/');
+                await http.PostAsync($"{aiBase}/api/workflows/{w.WorkflowId}/reject", null);
+            }
+            catch
+            {
+                // Best-effort notification
+            }
+
             return MapWorkflow(w);
         }
 

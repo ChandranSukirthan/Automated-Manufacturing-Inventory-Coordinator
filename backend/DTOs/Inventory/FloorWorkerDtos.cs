@@ -66,6 +66,8 @@ namespace backend.Dtos
         public string Objective { get; set; } = string.Empty;
         public string MaterialId { get; set; } = string.Empty;
         public decimal RequiredQuantity { get; set; } = 2000m;
+        public string? WorkerId { get; set; }
+        public string? InitiatorId { get; set; }
     }
 }
 

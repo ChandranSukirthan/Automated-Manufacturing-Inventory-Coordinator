@@ -6,7 +6,7 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/workflows")]
-[Microsoft.AspNetCore.Authorization.Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+[Microsoft.AspNetCore.Authorization.Authorize(Roles = "FloorWorker,SupplyChainManager,QualityInspector,ITAdmin")]
 public sealed class WorkflowsController : ControllerBase
 {
     private readonly string _pythonBaseUrl;

@@ -63,8 +63,16 @@ export default function AiApprovals() {
     setError('');
     try {
       const allOrders = await purchaseOrderService.getPurchaseOrders();
-      const pendingSummaries = allOrders.filter((o) => o.status === 'PendingApproval');
-      const awaitingSummaries = allOrders.filter((o) => o.status === 'Approved' || o.status === 'Payment');
+      const isPendingStatus = (status) => {
+        const clean = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+        return clean === 'pendingapproval' || clean === 'waitingforapproval' || clean === 'pending';
+      };
+      const isAwaitingStatus = (status) => {
+        const clean = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+        return clean === 'approved' || clean === 'payment' || clean === 'paymentpending';
+      };
+      const pendingSummaries = allOrders.filter((o) => isPendingStatus(o.status));
+      const awaitingSummaries = allOrders.filter((o) => isAwaitingStatus(o.status));
 
       const [detailedPending, detailedAwaiting, wfList] = await Promise.all([
         Promise.all(
@@ -584,6 +592,7 @@ export default function AiApprovals() {
               const exceededAmount = Math.max(0, totalAmount - budgetLimit);
 
               const workflowId = po.workflowId || 'Not linked';
+              const isAutoTriggered = po.isAutoTriggered === true;
 
               const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
               const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
@@ -631,16 +640,24 @@ export default function AiApprovals() {
                         <FileText className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-extrabold text-white tracking-tight">
                             {po.poNumber}
                           </span>
                           <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800">
                             Workflow ID: {workflowId}
                           </span>
+                          {isAutoTriggered && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                              <span>🤖</span> Auto-Triggered
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Submitted on {formatColomboDate(po.createdAt, 'toLocaleString')}
+                          {isAutoTriggered
+                            ? '⚡ Automatically triggered by Low-Stock Detector · '
+                            : 'Submitted on '}
+                          {formatColomboDate(po.createdAt, 'toLocaleString')}
                         </p>
                       </div>
                     </div>

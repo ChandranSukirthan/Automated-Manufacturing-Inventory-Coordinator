@@ -157,7 +157,7 @@ def purchasing_node(state: AgentState) -> Dict[str, Any]:
         available_suppliers = []
 
     # ── External market research via Gemini Search Grounding ──────────────────
-    internal_suppliers = query_internal_supplier_data(material_name=material_id)
+    internal_suppliers = query_internal_supplier_data(material_name=material_id, material_label=material_name)
     market_candidates = search_external_supplier_market(
         material_name=material_name,
         specification=specification,

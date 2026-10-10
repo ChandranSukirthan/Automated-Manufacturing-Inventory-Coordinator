@@ -10,6 +10,7 @@ using ManufacturingCoordinator.DTOs.PurchaseOrders;
 using ManufacturingCoordinator.Models.PurchaseOrders;
 using ManufacturingCoordinator.Enums;
 using backend.Services;
+using backend.Models;
 
 namespace ManufacturingCoordinator.Services.PurchaseOrders
 {
@@ -148,8 +149,49 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
         public async Task<ProcurementResponseDto> CreateRequestAsync(CreateProcurementRequestDto dto, Guid? createdById = null)
         {
-            var rawMaterial = await _context.RawMaterials.FindAsync(dto.RawMaterialId);
-            if (rawMaterial == null) throw new KeyNotFoundException($"RawMaterial {dto.RawMaterialId} was not found. Select an existing material.");
+            RawMaterial? rawMaterial = null;
+            if (dto.RawMaterialId.HasValue && dto.RawMaterialId.Value > 0)
+            {
+                rawMaterial = await _context.RawMaterials.FindAsync(dto.RawMaterialId.Value);
+            }
+
+            if (rawMaterial == null && !string.IsNullOrWhiteSpace(dto.Sku))
+            {
+                var cleanSku = dto.Sku.Trim().ToUpperInvariant();
+                rawMaterial = await _context.RawMaterials.FirstOrDefaultAsync(m => m.SkuCode.ToUpper() == cleanSku);
+            }
+
+            if (rawMaterial == null && !string.IsNullOrWhiteSpace(dto.MaterialName))
+            {
+                var cleanName = dto.MaterialName.Trim().ToLowerInvariant();
+                rawMaterial = await _context.RawMaterials.FirstOrDefaultAsync(m => m.Name.ToLower() == cleanName);
+            }
+
+            if (rawMaterial == null)
+            {
+                throw new KeyNotFoundException($"RawMaterial {(dto.RawMaterialId ?? 0)} was not found. Select an existing material.");
+            }
+
+            // Defaults & fallbacks for quick AI procurement triggers
+            if (dto.ProductionRequirement <= 0)
+            {
+                dto.ProductionRequirement = 100m;
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.RequiredSpecification))
+            {
+                dto.RequiredSpecification = $"Standard industrial specification for {rawMaterial.Name} ({rawMaterial.SkuCode})";
+            }
+
+            if (dto.MaximumBudget <= 0)
+            {
+                dto.MaximumBudget = 500_000m;
+            }
+
+            var requiredBy = dto.RequiredByDate.HasValue && dto.RequiredByDate.Value != default
+                ? EnsureUtc(dto.RequiredByDate.Value)
+                : DateTime.UtcNow.AddDays(7);
+
             // Verify createdById actually exists in Users table to avoid FK constraint violation
             if (createdById.HasValue)
             {
@@ -160,9 +202,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 }
             }
 
-            var inventory = await _context.InventoryItems.SingleOrDefaultAsync(i => i.Sku == rawMaterial.SkuCode)
-                ?? throw new InvalidOperationException("Register the SKU balance before requesting procurement.");
-            decimal currentStock = inventory.StockLevel;
+            var inventory = await _context.InventoryItems.SingleOrDefaultAsync(i => i.Sku == rawMaterial.SkuCode);
+            decimal currentStock = inventory?.StockLevel ?? dto.CurrentStock;
             var committedLines = await _context.OrderLines.Where(ol => ol.RawMaterialId == rawMaterial.Id &&
                 (ol.PurchaseOrder.Status == PurchaseOrderStatus.Approved || ol.PurchaseOrder.Status == PurchaseOrderStatus.Payment ||
                  ol.PurchaseOrder.Status == PurchaseOrderStatus.PaymentPending || ol.PurchaseOrder.Status == PurchaseOrderStatus.Paid ||
@@ -186,7 +227,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 ExistingOpenPoQuantity = openPoQty,
                 CalculatedNetQuantity = netQty,
                 MaximumBudget = dto.MaximumBudget,
-                RequiredByDate = dto.RequiredByDate,
+                RequiredByDate = requiredBy,
                 QualityRequirement = dto.QualityRequirement ?? string.Empty,
                 PreferredRegion = dto.PreferredRegion,
                 Status = ProcurementRequestStatus.Requested,
@@ -200,6 +241,13 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             await _context.SaveChangesAsync();
 
             return (await GetByIdAsync(request.Id))!;
+        }
+
+        private static DateTime EnsureUtc(DateTime dt)
+        {
+            if (dt.Kind == DateTimeKind.Utc) return dt;
+            if (dt.Kind == DateTimeKind.Local) return dt.ToUniversalTime();
+            return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
         }
 
         public async Task<ProcurementResponseDto> RunAiResearchAsync(int procurementRequestId)
@@ -357,6 +405,8 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             if (request == null)
                 throw new KeyNotFoundException($"ProcurementRequest {procurementRequestId} not found.");
 
+            await LoadLinkedOrderAsync(request);
+
             // Find best candidate: prefer APPROVED + validated, then lowest cost
             var bestCandidate = request.Candidates
                 .Where(c => c.IsValidated && string.Equals(c.SupplierStatus, "APPROVED", StringComparison.OrdinalIgnoreCase))
@@ -409,6 +459,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
 
             if (request == null) return null;
 
+            await LoadLinkedOrderAsync(request);
             var po = request.GeneratedPurchaseOrder;
 
             // Determine Stripe payment status from latest transaction
@@ -568,6 +619,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(p => p.Candidates)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
+            if (pr != null) await LoadLinkedOrderAsync(pr);
             return pr == null ? null : MapToDto(pr);
         }
 
@@ -579,6 +631,14 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
                 .Include(p => p.GeneratedPurchaseOrder)
                 .OrderByDescending(p => p.CreatedAt)
                 .ToListAsync();
+
+            var requestIds = requests.Select(r => r.Id).ToList();
+            var linkedOrders = await _context.PurchaseOrders.Where(p => p.ProcurementRequestId.HasValue && requestIds.Contains(p.ProcurementRequestId.Value)).ToListAsync();
+            foreach (var request in requests)
+            {
+                var linked = linkedOrders.FirstOrDefault(p => p.ProcurementRequestId == request.Id);
+                if (linked != null) { request.GeneratedPurchaseOrder = linked; request.GeneratedPurchaseOrderId = linked.Id; }
+            }
 
             return requests.Select(pr => new ProcurementResponseDto
             {
@@ -610,7 +670,40 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
             });
         }
 
+        public async Task<bool> DeleteRequestAsync(int id)
+        {
+            var request = await _context.ProcurementRequests
+                .Include(r => r.Candidates)
+                .FirstOrDefaultAsync(r => r.Id == id);
+            if (request == null) return false;
+
+            var linkedPo = await _context.PurchaseOrders
+                .FirstOrDefaultAsync(p => p.ProcurementRequestId == id);
+            if (linkedPo != null && linkedPo.Status != PurchaseOrderStatus.Draft && linkedPo.Status != PurchaseOrderStatus.Rejected)
+            {
+                throw new InvalidOperationException($"Cannot delete procurement request linked to active Purchase Order {linkedPo.PoNumber} in status '{linkedPo.Status}'.");
+            }
+
+            _context.SupplierCandidates.RemoveRange(request.Candidates);
+            _context.ProcurementRequests.Remove(request);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         // ── Private Helpers ───────────────────────────────────────────────────────
+
+        // Older manually customised orders have the forward link only.
+        private async Task LoadLinkedOrderAsync(ProcurementRequest request)
+        {
+            if (request.GeneratedPurchaseOrder != null) return;
+            var linked = await _context.PurchaseOrders.Include(p => p.Transactions)
+                .SingleOrDefaultAsync(p => p.ProcurementRequestId == request.Id);
+            if (linked != null)
+            {
+                request.GeneratedPurchaseOrder = linked;
+                request.GeneratedPurchaseOrderId = linked.Id;
+            }
+        }
 
         private ProcurementResponseDto MapToDto(ProcurementRequest pr) => new()
         {

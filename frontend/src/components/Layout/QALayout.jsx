@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   ChevronRight,
-  Activity
+  Activity,
+  Bot
 } from 'lucide-react';
 import { useAuth } from '../../context/useAuth';
 
@@ -47,6 +48,9 @@ export default function QALayout({ children, title, subtitle }) {
     if (path === '/quality/defects') {
       return currentPath.startsWith('/quality/defects') || currentPath.startsWith('/dashboard/defects');
     }
+    if (path === '/agent-workflows') {
+      return currentPath === '/agent-workflows';
+    }
     if (path === '/profile') {
       return currentPath === '/profile';
     }
@@ -59,6 +63,7 @@ export default function QALayout({ children, title, subtitle }) {
       items: [
         { label: 'Dashboard', path: '/quality', icon: LayoutDashboard },
         { label: 'AI Validation & Safety', path: '/quality/ai-validation', icon: Activity },
+        { label: 'Agent Workflows', path: '/agent-workflows', icon: Bot },
         { label: 'Defect Reports', path: '/quality/defects', icon: AlertTriangle },
         { label: 'Quarantine Management', path: '/quality/quarantine', icon: ShieldAlert },
         { label: 'Quarantine History', path: '/quality/quarantine/history', icon: History }

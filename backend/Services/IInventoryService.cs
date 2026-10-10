@@ -31,6 +31,9 @@ namespace backend.Services
         Task<bool> UpdateRawMaterialAsync(int id, RawMaterial material);
         Task<bool> DeleteRawMaterialAsync(int id);
         Task<IEnumerable<PackagingType>> GetPackagingTypesAsync();
+        Task<PackagingType> CreatePackagingTypeAsync(PackagingType packagingType);
+        Task<bool> UpdatePackagingTypeAsync(int id, PackagingType packagingType);
+        Task<bool> DeletePackagingTypeAsync(int id);
 
         // Student 1: Inventory Roll CRUD & QR Lookup
         Task<IEnumerable<InventoryRoll>> GetInventoryRollsAsync();
@@ -52,5 +55,6 @@ namespace backend.Services
 
         // Student 1: Proxy AI Trigger via ASP.NET Core
         Task<object> TriggerAgentReplenishmentAsync(TriggerReplenishmentDto dto, string? authorizationHeader);
+        Task ProcessAutomatedLowStockReplenishmentAsync();
     }
 }

@@ -35,10 +35,14 @@ export default function SCMLayout({ children, title, subtitle, actionButton }) {
       try {
         const orders = await purchaseOrderService.getPurchaseOrders();
         if (isMounted) {
-          const count = orders.filter((o) => o.status === 'PendingApproval').length;
+          const isPending = (status) => {
+            const s = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+            return s === 'pendingapproval' || s === 'waitingforapproval' || s === 'pending';
+          };
+          const count = orders.filter((o) => isPending(o.status)).length;
           setPendingCount(count);
         }
-    } catch {
+      } catch {
         // silent catch
       }
     };

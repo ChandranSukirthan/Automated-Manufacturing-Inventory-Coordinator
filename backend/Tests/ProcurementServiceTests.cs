@@ -627,5 +627,41 @@ namespace backend.Tests
             // PaymentFailed -> Draft
             Assert.True(PurchaseOrderStatusTransitions.IsTransitionAllowed(PurchaseOrderStatus.PaymentFailed, PurchaseOrderStatus.Draft));
         }
+
+        [Fact]
+        public async Task CreateRequestAsync_WithUnspecifiedDateTimeKindAndSku_SetsUtcAndSucceeds()
+        {
+            var db = CreateInMemoryDbContext();
+            var (service, _, _, _) = CreateService(db);
+
+            var rawMaterial = new backend.Models.RawMaterial
+            {
+                Name = "Heat-sealable Filter Paper",
+                SkuCode = "TB-FIL-001",
+                MaterialCode = "TB-FIL",
+                Category = "Filter"
+            };
+            db.RawMaterials.Add(rawMaterial);
+            db.InventoryItems.Add(new backend.Models.InventoryItem
+            {
+                Sku = "TB-FIL-001",
+                Name = "Heat-sealable Filter Paper",
+                StockLevel = 100,
+                ReorderThreshold = 600
+            });
+            await db.SaveChangesAsync();
+
+            var dto = new CreateProcurementRequestDto
+            {
+                Sku = "TB-FIL-001",
+                ProductionRequirement = 500m,
+                RequiredByDate = DateTime.SpecifyKind(DateTime.Now.AddDays(7), DateTimeKind.Unspecified)
+            };
+
+            var created = await service.CreateRequestAsync(dto);
+            Assert.NotNull(created);
+            Assert.Equal(rawMaterial.Id, created.RawMaterialId);
+            Assert.Equal(DateTimeKind.Utc, created.RequiredByDate.Kind);
+        }
     }
 }

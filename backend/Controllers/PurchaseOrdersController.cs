@@ -332,7 +332,7 @@ namespace ManufacturingCoordinator.Controllers
         /// Used to settle payment or retry for orders in Approved or Payment status.
         /// </summary>
         [HttpPost("{id:int}/process-payment")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -351,7 +351,7 @@ namespace ManufacturingCoordinator.Controllers
         }
 
         [HttpPost("{id:int}/create-checkout-session")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         public async Task<ActionResult> CreateCheckoutSession(int id)
         {
             try
@@ -359,14 +359,36 @@ namespace ManufacturingCoordinator.Controllers
                 var po = await _poService.GetByIdAsync(id);
                 if (po == null) return NotFound(new { message = "Purchase Order not found." });
 
-                var origin = Request.Headers["Origin"].ToString();
-                if (string.IsNullOrWhiteSpace(origin))
+                bool isMobile = (Request.Headers.ContainsKey("X-Platform") &&
+                                 Request.Headers["X-Platform"].ToString().Equals("mobile", StringComparison.OrdinalIgnoreCase)) ||
+                                (Request.Query.ContainsKey("platform") &&
+                                 Request.Query["platform"].ToString().Equals("mobile", StringComparison.OrdinalIgnoreCase));
+
+                var requestScheme = Request.Scheme;
+                var requestHost = Request.Host.Value;
+                var apiBase = $"{requestScheme}://{requestHost}";
+
+                string successUrl;
+                string cancelUrl;
+
+                if (isMobile)
                 {
-                    origin = Request.Headers["Referer"].ToString().TrimEnd('/');
+                    successUrl = $"{apiBase}/api/purchase-orders/{id}/stripe-return?session_id={{CHECKOUT_SESSION_ID}}";
+                    cancelUrl = $"{apiBase}/api/purchase-orders/{id}/stripe-return?payment=cancel";
                 }
-                if (string.IsNullOrWhiteSpace(origin))
+                else
                 {
-                    origin = "http://localhost:5173";
+                    var origin = Request.Headers["Origin"].ToString();
+                    if (string.IsNullOrWhiteSpace(origin))
+                    {
+                        origin = Request.Headers["Referer"].ToString().TrimEnd('/');
+                    }
+                    if (string.IsNullOrWhiteSpace(origin))
+                    {
+                        origin = "http://localhost:5173";
+                    }
+                    successUrl = origin + $"/purchase-orders/{id}?session_id={{CHECKOUT_SESSION_ID}}";
+                    cancelUrl = origin + $"/purchase-orders/{id}?payment=cancel";
                 }
 
                 var stripeKey = _configuration["StripeSettings:SecretKey"];
@@ -409,27 +431,18 @@ namespace ManufacturingCoordinator.Controllers
                         },
                     },
                     Mode = "payment",
-                    SuccessUrl = origin + $"/purchase-orders/{id}?session_id={{CHECKOUT_SESSION_ID}}",
+                    SuccessUrl = successUrl,
                     ClientReferenceId = id.ToString(),
-                    CancelUrl = origin + $"/purchase-orders/{id}?payment=cancel",
+                    CancelUrl = cancelUrl,
                 };
 
                 var service = new Stripe.Checkout.SessionService();
                 var session = await service.CreateAsync(options);
 
-                return Ok(new { url = session.Url });
+                return Ok(new { url = session.Url, sessionId = session.Id });
             }
             catch (Stripe.StripeException)
             {
-                var origin = Request.Headers["Origin"].ToString();
-                if (string.IsNullOrWhiteSpace(origin))
-                {
-                    origin = Request.Headers["Referer"].ToString().TrimEnd('/');
-                }
-                if (string.IsNullOrWhiteSpace(origin))
-                {
-                    origin = "http://localhost:5173";
-                }
                 return StatusCode(503, new { message = "Stripe is not configured; no payment has been confirmed." });
             }
             catch (Exception ex)
@@ -438,12 +451,92 @@ namespace ManufacturingCoordinator.Controllers
             }
         }
 
+        [HttpGet("{id:int}/stripe-return")]
+        [AllowAnonymous]
+        public async Task<IActionResult> StripeReturn(int id, [FromQuery] string? session_id, [FromQuery] string? payment)
+        {
+            bool isCancelled = string.Equals(payment, "cancel", StringComparison.OrdinalIgnoreCase);
+
+            if (!isCancelled && !string.IsNullOrWhiteSpace(session_id))
+            {
+                try
+                {
+                    var key = _configuration["StripeSettings:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+                    if (!string.IsNullOrWhiteSpace(key) && !key.Contains("placeholder", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var service = new Stripe.Checkout.SessionService(new Stripe.StripeClient(key));
+                        var session = await service.GetAsync(session_id);
+                        if (session.ClientReferenceId == id.ToString() && session.PaymentStatus == "paid" &&
+                            session.AmountTotal.HasValue && !string.IsNullOrWhiteSpace(session.PaymentIntentId))
+                        {
+                            await _poService.ConfirmCheckoutAsync(id, session.PaymentIntentId,
+                                session.AmountTotal.Value / 100m, session.Currency, null);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error auto-confirming checkout session {SessionId} on stripe-return", session_id);
+                }
+            }
+
+            var html = isCancelled
+                ? @"<!DOCTYPE html>
+<html>
+<head>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>Payment Cancelled - AMIC</title>
+  <style>
+    body { background: #0b132b; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; text-align: center; }
+    .card { background: #1c2541; padding: 36px 24px; border-radius: 24px; max-width: 380px; width: 100%; border: 1px solid #3a506b; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .icon { width: 68px; height: 68px; background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #ef4444; font-size: 32px; font-weight: bold; }
+    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
+    p { margin: 0 0 24px; color: #94a3b8; font-size: 14px; line-height: 1.5; }
+    .btn { display: inline-block; background: #6366f1; color: #ffffff; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 12px; text-decoration: none; border: none; cursor: pointer; width: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class='card'>
+    <div class='icon'>✕</div>
+    <h2>Payment Cancelled</h2>
+    <p>The transaction was cancelled. You can return to the AMIC app.</p>
+    <button class='btn' onclick='window.close();'>Close Window</button>
+  </div>
+</body>
+</html>"
+                : @"<!DOCTYPE html>
+<html>
+<head>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>Payment Successful - AMIC</title>
+  <style>
+    body { background: #0b132b; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; text-align: center; }
+    .card { background: #1c2541; padding: 36px 24px; border-radius: 24px; max-width: 380px; width: 100%; border: 1px solid #3a506b; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .icon { width: 68px; height: 68px; background: rgba(16, 185, 129, 0.15); border: 2px solid #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #10b981; font-size: 36px; font-weight: bold; }
+    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
+    p { margin: 0 0 24px; color: #94a3b8; font-size: 14px; line-height: 1.5; }
+    .btn { display: inline-block; background: #10b981; color: #ffffff; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 12px; text-decoration: none; border: none; cursor: pointer; width: 100%; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div class='card'>
+    <div class='icon'>✓</div>
+    <h2>Payment Successful!</h2>
+    <p>Purchase Order payment has been recorded. You can now close this tab and return to the AMIC app.</p>
+    <button class='btn' onclick='window.close();'>Close Window &amp; Return to App</button>
+  </div>
+</body>
+</html>";
+
+            return Content(html, "text/html");
+        }
+
         [HttpPost("{id:int}/verify-bank-slip")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         public async Task<IActionResult> VerifyBankSlip(int id) => Ok(await _poService.VerifyBankSlipAsync(id, GetCurrentUserId()));
 
         [HttpPost("{id:int}/confirm-checkout")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         public async Task<IActionResult> ConfirmCheckout(int id, [FromQuery] string sessionId)
         {
             var key = _configuration["StripeSettings:SecretKey"] ?? Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
@@ -462,7 +555,7 @@ namespace ManufacturingCoordinator.Controllers
         /// POST /api/purchase-orders/{id}/bank-slip — upload bank transfer slip image/PDF and verify payment
         /// </summary>
         [HttpPost("{id:int}/bank-slip")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -491,7 +584,7 @@ namespace ManufacturingCoordinator.Controllers
         /// POST /api/purchase-orders/{id}/bank-slip-json — settle bank slip payment via JSON payload
         /// </summary>
         [HttpPost("{id:int}/bank-slip-json")]
-        [Authorize(Roles = "SupplyChainManager,ITAdmin")]
+        [Authorize(Roles = "SupplyChainManager")]
         [ProducesResponseType(typeof(PurchaseOrderResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

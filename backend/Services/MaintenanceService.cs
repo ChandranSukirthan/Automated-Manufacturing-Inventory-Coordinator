@@ -21,6 +21,16 @@ namespace ManufacturingCoordinator.Api.Services
             _db = db;
         }
 
+        public async Task<List<MaintenanceLogDto>> GetAllAsync()
+        {
+            var logs = await _db.MaintenanceLogs
+                .Include(ml => ml.Machine)
+                .OrderByDescending(ml => ml.PerformedAt)
+                .ToListAsync();
+
+            return logs.Select(MapToDto).ToList();
+        }
+
         public async Task<List<MaintenanceLogDto>> GetByMachineIdAsync(Guid machineId)
         {
             var machine = await _db.Machines.FindAsync(machineId);
@@ -41,6 +51,9 @@ namespace ManufacturingCoordinator.Api.Services
             var machine = await _db.Machines.FindAsync(dto.MachineId);
             if (machine == null)
                 throw new AuthException("Machine not found.", HttpStatusCode.NotFound);
+
+            if (dto.PerformedAt.HasValue && dto.PerformedAt.Value > DateTime.UtcNow.AddMinutes(15))
+                throw new AuthException("Maintenance date cannot be set in the future.", HttpStatusCode.BadRequest);
 
             var log = new MaintenanceLog
             {
@@ -69,6 +82,9 @@ namespace ManufacturingCoordinator.Api.Services
             if (log == null)
                 throw new AuthException("Maintenance log not found.", HttpStatusCode.NotFound);
 
+            if (dto.PerformedAt.HasValue && dto.PerformedAt.Value > DateTime.UtcNow.AddMinutes(15))
+                throw new AuthException("Maintenance date cannot be set in the future.", HttpStatusCode.BadRequest);
+
             log.Description = dto.Description.Trim();
             log.PerformedBy = dto.PerformedBy.Trim();
             log.Type = dto.Type;
@@ -78,6 +94,16 @@ namespace ManufacturingCoordinator.Api.Services
             await _db.SaveChangesAsync();
 
             return MapToDto(log);
+        }
+
+        public async Task DeleteAsync(Guid id)
+        {
+            var log = await _db.MaintenanceLogs.FindAsync(id);
+            if (log == null)
+                throw new AuthException("Maintenance log not found.", HttpStatusCode.NotFound);
+
+            _db.MaintenanceLogs.Remove(log);
+            await _db.SaveChangesAsync();
         }
 
         private static MaintenanceLogDto MapToDto(MaintenanceLog log)

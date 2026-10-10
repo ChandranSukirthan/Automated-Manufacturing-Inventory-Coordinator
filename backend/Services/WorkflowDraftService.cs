@@ -56,8 +56,12 @@ public sealed class WorkflowDraftService(ApplicationDbContext db)
         await db.SaveChangesAsync();
         workflow.PurchaseOrderId = po.Id;
         var alerts = await db.StockAlerts.Where(a => a.Sku == material.SkuCode &&
-            (a.Status == "Pending" || a.Status == "Acknowledged")).ToListAsync();
-        foreach (var alert in alerts) alert.Status = "Processing";
+            (a.Status == "Pending" || a.Status == "Acknowledged" || a.Status == "Processing")).ToListAsync();
+        foreach (var alert in alerts)
+        {
+            alert.Status = "Processing";
+            alert.IsRead = true;
+        }
         await db.SaveChangesAsync();
         if (transaction != null) await transaction.CommitAsync();
         return po.Id;

@@ -87,4 +87,29 @@ public class InventoryBusinessLogicTests
         Assert.Equal("LOW", result.Severity);
         Assert.Equal(80m, result.CurrentStock);
     }
+
+    [Fact]
+    public async Task ProcessAutomatedLowStockReplenishment_CreatesAlertAndHandlesOfflineAiGracefully()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        context.InventoryItems.Add(new InventoryItem
+        {
+            Sku = "BP-FILM-AUTO",
+            Name = "Auto Film",
+            StockLevel = 30,
+            ReorderThreshold = 100
+        });
+        await context.SaveChangesAsync();
+
+        // Run automated replenishment routine
+        await service.ProcessAutomatedLowStockReplenishmentAsync();
+
+        // Verify a StockAlert was automatically created for this low-stock item
+        var alert = await context.StockAlerts.SingleOrDefaultAsync(a => a.Sku == "BP-FILM-AUTO");
+        Assert.NotNull(alert);
+        Assert.Equal("Automated Low-Stock Detector", alert.WorkerId);
+        Assert.True(alert.QuantityRequested > 0);
+    }
 }
