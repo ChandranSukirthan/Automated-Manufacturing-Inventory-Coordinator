@@ -10,13 +10,7 @@ import 'session_storage.dart';
 String get _defaultApiBaseUrl {
   const envUrl = String.fromEnvironment('API_BASE_URL');
   if (envUrl.isNotEmpty) return envUrl;
-  if (kReleaseMode) {
-    return 'https://amic-backend.onrender.com/api';
-  }
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    return 'http://10.0.2.2:5070/api';
-  }
-  return 'http://localhost:5070/api';
+  return 'https://amic-backend.onrender.com/api';
 }
 
 class ApiException implements Exception {
