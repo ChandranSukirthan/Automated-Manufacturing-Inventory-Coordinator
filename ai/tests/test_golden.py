@@ -182,7 +182,7 @@ def test_api_trigger_and_approve_workflow(auth_headers):
 # =======================================================
 # 6. Cross-Agent Quality & Coordinator Validation Test
 # =======================================================
-def test_cross_agent_quality_and_planner_coordination(monkeypatch):
+def test_existing_defect_does_not_replace_supplier_validation_with_qa_block(monkeypatch):
     from ai.agents.validation import validation_node
     from ai.agents.supervisor import supervisor_node
     import ai.agents.validation as validation
@@ -195,11 +195,18 @@ def test_cross_agent_quality_and_planner_coordination(monkeypatch):
     assert "status" not in evidence and "requires_approval" not in evidence
     result = supervisor_node({**state, **evidence})
     assert result["requires_approval"] is False
-    assert result["status"] == WorkflowStatus.Failed
-    assert not result["automatic_retry_required"]
-    assert result["required_action"] == "QA_REVIEW"
+    # An existing defective roll must not gate fresh replacement purchasing.
+    # This deliberately incomplete proposal still fails supplier checks, so the
+    # supervisor must request a better proposal rather than grant approval.
+    assert evidence["validation_results"]["qualitySafetyStatus"] == "CLEAR"
+    assert evidence["validation_results"]["isValid"] is False
+    assert "supplierVerification" in evidence["validation_results"]["failedChecks"]
+    assert result["status"] == WorkflowStatus.Running
+    assert result["automatic_retry_required"] is True
+    assert result["required_action"] == "RESELECT_SUPPLIER"
+    assert evidence["quality_data"]["defect"]["description"] == "Contamination"
     assert evidence["validation_results"]["quarantinedRollsCount"] == 0
-    assert evidence["validation_results"]["recommendedQuarantineRollsCount"] == 1
+    assert evidence["validation_results"]["recommendedQuarantineRollsCount"] == 0
 
 
 def test_validation_stops_after_third_rejected_supplier():

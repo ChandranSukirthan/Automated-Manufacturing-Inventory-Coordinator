@@ -22,7 +22,7 @@ class QuarantineHistoryScreen extends StatefulWidget {
       _QuarantineHistoryScreenState();
 }
 
-enum _HistorySort { newest, oldest, batch, inventory }
+enum _HistorySort { newest, oldest, inventory }
 
 class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
   static const _pageSize = 8;
@@ -63,7 +63,7 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
     final records = (_records ?? []).where((record) {
       final text = [
         record.inventoryRollId,
-        record.batchId,
+        record.defectReportId,
         record.status,
         record.reason,
       ].join(' ').toLowerCase();
@@ -77,7 +77,6 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
         _HistorySort.oldest => (left.releasedAt ?? left.createdAt).compareTo(
           right.releasedAt ?? right.createdAt,
         ),
-        _HistorySort.batch => left.batchId.compareTo(right.batchId),
         _HistorySort.inventory => left.inventoryRollId.compareTo(
           right.inventoryRollId,
         ),
@@ -215,7 +214,7 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
           }),
           style: const TextStyle(color: AppColors.strongText, fontSize: 13),
           decoration: InputDecoration(
-            hintText: 'Search roll, batch, disposition reason...',
+            hintText: 'Search roll ID, defect ID, or reason...',
             hintStyle: const TextStyle(color: AppColors.mutedText, fontSize: 12),
             prefixIcon: const Icon(Icons.search, size: 18),
             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -261,7 +260,6 @@ class _QuarantineHistoryScreenState extends State<QuarantineHistoryScreen> {
               itemBuilder: (_) => const [
                 PopupMenuItem(value: _HistorySort.newest, child: Text('Newest first')),
                 PopupMenuItem(value: _HistorySort.oldest, child: Text('Oldest first')),
-                PopupMenuItem(value: _HistorySort.batch, child: Text('Batch A-Z')),
                 PopupMenuItem(value: _HistorySort.inventory, child: Text('Roll A-Z')),
               ],
             ),

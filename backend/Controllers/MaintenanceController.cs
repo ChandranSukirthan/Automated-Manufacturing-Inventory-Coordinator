@@ -20,6 +20,13 @@ namespace ManufacturingCoordinator.Api.Controllers
             _auditService = auditService;
         }
 
+        [HttpGet("api/maintenance")]
+        public async Task<IActionResult> GetAll()
+        {
+            var logs = await _maintenanceService.GetAllAsync();
+            return Ok(logs);
+        }
+
         [HttpGet("api/machines/{id}/maintenance")]
         public async Task<IActionResult> GetByMachine(Guid id)
         {
@@ -61,6 +68,21 @@ namespace ManufacturingCoordinator.Api.Controllers
             await _auditService.LogAsync(userId, userName, "UPDATE", "MaintenanceLog", id.ToString(), true, ip);
 
             return Ok(log);
+        }
+
+        [HttpDelete("api/maintenance/{id}")]
+        [Authorize(Roles = "ITAdmin")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            await _maintenanceService.DeleteAsync(id);
+
+            // Audit log
+            var userId = GetCurrentUserId();
+            var userName = GetCurrentUserName();
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogAsync(userId, userName, "DELETE", "MaintenanceLog", id.ToString(), true, ip);
+
+            return NoContent();
         }
 
         private Guid GetCurrentUserId()

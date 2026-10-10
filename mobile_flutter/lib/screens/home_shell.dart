@@ -18,6 +18,8 @@ import 'purchase_orders/po_list_screen.dart';
 import 'purchase_orders/supplier_status_screen.dart';
 import 'purchase_orders/notification_status_screen.dart';
 import 'purchase_orders/procurement_details_screen.dart';
+import 'purchase_orders/ai_workflow_status_screen.dart';
+import 'purchase_orders/incoming_supplies_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -70,6 +72,7 @@ class _HomeShellState extends State<HomeShell> {
     if (isITAdmin) {
       return ItAdminMainScreen(
         apiClient: widget.qualityService.api,
+        appState: widget.appState,
         showAppBar: true,
         onSignOut: widget.appState.logout,
         userName: user.fullName,
@@ -119,17 +122,25 @@ class _HomeShellState extends State<HomeShell> {
       titles = ['QA Operations', 'AI Validation & Safety', 'Defect Management', 'Quarantine Control', 'Quarantine History'];
     } else {
       screens = [
-        POStatusDashboardScreen(service: widget.poService),
-        POListScreen(service: widget.poService, showAppBar: false),
+        POStatusDashboardScreen(
+          service: widget.poService,
+          onNavigateTab: _onTabSelect,
+        ),
+        POListScreen(service: widget.poService, showAppBar: false,
+            isActive: _selectedIndex == 1),
+        AIWorkflowStatusScreen(service: widget.poService, showAppBar: false),
         ProcurementDetailsScreen(service: widget.poService, showAppBar: false),
         SupplierStatusScreen(service: widget.poService, showAppBar: false),
+        IncomingSuppliesScreen(service: widget.poService, showAppBar: false),
         NotificationStatusScreen(service: widget.poService, showAppBar: false),
       ];
       titles = [
         'Command Center',
         'Purchase Orders',
+        'AI Workflows & Approvals',
         'AI Sourcing Hub',
         'Suppliers & Verification',
+        'Deliveries & Logistics',
         'Low Stock & Reorder',
       ];
     }
@@ -300,6 +311,12 @@ class _HomeShellState extends State<HomeShell> {
                 title: Text(titles[_selectedIndex < titles.length ? _selectedIndex : 0]),
                 actions: [
                   IconButton(
+                    onPressed: () => _onTabSelect(2),
+                    icon: const Icon(Icons.psychology_outlined),
+                    color: const Color(0xFF06B6D4),
+                    tooltip: 'AI Workflows & Approvals',
+                  ),
+                  IconButton(
                     onPressed: _showProfilePopup,
                     icon: const Icon(Icons.account_circle_outlined),
                     color: AppColors.primaryLight,
@@ -360,11 +377,19 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                   ListTile(
+                    leading: const Icon(Icons.psychology_outlined, color: Color(0xFF06B6D4)),
+                    title: const Text('AI Workflows & Approvals', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _selectedIndex = 2);
+                    },
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.auto_awesome_outlined, color: Color(0xFFA855F7)),
                     title: const Text('AI Sourcing Hub', style: TextStyle(color: Colors.white)),
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => _selectedIndex = 2);
+                      setState(() => _selectedIndex = 3);
                     },
                   ),
                   ListTile(
@@ -372,7 +397,15 @@ class _HomeShellState extends State<HomeShell> {
                     title: const Text('Suppliers & Verification', style: TextStyle(color: Colors.white)),
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => _selectedIndex = 3);
+                      setState(() => _selectedIndex = 4);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.local_shipping_outlined, color: Color(0xFF38BDF8)),
+                    title: const Text('Deliveries & Logistics', style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _selectedIndex = 5);
                     },
                   ),
                   ListTile(
@@ -380,7 +413,7 @@ class _HomeShellState extends State<HomeShell> {
                     title: const Text('Low Stock Alerts & Reorder', style: TextStyle(color: Colors.white)),
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => _selectedIndex = 4);
+                      setState(() => _selectedIndex = 6);
                     },
                   ),
                   const Divider(color: Colors.white24),
@@ -453,37 +486,68 @@ class _HomeShellState extends State<HomeShell> {
                 ),
               ),
             )
-          : NavigationBar(
-              selectedIndex: _selectedIndex < 5 ? _selectedIndex : 0,
-              onDestinationSelected: (index) =>
-                  setState(() => _selectedIndex = index),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard),
-                  label: 'Dashboard',
+          : Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF090E1A),
+                border: Border(
+                  top: BorderSide(
+                    color: const Color(0xFF1E293B).withValues(alpha: 0.9),
+                    width: 1,
+                  ),
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long),
-                  label: 'Orders',
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                  child: Row(
+                    children: [
+                      _navItem(
+                        index: 0,
+                        icon: Icons.dashboard_rounded,
+                        label: 'Dashboard',
+                      ),
+                      _navItem(
+                        index: 1,
+                        icon: Icons.receipt_long_rounded,
+                        label: 'Orders',
+                      ),
+                      _navItem(
+                        index: 2,
+                        icon: Icons.psychology_rounded,
+                        label: 'Workflows',
+                      ),
+                      _navItem(
+                        index: 3,
+                        icon: Icons.auto_awesome_rounded,
+                        label: 'Sourcing',
+                      ),
+                      _navItem(
+                        index: 4,
+                        icon: Icons.business_rounded,
+                        label: 'Suppliers',
+                      ),
+                      _navItem(
+                        index: 5,
+                        icon: Icons.local_shipping_rounded,
+                        label: 'Deliveries',
+                      ),
+                      _navItem(
+                        index: 6,
+                        icon: Icons.warning_amber_rounded,
+                        label: 'Alerts',
+                      ),
+                    ],
+                  ),
                 ),
-                NavigationDestination(
-                  icon: Icon(Icons.auto_awesome_outlined),
-                  selectedIcon: Icon(Icons.auto_awesome),
-                  label: 'AI Sourcing',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.business_outlined),
-                  selectedIcon: Icon(Icons.business),
-                  label: 'Suppliers',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.warning_amber_rounded),
-                  selectedIcon: Icon(Icons.warning_rounded),
-                  label: 'Stock Alerts',
-                ),
-              ],
+              ),
             ),
     );
   }
@@ -500,7 +564,7 @@ class _HomeShellState extends State<HomeShell> {
         borderRadius: BorderRadius.circular(10),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 4),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF2563EB).withValues(alpha: 0.16) : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
@@ -522,9 +586,9 @@ class _HomeShellState extends State<HomeShell> {
                 label,
                 style: TextStyle(
                   color: isSelected ? Colors.white : const Color(0xFF64748B),
-                  fontSize: 9.5,
+                  fontSize: 9.0,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                  letterSpacing: -0.1,
+                  letterSpacing: -0.2,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

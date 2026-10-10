@@ -40,21 +40,25 @@ class AdminOverviewTab extends StatelessWidget {
       );
     }
 
-    final operationalCount = machines.where((m) => m.status == 'Operational').length;
+    final operationalCount = machines
+        .where((m) => m.status == 'Operational')
+        .length;
     final maintenanceCount = machines.where((m) => m.isMaintenanceDue).length;
     final activeShift = shifts.firstWhere(
       (s) => s.status == 'Active',
-      orElse: () => shifts.isNotEmpty ? shifts.first : ShiftModel(
-        id: '',
-        name: 'No Active Shift',
-        startTime: DateTime.now(),
-        endTime: DateTime.now().add(const Duration(hours: 8)),
-        targetOutput: 0,
-        adjustedOutput: 0,
-        status: 'None',
-      ),
+      orElse: () => shifts.isNotEmpty
+          ? shifts.first
+          : ShiftModel(
+              id: '',
+              name: 'No Active Shift',
+              startTime: DateTime.now(),
+              endTime: DateTime.now().add(const Duration(hours: 8)),
+              targetOutput: 0,
+              adjustedOutput: 0,
+              status: 'None',
+            ),
     );
-    final pendingApprovals = workflows.where((w) => w.isWaitingForApproval).length;
+    final pendingApprovals = workflows.where((w) => w.canAuthorize).length;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
@@ -76,7 +80,11 @@ class AdminOverviewTab extends StatelessWidget {
                     color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.hub_rounded, color: Color(0xFF06B6D4), size: 28),
+                  child: const Icon(
+                    Icons.hub_rounded,
+                    color: Color(0xFF06B6D4),
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -93,7 +101,7 @@ class AdminOverviewTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Live telemetry • Plant Floor & Cloud Infrastructure',
+                        'Live telemetry â€¢ Plant Floor & Cloud Infrastructure',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 12,
@@ -102,7 +110,7 @@ class AdminOverviewTab extends StatelessWidget {
                     ],
                   ),
                 ),
-                StatusChip(status: health?.overallStatus ?? 'ONLINE'),
+                StatusChip(status: health?.overallStatus ?? 'UNKNOWN'),
               ],
             ),
           ),
@@ -120,7 +128,11 @@ class AdminOverviewTab extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.precision_manufacturing, color: Color(0xFF06B6D4), size: 22),
+                          const Icon(
+                            Icons.precision_manufacturing,
+                            color: Color(0xFF06B6D4),
+                            size: 22,
+                          ),
                           Text(
                             '$operationalCount / ${machines.length}',
                             style: const TextStyle(
@@ -134,13 +146,20 @@ class AdminOverviewTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Text(
                         'Equipment Active',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        maintenanceCount > 0 ? '$maintenanceCount due for check' : 'All running optimal',
+                        maintenanceCount > 0
+                            ? '$maintenanceCount due for check'
+                            : 'All running optimal',
                         style: TextStyle(
-                          color: maintenanceCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          color: maintenanceCount > 0
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -159,7 +178,11 @@ class AdminOverviewTab extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.schedule_rounded, color: Color(0xFF8B5CF6), size: 22),
+                          const Icon(
+                            Icons.schedule_rounded,
+                            color: Color(0xFF8B5CF6),
+                            size: 22,
+                          ),
                           Text(
                             '${activeShift.targetOutput.toInt()}u',
                             style: const TextStyle(
@@ -173,7 +196,10 @@ class AdminOverviewTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Text(
                         'Current Shift Goal',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -204,11 +230,17 @@ class AdminOverviewTab extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.psychology_rounded, color: Color(0xFFF59E0B), size: 22),
+                          const Icon(
+                            Icons.psychology_rounded,
+                            color: Color(0xFFF59E0B),
+                            size: 22,
+                          ),
                           Text(
                             '$pendingApprovals',
                             style: TextStyle(
-                              color: pendingApprovals > 0 ? const Color(0xFFF59E0B) : Colors.white,
+                              color: pendingApprovals > 0
+                                  ? const Color(0xFFF59E0B)
+                                  : Colors.white,
                               fontWeight: FontWeight.w800,
                               fontSize: 18,
                             ),
@@ -218,13 +250,20 @@ class AdminOverviewTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Text(
                         'Pending Approvals',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        pendingApprovals > 0 ? 'Requires Admin Decision' : 'Zero blockers',
+                        pendingApprovals > 0
+                            ? 'Requires Admin Decision'
+                            : 'Zero blockers',
                         style: TextStyle(
-                          color: pendingApprovals > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          color: pendingApprovals > 0
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -243,7 +282,11 @@ class AdminOverviewTab extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Icon(Icons.dns_rounded, color: Color(0xFF10B981), size: 22),
+                          const Icon(
+                            Icons.dns_rounded,
+                            color: Color(0xFF10B981),
+                            size: 22,
+                          ),
                           Text(
                             '${health?.services.length ?? 6}',
                             style: const TextStyle(
@@ -257,11 +300,16 @@ class AdminOverviewTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       const Text(
                         'Services Monitored',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        health?.overallStatus == 'ONLINE' ? '100% Operational' : 'Action Required',
+                        health?.overallStatus == 'ONLINE'
+                            ? '100% Operational'
+                            : 'Action Required',
                         style: TextStyle(
                           color: health?.overallStatus == 'ONLINE'
                               ? const Color(0xFF10B981)
@@ -294,11 +342,12 @@ class AdminOverviewTab extends StatelessWidget {
                 child: AdminCard(
                   onTap: service != null
                       ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => UserManagementScreen(service: service!),
-                            ),
-                          )
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                UserManagementScreen(service: service!),
+                          ),
+                        )
                       : null,
                   padding: const EdgeInsets.all(14),
                   child: Column(
@@ -307,20 +356,33 @@ class AdminOverviewTab extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
+                          color: const Color(
+                            0xFF06B6D4,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.manage_accounts_rounded, color: Color(0xFF06B6D4), size: 20),
+                        child: const Icon(
+                          Icons.manage_accounts_rounded,
+                          color: Color(0xFF06B6D4),
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       const Text(
                         'User Accounts',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       const Text(
                         'Roles & access control',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -331,11 +393,11 @@ class AdminOverviewTab extends StatelessWidget {
                 child: AdminCard(
                   onTap: service != null
                       ? () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AuditLogsScreen(service: service!),
-                            ),
-                          )
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AuditLogsScreen(service: service!),
+                          ),
+                        )
                       : null,
                   padding: const EdgeInsets.all(14),
                   child: Column(
@@ -344,20 +406,33 @@ class AdminOverviewTab extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          color: const Color(
+                            0xFF8B5CF6,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.security_rounded, color: Color(0xFF8B5CF6), size: 20),
+                        child: const Icon(
+                          Icons.security_rounded,
+                          color: Color(0xFF8B5CF6),
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       const Text(
                         'Audit Trail',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       const Text(
                         'Security logs & events',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -409,8 +484,12 @@ class AdminOverviewTab extends StatelessWidget {
                 const SizedBox(height: 12),
                 MetricGauge(
                   label: 'Target vs Adjusted Output',
-                  value: activeShift.adjustedOutput > 0 ? activeShift.adjustedOutput : activeShift.targetOutput,
-                  maxValue: activeShift.targetOutput > 0 ? activeShift.targetOutput : 100,
+                  value: activeShift.adjustedOutput > 0
+                      ? activeShift.adjustedOutput
+                      : activeShift.targetOutput,
+                  maxValue: activeShift.targetOutput > 0
+                      ? activeShift.targetOutput
+                      : 100,
                   unit: ' units',
                 ),
               ],
@@ -439,11 +518,16 @@ class AdminOverviewTab extends StatelessWidget {
               ),
             ],
           ),
-          ...machines.take(3).map(
+          ...machines
+              .take(3)
+              .map(
                 (m) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: AdminCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -474,7 +558,7 @@ class AdminOverviewTab extends StatelessWidget {
                                   ),
                                 ),
                                 Text(
-                                  '${m.uptimeHours.toInt()}h uptime • ${m.location}',
+                                  '${m.uptimeHours.toInt()}h uptime â€¢ ${m.location}',
                                   style: const TextStyle(
                                     color: Color(0xFF64748B),
                                     fontSize: 11,

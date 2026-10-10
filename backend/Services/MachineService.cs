@@ -41,9 +41,13 @@ namespace ManufacturingCoordinator.Api.Services
 
         public async Task<MachineDto> CreateAsync(CreateMachineDto dto)
         {
+            var cleanName = dto.Name.Trim();
+            if (await _db.Machines.AnyAsync(m => m.Name.ToLower() == cleanName.ToLower()))
+                throw new AuthException($"A machine with the name '{cleanName}' already exists.", HttpStatusCode.Conflict);
+
             var machine = new Machine
             {
-                Name = dto.Name.Trim(),
+                Name = cleanName,
                 Status = dto.Status,
                 UptimeHours = dto.UptimeHours,
                 MaintenanceIntervalHours = dto.MaintenanceIntervalHours,
@@ -62,7 +66,12 @@ namespace ManufacturingCoordinator.Api.Services
             if (machine == null)
                 throw new AuthException("Machine not found.", HttpStatusCode.NotFound);
 
-            machine.Name = dto.Name.Trim();
+            var cleanName = dto.Name.Trim();
+            if (cleanName.ToLower() != machine.Name.ToLower() &&
+                await _db.Machines.AnyAsync(m => m.Id != id && m.Name.ToLower() == cleanName.ToLower()))
+                throw new AuthException($"A machine with the name '{cleanName}' already exists.", HttpStatusCode.Conflict);
+
+            machine.Name = cleanName;
             machine.Status = dto.Status;
             machine.UptimeHours = dto.UptimeHours;
             machine.MaintenanceIntervalHours = dto.MaintenanceIntervalHours;

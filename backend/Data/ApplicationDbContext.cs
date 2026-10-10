@@ -284,7 +284,8 @@ namespace ManufacturingCoordinator.Data
                 entity.Property(i => i.Status)
                     .HasConversion(
                         status => status == InventoryStatus.Available ? "In Stock" : "Quarantined",
-                        value => value == "In Stock" ? InventoryStatus.Available : InventoryStatus.Quarantined)
+                        value => value == "In Stock" || value == "Available"
+                            ? InventoryStatus.Available : InventoryStatus.Quarantined)
                     .IsRequired();
                 entity.HasOne(i => i.Batch)
                     .WithMany(b => b.InventoryRolls)

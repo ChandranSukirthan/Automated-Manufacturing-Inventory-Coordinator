@@ -3,14 +3,17 @@ import 'package:flutter/material.dart';
 import '../../models/purchase_order_models.dart';
 import '../../services/purchase_order_service.dart';
 import '../../widgets/app_widgets.dart';
+import 'po_details_screen.dart';
 
 class AIWorkflowStatusScreen extends StatefulWidget {
   const AIWorkflowStatusScreen({
     required this.service,
+    this.showAppBar = true,
     super.key,
   });
 
   final PurchaseOrderService service;
+  final bool showAppBar;
 
   @override
   State<AIWorkflowStatusScreen> createState() => _AIWorkflowStatusScreenState();
@@ -50,7 +53,11 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
       final data = await widget.service.getAgentWorkflows();
       if (mounted) {
         setState(() {
-          _workflows = data;
+          _workflows = data.where((w) {
+            final type = w.workflowType.toLowerCase();
+            final id = w.workflowId.toLowerCase();
+            return type != 'maintenance' && !id.startsWith('wf-maint');
+          }).toList();
           _loading = false;
         });
       }
@@ -72,21 +79,23 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
 
     return Scaffold(
       backgroundColor: navyBg,
-      appBar: AppBar(
-        backgroundColor: navyBg,
-        elevation: 0,
-        title: const Text(
-          'AI Workflow Status',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: _fetchWorkflows,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: navyBg,
+              elevation: 0,
+              title: const Text(
+                'AI Workflow Status',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                  onPressed: _fetchWorkflows,
+                  tooltip: 'Refresh',
+                ),
+              ],
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -118,13 +127,19 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                         itemBuilder: (context, idx) {
                           final wf = _workflows[idx];
                           final isComplete = wf.status.toLowerCase() == 'completed';
+                          final isWaiting = wf.status.toLowerCase().contains('waiting') ||
+                              wf.approvalStatus.toLowerCase().contains('pending');
 
                           return Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
                               color: cardBg,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                              border: Border.all(
+                                color: isWaiting
+                                    ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                                    : Colors.white.withValues(alpha: 0.08),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,31 +147,43 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      wf.workflowId,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
+                                    Expanded(
+                                      child: Text(
+                                        wf.workflowId,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
                                         color: isComplete
                                             ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                                            : const Color(0xFF5CC8F8).withValues(alpha: 0.15),
+                                            : isWaiting
+                                                ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                                : const Color(0xFF5CC8F8).withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
                                           color: isComplete
                                               ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                                              : const Color(0xFF5CC8F8).withValues(alpha: 0.3),
+                                              : isWaiting
+                                                  ? const Color(0xFFF59E0B).withValues(alpha: 0.4)
+                                                  : const Color(0xFF5CC8F8).withValues(alpha: 0.3),
                                         ),
                                       ),
                                       child: Text(
                                         wf.status,
                                         style: TextStyle(
-                                          color: isComplete ? const Color(0xFF10B981) : const Color(0xFF5CC8F8),
+                                          color: isComplete
+                                              ? const Color(0xFF10B981)
+                                              : isWaiting
+                                                  ? const Color(0xFFF59E0B)
+                                                  : const Color(0xFF5CC8F8),
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -259,6 +286,34 @@ class _AIWorkflowStatusScreenState extends State<AIWorkflowStatusScreen> {
                                   'Linked: ${wf.poNumber} • ${formatMoney(wf.totalCost, currency: wf.currency)}',
                                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                                 ),
+                                if (wf.purchaseOrderId > 0) ...[
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => PODetailsScreen(
+                                            service: widget.service,
+                                            poId: wf.purchaseOrderId,
+                                          ),
+                                        ),
+                                      ).then((_) => _fetchWorkflows()),
+                                      icon: const Icon(Icons.rate_review_rounded, size: 16),
+                                      label: const Text(
+                                        'Review Purchase Order',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF10B981),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           );

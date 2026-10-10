@@ -108,6 +108,7 @@ builder.Services.AddScoped<IProcurementService, ProcurementService>();
 builder.Services.AddScoped<GoodsReceiptService>();
 builder.Services.AddScoped<WorkflowDraftService>();
 builder.Services.AddHostedService<WorkflowDraftWorker>();
+builder.Services.AddHostedService<AutoReplenishmentWorker>();
 
 // Register Student 3 - Quality & Defect Services
 builder.Services.AddScoped<IDefectReportService, DefectReportService>();

@@ -34,6 +34,7 @@ export default function ReplenishmentRequestPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [cancellingAlert, setCancellingAlert] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [formError, setFormError] = useState('');
   const [result, setResult] = useState(null);
@@ -80,11 +81,34 @@ export default function ReplenishmentRequestPage() {
       && ACTIVE_ALERT_STATUSES.has(String(alert.status || '').toLowerCase())
   );
 
+  const handleDismissAlert = async () => {
+    if (!activeAlert?.id) return;
+    const confirmed = window.confirm(
+      `Dismiss Alert #${activeAlert.id} for ${activeAlert.sku} (${activeAlert.quantityRequested} units)?\n\nThis will clear the pending request so you can adjust the quantity and submit a new replenishment request.`
+    );
+    if (!confirmed) return;
+
+    setCancellingAlert(true);
+    setFormError('');
+    try {
+      if (typeof inventoryService.updateAlertStatus === 'function') {
+        await inventoryService.updateAlertStatus(activeAlert.id, 'Dismissed');
+      }
+      setResult(null);
+      await loadWorkspace();
+    } catch (error) {
+      setFormError(parseErrorMessage(error, 'Unable to dismiss the active alert.'));
+    } finally {
+      setCancellingAlert(false);
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
     setResult(null);
 
+    const isExisting = Boolean(activeAlert);
     const requestedQuantity = Number(activeAlert?.quantityRequested ?? quantity);
     if (!selectedLevel) {
       setFormError('Choose a material before submitting a replenishment request.');
@@ -114,7 +138,7 @@ export default function ReplenishmentRequestPage() {
       } catch (error) {
         workflowError = `The request was saved, but the AI workflow could not start: ${parseErrorMessage(error)} Retry using the button above; the saved request will be reused.`;
       }
-      setResult({ alert, workflow, workflowError });
+      setResult({ alert, workflow, workflowError, isExisting });
       await loadWorkspace();
     } catch (error) {
       setFormError(parseErrorMessage(error, 'Unable to submit the replenishment request.'));
@@ -214,8 +238,39 @@ export default function ReplenishmentRequestPage() {
                     ))}
                   </select>
                 </div>
+                {activeAlert && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-200">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+                        <div>
+                          <p className="font-semibold text-amber-100">
+                            Active Request in Progress (Alert #{activeAlert.id})
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed text-amber-200/90">
+                            A request for <strong className="text-white">{activeAlert.quantityRequested} units</strong> is already <span className="font-semibold uppercase text-amber-300">{activeAlert.status}</span>.
+                            Quantity is locked to prevent duplicate purchase orders. Clicking below will reconnect to or check the active workflow for this alert without creating a duplicate request.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDismissAlert}
+                        disabled={cancellingAlert || submitting}
+                        className="self-start shrink-0 rounded-lg border border-rose-500/40 bg-rose-500/20 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {cancellingAlert ? 'Dismissing…' : 'Dismiss / Clear to edit'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <label htmlFor="quantity" className="mb-1.5 block text-sm font-semibold text-slate-300">Requested quantity (material units)</label>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label htmlFor="quantity" className="block text-sm font-semibold text-slate-300">Requested quantity (material units)</label>
+                    {activeAlert && (
+                      <span className="text-xs font-medium text-amber-400">Locked to Alert #{activeAlert.id}</span>
+                    )}
+                  </div>
                   <input
                     id="quantity"
                     disabled={Boolean(activeAlert)}
@@ -225,7 +280,7 @@ export default function ReplenishmentRequestPage() {
                     inputMode="numeric"
                     value={activeAlert?.quantityRequested ?? quantity}
                     onChange={(event) => setQuantity(event.target.value)}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white focus:border-cyan-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-75 disabled:bg-slate-900"
                   />
                 </div>
 
@@ -239,14 +294,21 @@ export default function ReplenishmentRequestPage() {
                 )}
 
                 {formError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{formError}</p>}
-                <button
-                  type="submit"
-                  disabled={submitting || !selectedSku || visibleLevels.length === 0}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-                  {submitting ? 'Submitting request…' : activeAlert ? 'Start or retry AI for saved request' : 'Submit and start AI workflow'}
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="submit"
+                    disabled={submitting || cancellingAlert || !selectedSku || visibleLevels.length === 0}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-bold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+                    {submitting ? 'Connecting to AI workflow…' : activeAlert ? 'Start or retry AI for saved request' : 'Submit and start AI workflow'}
+                  </button>
+                  {activeAlert && (
+                    <p className="text-center text-xs text-slate-400">
+                      Reconnecting to existing workflow session for Alert #{activeAlert.id}. No duplicate request will be created.
+                    </p>
+                  )}
+                </div>
               </form>
             </section>
 
@@ -273,8 +335,22 @@ export default function ReplenishmentRequestPage() {
             <div className="flex items-start gap-3">
               <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-400" />
               <div className="min-w-0">
-                <h2 className="font-bold text-emerald-100">Replenishment request saved</h2>
-                <p className="mt-1 text-sm text-emerald-100/80">{workflowValue(result.alert, 'sku', 'sku', selectedSku)} has been recorded for {workflowValue(result.alert, 'quantityRequested', 'quantity_requested', quantity)} units.</p>
+                <h2 className="font-bold text-emerald-100">
+                  {result.isExisting
+                    ? `Replenishment request saved (Reconnected to Alert #${result.alert.id})`
+                    : 'Replenishment request saved'}
+                </h2>
+                <p className="mt-1 text-sm text-emerald-100/80">
+                  {result.isExisting ? (
+                    <>
+                      Reconnected to existing saved alert for <strong className="text-white">{workflowValue(result.alert, 'sku', 'sku', selectedSku)}</strong> ({workflowValue(result.alert, 'quantityRequested', 'quantity_requested', quantity)} units). No duplicate request was created.
+                    </>
+                  ) : (
+                    <>
+                      {workflowValue(result.alert, 'sku', 'sku', selectedSku)} has been recorded for {workflowValue(result.alert, 'quantityRequested', 'quantity_requested', quantity)} units.
+                    </>
+                  )}
+                </p>
                 {result.workflow ? (
                   <p className="mt-3 rounded-lg border border-emerald-400/20 bg-slate-950/40 p-3 text-sm text-slate-300">
                     Workflow <strong className="font-mono text-cyan-300">{workflowValue(result.workflow, 'workflowId', 'workflow_id', 'active')}</strong> is {workflowValue(result.workflow, 'status', 'status', 'active')}. Approval: {workflowValue(result.workflow, 'approvalStatus', 'approval_status', 'pending')}.

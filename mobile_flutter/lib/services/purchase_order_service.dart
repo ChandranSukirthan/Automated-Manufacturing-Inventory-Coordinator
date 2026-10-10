@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import '../models/procurement_models.dart';
 import '../models/purchase_order_models.dart';
 import 'api_client.dart';
+import 'inventory_api_service.dart';
 
 class PurchaseOrderService {
   const PurchaseOrderService(this._api);
@@ -73,12 +74,16 @@ class PurchaseOrderService {
   }
 
   /// GET /api/procurement/{id} — full procurement item with evaluated candidates
-  Future<ProcurementItem> getProcurementById(int id) async {
-    final response = await _api.get('/procurement/$id');
-    if (response is Map<String, dynamic>) {
-      return ProcurementItem.fromJson(response);
+  Future<ProcurementItem?> getProcurementById(int id) async {
+    try {
+      final response = await _api.get('/procurement/$id');
+      if (response is Map<String, dynamic>) {
+        return ProcurementItem.fromJson(response);
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
-    throw const ApiException('Failed to retrieve procurement request.');
   }
 
   /// GET /api/procurement/{id}/status — real-time 11-step status pipeline
@@ -110,6 +115,54 @@ class PurchaseOrderService {
       return ProcurementItem.fromJson(response);
     }
     throw const ApiException('Failed to trigger AI research.');
+  }
+
+  /// POST /api/procurement/{id}/research or /analyze — run multi-agent AI research
+  Future<ProcurementItem> runAiResearch(int id) async {
+    try {
+      final response = await _api.post('/procurement/$id/research');
+      if (response is Map<String, dynamic>) {
+        return ProcurementItem.fromJson(response);
+      }
+    } catch (_) {
+      try {
+        final response = await _api.post('/procurement/$id/analyze');
+        if (response is Map<String, dynamic>) {
+          return ProcurementItem.fromJson(response);
+        }
+      } catch (_) {
+        return startProcurementResearch(id);
+      }
+    }
+    throw const ApiException('Failed to run AI procurement research.');
+  }
+
+  /// GET /api/procurement/{id}/recommendation — retrieve recommendation rationale
+  Future<Map<String, dynamic>?> getProcurementRecommendation(int id) async {
+    try {
+      final response = await _api.get('/procurement/$id/recommendation');
+      if (response is Map<String, dynamic>) {
+        return response;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// GET /api/inventory/rawmaterials — list all raw materials for procurement dropdown
+  Future<List<RawMaterialModel>> getRawMaterials() async {
+    try {
+      final response = await _api.get('/inventory/rawmaterials');
+      if (response is List) {
+        return response
+            .map((item) => RawMaterialModel.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
   /// POST /api/stock-alerts — submit low stock alert to ASP.NET Core
@@ -195,6 +248,29 @@ class PurchaseOrderService {
       return SupplierSummary.fromJson(response);
     }
     throw const ApiException('Failed to verify supplier.');
+  }
+
+  /// GET /api/suppliers/{id} — get supplier by ID
+  Future<SupplierSummary> getSupplierById(int id) async {
+    final response = await _api.get('/suppliers/$id');
+    if (response is Map<String, dynamic>) {
+      return SupplierSummary.fromJson(response);
+    }
+    throw const ApiException('Failed to fetch supplier details.');
+  }
+
+  /// PUT /api/suppliers/{id} — update supplier
+  Future<SupplierSummary> updateSupplier(int id, Map<String, dynamic> data) async {
+    final response = await _api.put('/suppliers/$id', data);
+    if (response is Map<String, dynamic>) {
+      return SupplierSummary.fromJson(response);
+    }
+    throw const ApiException('Failed to update supplier.');
+  }
+
+  /// DELETE /api/suppliers/{id} — deactivate / soft-delete supplier
+  Future<void> deleteSupplier(int id) async {
+    await _api.delete('/suppliers/$id');
   }
 
   /// GET /api/stock-alerts — retrieve all low stock alerts
@@ -316,10 +392,19 @@ class PurchaseOrderService {
   }
 
   /// POST /api/purchase-orders/{id}/create-checkout-session
-  Future<String?> createCheckoutSession(int id) async {
-    final response = await _api.post('/purchase-orders/$id/create-checkout-session');
-    if (response is Map<String, dynamic> && response['url'] != null) {
-      return response['url'] as String;
+  Future<Map<String, dynamic>?> createCheckoutSession(int id) async {
+    final response = await _api.post('/purchase-orders/$id/create-checkout-session?platform=mobile');
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    return null;
+  }
+
+  /// POST /api/purchase-orders/{id}/confirm-checkout?sessionId=...
+  Future<PurchaseOrderDetail?> confirmCheckout(int id, String sessionId) async {
+    final response = await _api.post('/purchase-orders/$id/confirm-checkout?sessionId=${Uri.encodeComponent(sessionId)}');
+    if (response is Map<String, dynamic>) {
+      return PurchaseOrderDetail.fromJson(response);
     }
     return null;
   }

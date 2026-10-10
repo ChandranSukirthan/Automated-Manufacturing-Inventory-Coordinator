@@ -349,9 +349,13 @@ namespace ManufacturingCoordinator.Api.Controllers
             }
 
             string workflowStatus;
-            if (manualResolutionStatus == "RESOLVED" && isValid == true && (quarantinedRollsCount ?? 0) == 0)
+            if (isValid == true)
             {
-                workflowStatus = "Resolved";
+                workflowStatus = "Verified";
+            }
+            else if (isValid == false)
+            {
+                workflowStatus = "Failed";
             }
             else if (manualResolutionStatus == "REJECTED")
             {
@@ -360,18 +364,6 @@ namespace ManufacturingCoordinator.Api.Controllers
             else if (manualResolutionStatus == "ON_HOLD")
             {
                 workflowStatus = "OnHold";
-            }
-            else if (isValid == true && (qualitySafetyStatus == "CLEAR" || qualitySafetyStatus == "PASSED") && (quarantinedRollsCount == null || quarantinedRollsCount == 0))
-            {
-                workflowStatus = "Verified";
-            }
-            else if (qualitySafetyStatus == "MANUAL_REVIEW_REQUIRED" || manualResolutionStatus == "PENDING_REVIEW")
-            {
-                workflowStatus = "ManualReviewRequired";
-            }
-            else if (isValid == false || (quarantinedRollsCount != null && quarantinedRollsCount > 0) || qualitySafetyStatus?.Contains("QUARANTINE", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                workflowStatus = "PendingReview";
             }
             else
             {

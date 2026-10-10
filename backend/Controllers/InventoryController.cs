@@ -115,6 +115,58 @@ namespace backend.Controllers
             return Ok(packagingTypes);
         }
 
+        // POST: api/inventory/packaging-types
+        [HttpPost("packaging-types")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<ActionResult<PackagingType>> CreatePackagingType([FromBody] PackagingType packagingType)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            try
+            {
+                var created = await _inventoryService.CreatePackagingTypeAsync(packagingType);
+                return CreatedAtAction(nameof(GetPackagingTypes), new { id = created.Id }, created);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        // PUT: api/inventory/packaging-types/{id}
+        [HttpPut("packaging-types/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<IActionResult> UpdatePackagingType(int id, [FromBody] PackagingType packagingType)
+        {
+            if (id != packagingType.Id) return BadRequest(new { message = "ID mismatch." });
+            try
+            {
+                var updated = await _inventoryService.UpdatePackagingTypeAsync(id, packagingType);
+                if (!updated) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
+        // DELETE: api/inventory/packaging-types/{id}
+        [HttpDelete("packaging-types/{id:int}")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<IActionResult> DeletePackagingType(int id)
+        {
+            try
+            {
+                var deleted = await _inventoryService.DeletePackagingTypeAsync(id);
+                if (!deleted) return NotFound();
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
+        }
+
         // GET: api/inventory/rawmaterials/{id}
         [HttpGet("rawmaterials/{id:int}")]
         public async Task<ActionResult<RawMaterial>> GetRawMaterialById(int id)
@@ -135,9 +187,13 @@ namespace backend.Controllers
                 var created = await _inventoryService.CreateRawMaterialAsync(material);
                 return CreatedAtAction(nameof(GetRawMaterialById), new { id = created.Id }, created);
             }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
             catch (System.Exception ex)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -409,6 +465,14 @@ namespace backend.Controllers
             if (dto == null) return BadRequest("Replenishment request is empty.");
             try
             {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var employeeId = User.FindFirst("employee_id")?.Value;
+
+                if (string.IsNullOrWhiteSpace(dto.WorkerId))
+                    dto.WorkerId = employeeId ?? userId;
+                if (string.IsNullOrWhiteSpace(dto.InitiatorId))
+                    dto.InitiatorId = userId;
+
                 var result = await _inventoryService.TriggerAgentReplenishmentAsync(
                     dto,
                     Request.Headers.Authorization.ToString());
@@ -422,6 +486,15 @@ namespace backend.Controllers
             {
                 return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = ex.Message });
             }
+        }
+
+        // POST: api/inventory/process-auto-replenishment
+        [HttpPost("process-auto-replenishment")]
+        [Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+        public async Task<IActionResult> ProcessAutoReplenishment()
+        {
+            await _inventoryService.ProcessAutomatedLowStockReplenishmentAsync();
+            return Ok(new { success = true, message = "Automated low stock evaluation completed." });
         }
 
         private bool AssignWorkerEmployeeId(CreateStockAlertDto alertDto)

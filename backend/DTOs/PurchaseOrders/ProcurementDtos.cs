@@ -9,20 +9,20 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
 
     public class CreateProcurementRequestDto
     {
-        [Required]
-        public int RawMaterialId { get; set; }
+        public int? RawMaterialId { get; set; }
 
         /// <summary>Alias for RawMaterialId.</summary>
-        public int MaterialId
+        public int? MaterialId
         {
             get => RawMaterialId;
             set => RawMaterialId = value;
         }
 
+        public string? Sku { get; set; }
+
         [MaxLength(200)]
         public string? MaterialName { get; set; }
 
-        [Required]
         [MaxLength(200)]
         public string RequiredSpecification { get; set; } = string.Empty;
 
@@ -33,9 +33,14 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
             set => RequiredSpecification = value;
         }
 
-        [Required]
-        [Range(0.001, double.MaxValue, ErrorMessage = "Production requirement must be positive.")]
         public decimal ProductionRequirement { get; set; }
+
+        /// <summary>Alias for ProductionRequirement.</summary>
+        public decimal Quantity
+        {
+            get => ProductionRequirement;
+            set => ProductionRequirement = value;
+        }
 
         [Range(0, double.MaxValue)]
         public decimal CurrentStock { get; set; }
@@ -53,15 +58,12 @@ namespace ManufacturingCoordinator.DTOs.PurchaseOrders
             set => ExistingOpenPoQuantity = value;
         }
 
-        [Required]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Maximum budget must be greater than zero.")]
         public decimal MaximumBudget { get; set; }
 
-        [Required]
-        public DateTime RequiredByDate { get; set; }
+        public DateTime? RequiredByDate { get; set; }
 
         /// <summary>Alias for RequiredByDate.</summary>
-        public DateTime RequiredDeliveryDate
+        public DateTime? RequiredDeliveryDate
         {
             get => RequiredByDate;
             set => RequiredByDate = value;

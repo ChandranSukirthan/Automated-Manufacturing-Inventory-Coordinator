@@ -8,7 +8,7 @@ import WorkerDashboard from './WorkerDashboard';
 vi.mock('../../components/Layout/RoleLayout', () => ({ default: ({ children }) => <div>{children}</div> }));
 vi.mock('../../services/inventoryService', () => ({ default: {
   getItems: vi.fn(), getRawMaterials: vi.fn(), getRolls: vi.fn(),
-  getAlerts: vi.fn(), getStockLevels: vi.fn(), deleteItem: vi.fn(),
+  getAlerts: vi.fn(), getStockLevels: vi.fn(), deleteItem: vi.fn(), updateItem: vi.fn(),
 } }));
 
 const item = { id: 42, sku: 'BP-FILM-042', name: 'Film', stockLevel: 0, reorderThreshold: 5 };
@@ -51,5 +51,42 @@ describe('Worker inventory deletion', () => {
     fireEvent.click(button);
     expect(await screen.findByText(/Cannot delete BP-FILM-042: it has 10 units remaining/)).toBeInTheDocument();
     expect(inventoryService.deleteItem).not.toHaveBeenCalled();
+  });
+
+  it('renders the operations overview on /dashboard/worker', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard/worker']}>
+        <WorkerDashboard />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Operations Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Floor Worker Quick Actions')).toBeInTheDocument();
+  });
+
+  it('renders the inventory catalogue workspace on /inventory', async () => {
+    render(
+      <MemoryRouter initialEntries={['/inventory']}>
+        <WorkerDashboard />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Inventory Workspace')).toBeInTheDocument();
+    expect(screen.getByText('Raw Materials & Items')).toBeInTheDocument();
+  });
+
+  it('opens edit modal and updates the item', async () => {
+    inventoryService.updateItem.mockResolvedValue({});
+    inventoryService.getItems.mockResolvedValueOnce([item]).mockResolvedValue([{ ...item, stockLevel: 25 }]);
+    render(<MemoryRouter><WorkerDashboard /></MemoryRouter>);
+    const editButton = await screen.findByRole('button', { name: `Edit ${item.sku}` });
+    fireEvent.click(editButton);
+    expect(await screen.findByText('Edit Catalog Item')).toBeInTheDocument();
+    const stockInputs = screen.getAllByRole('spinbutton');
+    // First spinbutton is Current Stock (Units), second is Reorder Level (Units)
+    fireEvent.change(stockInputs[0], { target: { value: '25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() => expect(inventoryService.updateItem).toHaveBeenCalledWith(42, expect.objectContaining({
+      id: 42,
+      stockLevel: 25,
+    })));
   });
 });

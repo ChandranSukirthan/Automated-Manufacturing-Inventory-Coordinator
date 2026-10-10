@@ -64,6 +64,21 @@ namespace ManufacturingCoordinator.Api.Controllers
             return Ok(shift);
         }
 
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "ITAdmin")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            await _shiftService.DeleteAsync(id);
+
+            // Audit log
+            var userId = GetCurrentUserId();
+            var userName = GetCurrentUserName();
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogAsync(userId, userName, "DELETE", "Shift", id.ToString(), true, ip);
+
+            return NoContent();
+        }
+
         [HttpPost("{id}/adjust-output")]
         [Authorize(Roles = "ITAdmin")]
         public async Task<IActionResult> AdjustOutput(Guid id)

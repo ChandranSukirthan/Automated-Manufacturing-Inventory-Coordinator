@@ -76,7 +76,7 @@ export default function AgentWorkflowsPage() {
     setSuccessMsg('');
     try {
       await adminService.approveWorkflow(workflowId);
-      setSuccessMsg(`Workflow ${workflowId} approved successfully. Maintenance authorization recorded.`);
+      setSuccessMsg(`Workflow ${workflowId} approved successfully.`);
       await fetchWorkflows();
     } catch (err) {
       console.error(err);
@@ -481,7 +481,7 @@ export default function AgentWorkflowsPage() {
           </div>
         ) : (
           filteredWorkflows.map((wf) => {
-            const isWaitingApproval = wf.workflowType === 'Maintenance' && 
+            const isWaitingApproval =
               (wf.status === 3 || wf.status === 'WaitingForApproval') && 
               (wf.approvalStatus === 0 || wf.approvalStatus === 'Pending') &&
               wf.status !== 1 && wf.status !== 'Completed' &&
@@ -537,8 +537,16 @@ export default function AgentWorkflowsPage() {
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
                       <div>
-                        <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">IT Admin Approval Required</span>
-                        <p className="text-xs text-slate-300 mt-0.5">This machine maintenance request awaits IT Admin authorization.</p>
+                        <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
+                          {wf.workflowType === 'Maintenance'
+                            ? 'IT Admin Approval Required'
+                            : `${wf.workflowType || 'Agent'} Workflow Approval Required`}
+                        </span>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          {wf.workflowType === 'Maintenance'
+                            ? 'This machine maintenance request awaits IT Admin authorization.'
+                            : 'This agentic workflow awaits IT Admin authorization. Approving authorizes the workflow proposal (payment settlement remains exclusively with Supply Chain Manager / Finance).'}
+                        </p>
                       </div>
                     </div>
 
@@ -546,16 +554,16 @@ export default function AgentWorkflowsPage() {
                       <button
                         onClick={() => handleApprove(wf.workflowId)}
                         disabled={isApproveLoading || isRejectLoading}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
                       >
                         {isApproveLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        <span>Authorize maintenance</span>
+                        <span>{wf.workflowType === 'Maintenance' ? 'Authorize maintenance' : 'Authorize workflow'}</span>
                       </button>
 
                       <button
                         onClick={() => handleReject(wf.workflowId)}
                         disabled={isApproveLoading || isRejectLoading}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded-xl border border-red-500/30 text-xs font-semibold transition-all disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded-xl border border-red-500/30 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
                       >
                         {isRejectLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
                         <span>Reject</span>

@@ -43,7 +43,9 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
         setState(() {
           _currentMachine = updated;
           _calculating = false;
-          _message = res['message']?.toString() ?? 'Maintenance calculation updated successfully!';
+          _message =
+              res['message']?.toString() ??
+              'Maintenance calculation updated successfully!';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -68,10 +70,8 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
   Future<void> _editMachine() async {
     final updated = await showDialog<MachineModel>(
       context: context,
-      builder: (_) => MachineFormDialog(
-        machine: _currentMachine,
-        service: widget.service,
-      ),
+      builder: (_) =>
+          MachineFormDialog(machine: _currentMachine, service: widget.service),
     );
 
     if (updated != null && mounted) {
@@ -92,7 +92,10 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Delete Equipment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Delete Equipment',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         content: Text(
           'Are you sure you want to delete "${_currentMachine.name}"? This action cannot be undone.',
           style: const TextStyle(color: Color(0xFFCBD5E1)),
@@ -100,7 +103,10 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF94A3B8)),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -201,7 +207,10 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                 const SizedBox(height: 6),
                 Text(
                   'Location: ${_currentMachine.location}',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 MetricGauge(
@@ -210,7 +219,8 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                   maxValue: _currentMachine.maintenanceIntervalHours > 0
                       ? _currentMachine.maintenanceIntervalHours
                       : 100,
-                  unit: 'h / ${_currentMachine.maintenanceIntervalHours.toInt()}h',
+                  unit:
+                      'h / ${_currentMachine.maintenanceIntervalHours.toInt()}h',
                 ),
                 const SizedBox(height: 12),
                 if (_currentMachine.isMaintenanceDue)
@@ -223,12 +233,19 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                     ),
                     child: const Row(
                       children: [
-                        Icon(Icons.warning_amber_rounded, color: Color(0xFFF59E0B), size: 20),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFF59E0B),
+                          size: 20,
+                        ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Maintenance overdue or required based on runtime limits.',
-                            style: TextStyle(color: Color(0xFFFDE68A), fontSize: 12),
+                            style: TextStyle(
+                              color: Color(0xFFFDE68A),
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ],
@@ -254,10 +271,26 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                 ),
                 const SizedBox(height: 12),
                 _specRow('Machine ID', _currentMachine.id),
-                _specRow('Uptime Total', '${_currentMachine.uptimeHours.toStringAsFixed(1)} hours'),
-                _specRow('Remaining to Service', '${_currentMachine.remainingHours.toStringAsFixed(1)} hours'),
-                _specRow('Service Cycle Interval', '${_currentMachine.maintenanceIntervalHours.toInt()} hours'),
-                _specRow('Last Synced', _currentMachine.updatedAt.toUtc().add(const Duration(hours: 5, minutes: 30)).toString().split('.')[0]),
+                _specRow(
+                  'Uptime Total',
+                  '${_currentMachine.uptimeHours.toStringAsFixed(1)} hours',
+                ),
+                _specRow(
+                  'Remaining to Service',
+                  '${_currentMachine.remainingHours.toStringAsFixed(1)} hours',
+                ),
+                _specRow(
+                  'Service Cycle Interval',
+                  '${_currentMachine.maintenanceIntervalHours.toInt()} hours',
+                ),
+                _specRow(
+                  'Last Synced',
+                  _currentMachine.updatedAt
+                      .toUtc()
+                      .add(const Duration(hours: 5, minutes: 30))
+                      .toString()
+                      .split('.')[0],
+                ),
               ],
             ),
           ),
@@ -269,15 +302,22 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
             icon: _calculating
                 ? const SizedBox.square(
                     dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0B0F19)),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF0B0F19),
+                    ),
                   )
                 : const Icon(Icons.calculate_rounded),
-            label: Text(_calculating ? 'Analyzing Cycles...' : 'Recalculate Maintenance'),
+            label: Text(
+              _calculating ? 'Analyzing Cycles...' : 'Recalculate Maintenance',
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF06B6D4),
               foregroundColor: const Color(0xFF0B0F19),
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -293,12 +333,20 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
                 ),
               );
             },
-            icon: const Icon(Icons.build_circle_outlined, color: Color(0xFF06B6D4)),
-            label: const Text('View Maintenance Logs', style: TextStyle(color: Color(0xFF06B6D4))),
+            icon: const Icon(
+              Icons.build_circle_outlined,
+              color: Color(0xFF06B6D4),
+            ),
+            label: const Text(
+              'View Maintenance Logs',
+              style: TextStyle(color: Color(0xFF06B6D4)),
+            ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: Color(0xFF06B6D4)),
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ],
@@ -312,7 +360,10 @@ class _MachineDetailScreenState extends State<MachineDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+          Text(
+            label,
+            style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+          ),
           Text(
             value,
             style: const TextStyle(

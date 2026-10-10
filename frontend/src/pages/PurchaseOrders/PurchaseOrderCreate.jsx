@@ -21,6 +21,7 @@ import AppLayout from '../../components/Layout/AppLayout';
 import purchaseOrderService from '../../services/purchaseOrderService';
 import supplierService from '../../services/supplierService';
 import rawMaterialService from '../../services/rawMaterialService';
+import procurementService from '../../services/procurementService';
 import { parseErrorMessage } from '../../utils/errorHandler';
 
 export default function PurchaseOrderCreate() {
@@ -37,6 +38,18 @@ export default function PurchaseOrderCreate() {
   const paramCandidateId = searchParams.get('candidateId');
   const paramProcurementId = searchParams.get('procurementId');
   const isFromAiRecommendation = Boolean(paramCandidateId || paramProcurementId);
+
+  useEffect(() => {
+    let active = true;
+    if (paramProcurementId) {
+      procurementService.getRequest(Number(paramProcurementId)).then((request) => {
+        if (active && request.generatedPurchaseOrderId) {
+          navigate(`/purchase-orders/${request.generatedPurchaseOrderId}`, { replace: true });
+        }
+      }).catch(() => {});
+    }
+    return () => { active = false; };
+  }, [paramProcurementId, navigate]);
 
   const [suppliers, setSuppliers] = useState([]);
   const [materials, setMaterials] = useState([]);

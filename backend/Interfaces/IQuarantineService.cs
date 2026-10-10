@@ -12,5 +12,6 @@ namespace ManufacturingCoordinator.Api.Interfaces
         Task<IReadOnlyList<QuarantineDto>> QuarantineDefectAsync(Guid defectId, CreateQuarantineDto dto);
         Task<QuarantineDto?> ReleaseAsync(Guid id);
         Task<QuarantineDto?> ReleaseAsync(Guid id, string? resolutionNote, string? resolvedBy);
+        Task<IReadOnlyList<QuarantineDto>> ReleaseAllForDefectAsync(Guid defectId, string? resolutionNote, string? resolvedBy);
     }
 }

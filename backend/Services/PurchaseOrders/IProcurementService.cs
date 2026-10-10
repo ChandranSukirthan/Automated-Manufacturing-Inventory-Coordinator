@@ -13,6 +13,7 @@ namespace ManufacturingCoordinator.Services.PurchaseOrders
         Task<ProcurementResponseDto> RunAiResearchAsync(int procurementRequestId);
         Task<ProcurementResponseDto?> GetByIdAsync(int id);
         Task<IEnumerable<ProcurementResponseDto>> GetAllAsync();
+        Task<bool> DeleteRequestAsync(int id);
 
         // ── Candidates ────────────────────────────────────────────────────────────
         Task<IEnumerable<SupplierCandidateDto>> GetCandidatesAsync(int procurementRequestId);

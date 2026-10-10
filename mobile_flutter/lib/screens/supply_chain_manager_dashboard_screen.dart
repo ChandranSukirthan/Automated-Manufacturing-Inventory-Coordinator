@@ -240,9 +240,20 @@ class _SupplyChainManagerDashboardScreenState extends State<SupplyChainManagerDa
   Future<void> _triggerAiProcurement(StockAlertItem alert) async {
     setState(() => _loading = true);
     try {
-      final reqData = {
-        'rawMaterialId': alert.rawMaterialId,
-        'quantity': alert.netDeficit != null && alert.netDeficit! > 0 ? alert.netDeficit : 100,
+      final qty = (alert.netDeficit != null && alert.netDeficit! > 0)
+          ? alert.netDeficit!
+          : (alert.quantityRequested > 0 ? alert.quantityRequested.toDouble() : 100.0);
+
+      final reqData = <String, dynamic>{
+        if (alert.rawMaterialId != null && alert.rawMaterialId! > 0)
+          'rawMaterialId': alert.rawMaterialId,
+        'sku': alert.sku,
+        'materialName': alert.materialName ?? alert.sku,
+        'quantity': qty,
+        'productionRequirement': qty,
+        'requiredSpecification': 'Automated replenishment specification for ${alert.materialName ?? alert.sku}',
+        'maximumBudget': 500000.0,
+        'requiredByDate': DateTime.now().toUtc().add(const Duration(days: 7)).toIso8601String(),
       };
       // Step 1: Create request
       final request = await widget.service.createProcurementRequest(reqData);

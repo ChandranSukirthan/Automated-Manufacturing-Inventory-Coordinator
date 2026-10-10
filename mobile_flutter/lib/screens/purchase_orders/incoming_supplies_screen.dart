@@ -7,10 +7,12 @@ import '../../widgets/app_widgets.dart';
 class IncomingSuppliesScreen extends StatefulWidget {
   const IncomingSuppliesScreen({
     required this.service,
+    this.showAppBar = true,
     super.key,
   });
 
   final PurchaseOrderService service;
+  final bool showAppBar;
 
   @override
   State<IncomingSuppliesScreen> createState() => _IncomingSuppliesScreenState();
@@ -75,21 +77,23 @@ class _IncomingSuppliesScreenState extends State<IncomingSuppliesScreen> {
 
     return Scaffold(
       backgroundColor: navyBg,
-      appBar: AppBar(
-        backgroundColor: navyBg,
-        elevation: 0,
-        title: const Text(
-          'Incoming Supplies',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-            onPressed: _fetchSupplies,
-            tooltip: 'Refresh Deliveries',
-          ),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: navyBg,
+              elevation: 0,
+              title: const Text(
+                'Incoming Supplies',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                  onPressed: _fetchSupplies,
+                  tooltip: 'Refresh Deliveries',
+                ),
+              ],
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

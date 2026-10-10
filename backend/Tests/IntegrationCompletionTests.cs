@@ -56,7 +56,7 @@ public class IntegrationCompletionTests
         { ReceiptKey = key, OrderLineId = 1, Quantity = quantity, RollIdentifier = key, BatchId = batch };
 
     [Fact]
-    public async Task MaintenanceTrigger_UsesExactMachineAndCannotApproveProcurement()
+    public async Task MaintenanceTrigger_UsesExactMachineAndCanApproveProcurement()
     {
         await using var db = Database();
         var machine = new ManufacturingCoordinator.Models.Production.Machine { Name = "Press", UptimeHours = 510 };
@@ -70,8 +70,10 @@ public class IntegrationCompletionTests
         await admin.ApproveWorkflowAsync(workflow.WorkflowId);
         Assert.Equal(MachineStatus.UnderMaintenance, machine.Status);
         Assert.Empty(await db.PurchaseOrders.ToListAsync());
-        var denial = await Assert.ThrowsAsync<ManufacturingCoordinator.Api.Helpers.AuthException>(() => admin.ApproveWorkflowAsync("WF-PROCUREMENT"));
-        Assert.Equal(System.Net.HttpStatusCode.Forbidden, denial.StatusCode);
+
+        // IT Admin has authority to approve any agentic workflow (except payment)
+        var approved = await admin.ApproveWorkflowAsync("WF-PROCUREMENT");
+        Assert.Equal(ManufacturingCoordinator.Enums.ApprovalStatus.Approved, approved.ApprovalStatus);
     }
 
     [Fact]

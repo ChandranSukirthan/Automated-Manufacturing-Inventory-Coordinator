@@ -10,7 +10,7 @@ namespace backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "FloorWorker,SupplyChainManager,ITAdmin")]
+    [Microsoft.AspNetCore.Authorization.Authorize(Roles = "FloorWorker,SupplyChainManager,QualityInspector,ITAdmin")]
     public class AgentWorkflowController : ControllerBase
     {
         private readonly IInventoryService _inventoryService;
@@ -31,11 +31,83 @@ namespace backend.Controllers
         }
 
         // GET: api/agentworkflow/workflows
-        // Returns agentic pipeline execution states for monitor view
+        // Returns agentic pipeline execution states for monitor view scoped by caller's role & permissions
         [HttpGet("workflows")]
         public async Task<IActionResult> GetWorkflows()
         {
-            var workflows = await _appContext.AgentWorkflows.AsNoTracking().OrderByDescending(w => w.StartedAt).ToListAsync();
+            var isITAdmin = User.IsInRole("ITAdmin");
+            var isManager = User.IsInRole("SupplyChainManager");
+            var isQA = User.IsInRole("QualityInspector");
+            var isWorker = User.IsInRole("FloorWorker");
+
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var employeeId = User.FindFirst("employee_id")?.Value;
+            var userName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+            IQueryable<ManufacturingCoordinator.Models.Administration.AgentWorkflow> query = 
+                _appContext.AgentWorkflows.AsNoTracking();
+
+            // 1. IT Admin can see ALL workflows as the center of command
+            if (isITAdmin)
+            {
+                // Unrestricted access for IT Admin
+            }
+            // 2. Machine Maintenance is strictly for IT Admin - non-admins must never see Maintenance workflows
+            else
+            {
+                query = query.Where(w => w.WorkflowType != "Maintenance" && !w.WorkflowId.StartsWith("WF-MAINT"));
+
+                if (isManager)
+                {
+                    // Supply Chain Manager sees workflows they are responsible for / need to approve
+                    // (Procurement / Replenishment workflows, POs)
+                    query = query.Where(w =>
+                        w.WorkflowType == "Procurement" ||
+                        w.PurchaseOrderId != null ||
+                        w.WorkflowId.StartsWith("WF-PO") ||
+                        w.WorkflowId.StartsWith("WF-WORKER") ||
+                        w.Objective.ToLower().Contains("replenish") ||
+                        w.Objective.ToLower().Contains("procure") ||
+                        w.Objective.ToLower().Contains("reorder"));
+                }
+                else if (isQA)
+                {
+                    // Quality Inspector can only see workflows if QA agent validated it (or quality workflows)
+                    query = query.Where(w =>
+                        w.ValidationResults != null ||
+                        w.WorkflowType == "Quality" ||
+                        w.WorkflowId.StartsWith("WF-QA") ||
+                        (w.StateJson != null && w.StateJson.Contains("validation_results")));
+                }
+                else if (isWorker)
+                {
+                    // Floor Worker can only see the workflows they originally initiated (their history)
+                    var workerAlertIds = new System.Collections.Generic.List<string>();
+                    var workerKey = employeeId ?? userId;
+                    if (!string.IsNullOrWhiteSpace(workerKey))
+                    {
+                        var alertIds = await _appContext.StockAlerts
+                            .Where(a => a.WorkerId == workerKey || (employeeId != null && a.WorkerId == employeeId) || (userId != null && a.WorkerId == userId))
+                            .Select(a => a.Id)
+                            .ToListAsync();
+                        workerAlertIds = alertIds.Select(id => $"WF-WORKER-ALERT-{id}").ToList();
+                    }
+
+                    query = query.Where(w =>
+                        (w.StateJson != null && (
+                            (userId != null && w.StateJson.Contains(userId)) ||
+                            (employeeId != null && w.StateJson.Contains(employeeId)) ||
+                            (userName != null && w.StateJson.Contains(userName))
+                        )) ||
+                        workerAlertIds.Contains(w.WorkflowId) ||
+                        (employeeId != null && w.WorkflowId.Contains(employeeId)) ||
+                        (userId != null && w.WorkflowId.Contains(userId)) ||
+                        (userName != null && w.Objective.Contains(userName))
+                    );
+                }
+            }
+
+            var workflows = await query.OrderByDescending(w => w.StartedAt).ToListAsync();
             return Ok(workflows.Select(w => new { w.WorkflowId, w.WorkflowType, w.MachineId,
                 w.PurchaseOrderId, w.Objective, w.CurrentAgent, Status = w.Status.ToString(),
                 ApprovalStatus = w.ApprovalStatus.ToString(), w.StartedAt, w.CompletedAt, w.FinalOutcome,

@@ -6,7 +6,6 @@ import '../models/quality_models.dart';
 import '../services/quality_service.dart';
 import '../widgets/app_widgets.dart';
 import 'ai_validation_screen.dart';
-import 'batch_scan_screen.dart';
 import 'defect_detail_screen.dart';
 import 'defect_form_screen.dart';
 import 'defects_screen.dart';
@@ -165,41 +164,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             criticalCount: criticalDefects.length,
             activeQuarantinesCount: activeQuarantines.length,
             releasedQuarantinesCount: releasedQuarantines.length,
-            batchesHeldCount: summary.quarantinedBatches,
+            rollsHeldCount: summary.quarantinedBatches > 0
+                ? summary.quarantinedBatches
+                : (summary.quarantinedRolls > 0
+                    ? summary.quarantinedRolls
+                    : activeQuarantines.length),
             restrictedRollsCount: summary.affectedInventory > 0
                 ? summary.affectedInventory
                 : activeQuarantines.length,
             clearedRollsCount: summary.releasedInventory,
             aiValidation: _aiValidation,
-          ),
-          const SizedBox(height: 20),
-
-          // Quick Scan QR Button
-          SizedBox(
-            height: 50,
-            child: FilledButton.icon(
-              onPressed: () => Navigator.push<void>(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BatchScanScreen(
-                    service: widget.service,
-                    appState: widget.appState,
-                  ),
-                ),
-              ),
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              label: const Text(
-                'Scan Batch QR Code',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
           ),
           const SizedBox(height: 20),
 
@@ -440,7 +414,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required int criticalCount,
     required int activeQuarantinesCount,
     required int releasedQuarantinesCount,
-    required int batchesHeldCount,
+    required int rollsHeldCount,
     required int restrictedRollsCount,
     required int clearedRollsCount,
     required AiValidationData? aiValidation,
@@ -487,7 +461,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           valueColor: AppColors.error,
           icon: Icons.shield_outlined,
           iconColor: AppColors.error,
-          footerLeft: '$batchesHeldCount held',
+          footerLeft: '$rollsHeldCount items held',
           footerRight: '$releasedQuarantinesCount rel',
           footerRightColor: const Color(0xFF34D399),
           onTap: () {
@@ -1435,8 +1409,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 10),
       _shortcutTile(
         title: 'AI Validation & Safety',
-        subtitle: 'Authoritative rules & safety gates',
-        icon: Icons.auto_awesome_outlined,
+        subtitle: 'Assessments & Safety Gates',
+        icon: Icons.auto_awesome_rounded,
+        accentColor: const Color(0xFF60A5FA),
         onTap: () {
           if (widget.onNavigateTab != null) {
             widget.onNavigateTab!(1);
@@ -1456,8 +1431,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Defect Reports',
-        subtitle: 'Inspection, logging & defect matrix',
+        subtitle: 'Inspection & Logging',
         icon: Icons.fact_check_outlined,
+        accentColor: const Color(0xFFA78BFA),
         onTap: () {
           if (widget.onNavigateTab != null) {
             widget.onNavigateTab!(2);
@@ -1474,8 +1450,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Quarantine Control',
-        subtitle: 'Active holds & release management',
+        subtitle: 'Active Holds & Releases',
         icon: Icons.shield_outlined,
+        accentColor: const Color(0xFFFB7185),
         onTap: () {
           if (widget.onNavigateTab != null) {
             widget.onNavigateTab!(3);
@@ -1492,8 +1469,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 8),
       _shortcutTile(
         title: 'Quarantine History',
-        subtitle: 'Audit ledger & released dispositions',
+        subtitle: 'Audit Ledger & Dispositions',
         icon: Icons.history_rounded,
+        accentColor: const Color(0xFF22D3EE),
         onTap: () {
           if (widget.onNavigateTab != null) {
             widget.onNavigateTab!(4);
@@ -1514,6 +1492,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String title,
     required String subtitle,
     required IconData icon,
+    required Color accentColor,
     required VoidCallback onTap,
   }) => InkWell(
     onTap: onTap,
@@ -1526,10 +1505,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+              color: accentColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.3),
+              ),
             ),
-            child: Icon(icon, color: const Color(0xFF60A5FA), size: 18),
+            child: Icon(icon, color: accentColor, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1577,7 +1559,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           type: 'QUARANTINE HOLD',
           title:
               'Roll ${q.inventoryRollId.length > 8 ? q.inventoryRollId.substring(0, 8) : q.inventoryRollId}',
-          subtitle: 'Batch: ${q.batchId} • ${q.reason}',
+          subtitle: 'Roll: ${q.inventoryRollId} • ${q.reason}',
           onInspect: () => Navigator.push<void>(
             context,
             MaterialPageRoute(
@@ -1672,7 +1654,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ? 'Quarantine Released'
               : 'Quarantine Placed',
           ref: 'QR-${q.id.substring(0, 6)}',
-          detail: 'Roll ${q.inventoryRollId} (${q.batchId})',
+          detail: 'Roll ${q.inventoryRollId}',
           status: q.status,
           onTap: () => Navigator.push<void>(
             context,

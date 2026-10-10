@@ -57,6 +57,27 @@ const inventoryService = {
     return response.data;
   },
 
+  // Packaging types
+  getPackagingTypes: async () => {
+    const response = await api.get('/inventory/packaging-types');
+    return response.data;
+  },
+
+  createPackagingType: async (data) => {
+    const response = await api.post('/inventory/packaging-types', data);
+    return response.data;
+  },
+
+  updatePackagingType: async (id, data) => {
+    const response = await api.put(`/inventory/packaging-types/${id}`, data);
+    return response.data;
+  },
+
+  deletePackagingType: async (id) => {
+    const response = await api.delete(`/inventory/packaging-types/${id}`);
+    return response.data;
+  },
+
   // =========================================================================
   // Inventory rolls and QR code lookup
   // =========================================================================
@@ -159,6 +180,11 @@ const inventoryService = {
 
   getActiveWorkflows: async () => {
     const response = await api.get('/agentworkflow/workflows');
+    return response.data;
+  },
+
+  processAutoReplenishment: async () => {
+    const response = await api.post('/inventory/process-auto-replenishment');
     return response.data;
   }
 

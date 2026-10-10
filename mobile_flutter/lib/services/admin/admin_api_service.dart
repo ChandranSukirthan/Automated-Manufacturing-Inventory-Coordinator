@@ -29,7 +29,9 @@ class AdminApiService {
   }
 
   Future<Map<String, dynamic>> calculateMaintenance(String machineId) async {
-    final response = await apiClient.post('/machines/$machineId/calculate-maintenance');
+    final response = await apiClient.post(
+      '/machines/$machineId/calculate-maintenance',
+    );
     return response is Map<String, dynamic> ? response : {};
   }
 
@@ -37,7 +39,10 @@ class AdminApiService {
     final response = await apiClient.get('/machines/$machineId/maintenance');
     if (response is List) {
       return response
-          .map((item) => MaintenanceLogModel.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) =>
+                MaintenanceLogModel.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     }
     return [];
@@ -80,6 +85,28 @@ class AdminApiService {
 
   Future<void> deleteMachine(String id) async {
     await apiClient.delete('/machines/$id');
+  }
+
+  Future<void> createMaintenanceLog(
+    String machineId,
+    String description,
+    String performedBy,
+    int type,
+  ) async {
+    await apiClient.post('/maintenance', {
+      'machineId': machineId,
+      'description': description,
+      'performedBy': performedBy,
+      'type': type,
+    });
+  }
+
+  Future<void> deleteMaintenanceLog(String id) async {
+    await apiClient.delete('/maintenance/$id');
+  }
+
+  Future<void> deleteShift(String id) async {
+    await apiClient.delete('/shifts/$id');
   }
 
   // ========== Shifts ==========
@@ -234,7 +261,9 @@ class AdminApiService {
     DateTime? toDate,
   }) async {
     final queryParams = <String, String>{};
-    if (userName != null && userName.isNotEmpty) queryParams['userName'] = userName;
+    if (userName != null && userName.isNotEmpty) {
+      queryParams['userName'] = userName;
+    }
     if (action != null && action.isNotEmpty) queryParams['action'] = action;
     if (entity != null && entity.isNotEmpty) queryParams['entity'] = entity;
     if (fromDate != null) queryParams['fromDate'] = fromDate.toIso8601String();
@@ -277,7 +306,10 @@ class AdminApiService {
     return await apiClient.post('/admin/agent-workflows/$workflowId/reject');
   }
 
-  Future<dynamic> triggerWorkflow(String objective, [String? workflowId]) async {
+  Future<dynamic> triggerWorkflow(
+    String objective, [
+    String? workflowId,
+  ]) async {
     final body = <String, dynamic>{'objective': objective};
     if (workflowId != null) {
       body['workflowId'] = workflowId;
@@ -292,6 +324,6 @@ class AdminApiService {
     if (response is Map<String, dynamic>) {
       return SystemHealthModel.fromJson(response);
     }
-    return SystemHealthModel(overallStatus: 'ONLINE', services: []);
+    return SystemHealthModel(overallStatus: 'UNKNOWN', services: []);
   }
 }

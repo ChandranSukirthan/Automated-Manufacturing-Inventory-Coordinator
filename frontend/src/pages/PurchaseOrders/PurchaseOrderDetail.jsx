@@ -77,6 +77,12 @@ export default function PurchaseOrderDetail() {
   // Check if current user is Supply Chain Manager (role === 1)
   const isManager = user && (user.role === 1 || user.role === 'SupplyChainManager' || user.role === '1');
 
+  // Check if current user has QA audit access (Quality Inspector or IT Admin)
+  const canViewQaAudit = Boolean(user && (
+    user.role === 2 || user.role === 'QualityInspector' || user.role === '2' ||
+    user.role === 3 || user.role === 'ITAdmin' || user.role === '3'
+  ));
+
   const handleDownloadPdf = async () => {
     setDownloadLoading(true);
     try {
@@ -335,6 +341,14 @@ export default function PurchaseOrderDetail() {
     }
   };
 
+  const isPending = (status) => {
+    const s = String(status || '').toLowerCase().replace(/[^a-z]/g, '');
+    return s === 'pendingapproval' || s === 'waitingforapproval' || s === 'pending';
+  };
+  const safetyStatus = String(po?.qualitySafetyStatus || po?.qaSafetyStatus || '').toUpperCase();
+  const isResolved = po?.manualResolutionStatus === 'RESOLVED' || po?.isQaResolved === true;
+  const isQaBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus.includes('MANUAL_REVIEW') || safetyStatus === 'BLOCKED' || po?.isQuarantined === true) && !isResolved;
+
   const currentStepIdx = getStepIndex(po.status);
   const isRejected = po.status === 'Rejected';
   const isRevision = po.status === 'RevisionRequested';
@@ -361,6 +375,43 @@ export default function PurchaseOrderDetail() {
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Submit for Approval</span>
+              </button>
+            </div>
+          )}
+
+          {/* Pending Approval Manager Actions */}
+          {isPending(po.status) && isManager && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setRejectModalOpen(true)}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-rose-600/10 border border-rose-500/30 hover:bg-rose-600/20 text-rose-400 font-semibold rounded-xl text-xs transition-colors disabled:opacity-50"
+                title="Reject Purchase Order"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Reject</span>
+              </button>
+              <button
+                onClick={() => setReviseModalOpen(true)}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 font-semibold rounded-xl text-xs transition-colors disabled:opacity-50"
+                title="Request Revision"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Revise</span>
+              </button>
+              <button
+                onClick={() => setApproveModalOpen(true)}
+                disabled={actionLoading || isQaBlocked}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-emerald-600/25 transition-all disabled:opacity-50"
+                title={isQaBlocked ? 'Approval blocked by QA Safety Gate' : 'Approve Purchase Order & Authorize Payment'}
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
+                <span>Approve & Authorize</span>
               </button>
             </div>
           )}
@@ -439,7 +490,7 @@ export default function PurchaseOrderDetail() {
       )}
 
       {/* QA Safety Gate Status Banner for Managers */}
-      {po.status === 'PendingApproval' && (() => {
+      {isPending(po.status) && (() => {
         const safetyStatus = String(po.qualitySafetyStatus || po.qaSafetyStatus || '').toUpperCase();
         const isResolved = po.manualResolutionStatus === 'RESOLVED' || po.isQaResolved === true;
         const isBlocked = (safetyStatus.includes('QUARANTINE') || safetyStatus === 'BLOCKED' || po.isQuarantined === true) && !isResolved;
@@ -469,12 +520,14 @@ export default function PurchaseOrderDetail() {
                 </span>
               </div>
             </div>
-            <Link
-              to="/quality/ai-validation"
-              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-xs shrink-0 transition-colors"
-            >
-              View QA Audit
-            </Link>
+            {canViewQaAudit && (
+              <Link
+                to="/quality/ai-validation"
+                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-xs shrink-0 transition-colors"
+              >
+                View QA Audit
+              </Link>
+            )}
           </div>
         );
       })()}

@@ -169,7 +169,7 @@ public class QaWorkflowIsolationTests
     }
 
     [Fact]
-    public async Task Test2_StaleResolutionPrevention_ActiveQuarantine_ResetsToPendingReview()
+    public async Task Test2_WarehouseRollQuarantine_DoesNotBlockReplenishmentPoValidation()
     {
         await using var db = CreateInMemoryDbContext();
 
@@ -207,7 +207,7 @@ public class QaWorkflowIsolationTests
         };
         db.PurchaseOrders.Add(po);
 
-        // An active quarantine exists in DB
+        // An active quarantine exists in DB on an existing warehouse roll
         db.Quarantines.Add(new Quarantine
         {
             Id = Guid.NewGuid(),
@@ -218,24 +218,6 @@ public class QaWorkflowIsolationTests
         });
 
         db.StockRolls.Add(new backend.Models.InventoryRoll { RawMaterialId = 1, RollIdentifier = "ROLL-TEST-1", Status = "In Stock" });
-        // Workflow has stale "RESOLVED" state
-        var staleWf = new AgentWorkflow
-        {
-            Id = Guid.NewGuid(),
-            WorkflowId = "WF-QA-PO-2026-0033",
-            Objective = "Validation for PO PO-2026-0033",
-            ValidationResults = JsonSerializer.Serialize(new Dictionary<string, object?>
-            {
-                ["isValid"] = true,
-                ["qualitySafetyStatus"] = "QUARANTINE_ACTIVE",
-                ["quarantinedRollsCount"] = 1,
-                ["manualResolutionStatus"] = "RESOLVED", // STALE RESOLUTION
-                ["manualResolutionNote"] = "Old stale note",
-                ["resolvedBy"] = "Old Inspector",
-                ["resolvedAt"] = "2026-09-01T00:00:00Z"
-            })
-        };
-        db.AgentWorkflows.Add(staleWf);
         await db.SaveChangesAsync();
 
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
@@ -250,11 +232,10 @@ public class QaWorkflowIsolationTests
         // Act: Re-run validation for PO
         var resultWf = await poService.EnsurePoValidationWorkflowAsync(po);
 
-        // Assert: It must NOT remain falsely resolved!
+        // Assert: New replenishment PO for fresh stock is VALID (4 checks pass) even though a warehouse roll is quarantined
         using var doc = JsonDocument.Parse(resultWf.ValidationResults!);
-        Assert.False(doc.RootElement.GetProperty("isValid").GetBoolean());
-        Assert.Equal("QUARANTINE_ACTIVE", doc.RootElement.GetProperty("qualitySafetyStatus").GetString());
-        Assert.Equal("PENDING_REVIEW", doc.RootElement.GetProperty("manualResolutionStatus").GetString());
+        Assert.True(doc.RootElement.GetProperty("isValid").GetBoolean());
+        Assert.Equal("CLEAR", doc.RootElement.GetProperty("qualitySafetyStatus").GetString());
         Assert.Equal(1, doc.RootElement.GetProperty("quarantinedRollsCount").GetInt32());
     }
 
@@ -319,7 +300,7 @@ public class QaWorkflowIsolationTests
     }
 
     [Fact]
-    public async Task Test4_ManagerApprovalGate_BlockedWhenQuarantineActive_AllowedAfterResolution()
+    public async Task Test4_ManagerApprovalGate_AllowedWhenWarehouseRollQuarantined()
     {
         await using var db = CreateInMemoryDbContext();
 
@@ -358,6 +339,7 @@ public class QaWorkflowIsolationTests
         };
         db.PurchaseOrders.Add(po);
 
+        // An active quarantine exists on a physical roll in warehouse
         var quarantine = new Quarantine
         {
             Id = Guid.NewGuid(),
@@ -379,35 +361,10 @@ public class QaWorkflowIsolationTests
             NullLogger<PurchaseOrderService>.Instance
         );
 
-        // 1. Initial Validation -> BLOCKED
+        // Validation for new replenishment PO
         await poService.EnsurePoValidationWorkflowAsync(po);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => poService.ValidateApprovalGateAsync(po));
-        Assert.Contains("active quarantine", ex.Message);
 
-        // 2. Resolve & Release Quarantine
-        quarantine.Status = QuarantineStatus.Released;
-        quarantine.ReleasedAt = DateTime.UtcNow;
-
-        var wf = await db.AgentWorkflows.FirstAsync(w => w.WorkflowId == "WF-QA-PO-2026-0040");
-        wf.ValidationResults = JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["isValid"] = true,
-            ["qualitySafetyStatus"] = "CLEAR",
-            ["supplierValidation"] = "PASSED",
-            ["budgetCheck"] = "PASSED",
-            ["poMathematicalCheck"] = "PASSED",
-            ["materialValidation"] = "PASSED",
-            ["quarantinedRollsCount"] = 0,
-            ["impactReason"] = "",
-            ["rejectionReason"] = "",
-            ["manualResolutionStatus"] = "RESOLVED",
-            ["manualResolutionNote"] = "Inspected and verified release",
-            ["resolvedBy"] = "Inspector",
-            ["resolvedAt"] = DateTime.UtcNow.ToString("o")
-        });
-        await db.SaveChangesAsync();
-
-        // 3. Approval Gate check now PASSES without exception
+        // Manager Approval Gate check PASSES: warehouse roll quarantine does not block new replenishment PO
         var exception = await Record.ExceptionAsync(() => poService.ValidateApprovalGateAsync(po));
         Assert.Null(exception);
     }

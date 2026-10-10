@@ -1,3 +1,7 @@
+import 'dart:async';
+import '../../app_state.dart';
+import '../profile_screen.dart';
+import 'subscreens/admin_modules_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mobile_flutter/models/admin/machine_model.dart';
@@ -10,11 +14,10 @@ import 'package:mobile_flutter/screens/admin/tabs/admin_overview_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/production_equipment_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/agent_workflows_tab.dart';
 import 'package:mobile_flutter/screens/admin/tabs/system_health_tab.dart';
-import 'package:mobile_flutter/screens/defects_screen.dart';
-import 'package:mobile_flutter/services/quality_service.dart';
 
 class ItAdminMainScreen extends StatefulWidget {
   final ApiClient apiClient;
+  final AppState? appState;
   final bool showAppBar;
   final VoidCallback? onSignOut;
   final String? userName;
@@ -22,6 +25,7 @@ class ItAdminMainScreen extends StatefulWidget {
 
   const ItAdminMainScreen({
     required this.apiClient,
+    this.appState,
     this.showAppBar = true,
     this.onSignOut,
     this.userName,
@@ -33,7 +37,11 @@ class ItAdminMainScreen extends StatefulWidget {
   State<ItAdminMainScreen> createState() => _ItAdminMainScreenState();
 }
 
-class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
+class _ItAdminMainScreenState extends State<ItAdminMainScreen>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+  bool _fetching = false;
+  bool _foreground = true;
   late final AdminApiService _service;
   int _currentIndex = 0;
 
@@ -49,27 +57,67 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
     super.initState();
     _service = AdminApiService(apiClient: widget.apiClient);
     _loadAllData();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        _loadAllData(background: true);
+      }
+    });
   }
 
-  Future<void> _loadAllData() async {
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground) _loadAllData(background: true);
+  }
+
+  Future<void> _loadAllData({bool background = false}) async {
+    if (_fetching || !mounted) return;
+    _fetching = true;
     setState(() {
-      _loading = true;
+      if (!background) _loading = true;
       _error = null;
     });
 
     try {
       final results = await Future.wait([
-        _service.getMachines().catchError((_) => <MachineModel>[]),
-        _service.getShifts().catchError((_) => <ShiftModel>[]),
-        _service.getAgentWorkflows().catchError((_) => <WorkflowModel>[]),
-        _service.getSystemHealth().catchError((_) => SystemHealthModel(overallStatus: 'ONLINE', services: [])),
+        _service.getMachines().catchError((_) {
+          _error =
+              'Some admin data could not be refreshed. Pull to refresh and retry.';
+          return _machines;
+        }),
+        _service.getShifts().catchError((_) {
+          _error =
+              'Some admin data could not be refreshed. Pull to refresh and retry.';
+          return _shifts;
+        }),
+        _service.getAgentWorkflows().catchError((_) {
+          _error = 'Workflow refresh failed. Pull to refresh and retry.';
+          return _workflows;
+        }),
+        _service.getSystemHealth().catchError(
+          (_) => SystemHealthModel(overallStatus: 'UNKNOWN', services: []),
+        ),
       ]);
 
       if (mounted) {
         setState(() {
-          _machines = (results[0] as List<dynamic>?)?.cast<MachineModel>() ?? <MachineModel>[];
-          _shifts = (results[1] as List<dynamic>?)?.cast<ShiftModel>() ?? <ShiftModel>[];
-          _workflows = (results[2] as List<dynamic>?)?.cast<WorkflowModel>() ?? <WorkflowModel>[];
+          _machines =
+              (results[0] as List<dynamic>?)?.cast<MachineModel>() ??
+              <MachineModel>[];
+          _shifts =
+              (results[1] as List<dynamic>?)?.cast<ShiftModel>() ??
+              <ShiftModel>[];
+          _workflows =
+              (results[2] as List<dynamic>?)?.cast<WorkflowModel>() ??
+              <WorkflowModel>[];
           _health = results[3] as SystemHealthModel?;
           _loading = false;
         });
@@ -81,10 +129,21 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
           _loading = false;
         });
       }
+    } finally {
+      _fetching = false;
     }
   }
 
   void _showProfileDialog() {
+    if (widget.appState != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfileScreen(appState: widget.appState!),
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -98,7 +157,11 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                 color: const Color(0xFF06B6D4).withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.person, color: Color(0xFF06B6D4), size: 24),
+              child: const Icon(
+                Icons.person,
+                color: Color(0xFF06B6D4),
+                size: 24,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -107,11 +170,18 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                 children: [
                   Text(
                     widget.userName ?? 'System Administrator',
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text(
                     widget.userEmail ?? 'admin@amic.com',
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -129,8 +199,12 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
               Icon(Icons.verified_user, color: Color(0xFF10B981), size: 18),
               SizedBox(width: 8),
               Text(
-                'Role: ITAdmin (Full Access)',
-                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                'Role: ITAdmin',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -138,7 +212,10 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text(
+              'Close',
+              style: TextStyle(color: Color(0xFF94A3B8)),
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -159,7 +236,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _workflows.where((w) => w.canAuthorizeMaintenance).length;
+    final pendingCount = _workflows.where((w) => w.canAuthorize).length;
 
     final tabs = [
       AdminOverviewTab(
@@ -190,9 +267,10 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
         loading: _loading,
         onRefresh: _loadAllData,
       ),
-      DefectsScreen(
-        service: QualityService(widget.apiClient),
-        showAppBar: false,
+      AdminModulesScreen(
+        apiClient: widget.apiClient,
+        appState: widget.appState,
+        service: _service,
       ),
     ];
 
@@ -229,7 +307,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                         ),
                       ),
                       Text(
-                        'Student 4 • Production & Monitoring',
+                        'Student 4 Ã¢â‚¬Â¢ Production & Monitoring',
                         style: TextStyle(
                           color: Color(0xFF64748B),
                           fontSize: 10,
@@ -242,13 +320,19 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Color(0xFF06B6D4)),
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: Color(0xFF06B6D4),
+                  ),
                   tooltip: 'Refresh Telemetry',
                   onPressed: _loadAllData,
                 ),
                 if (widget.onSignOut != null)
                   IconButton(
-                    icon: const Icon(Icons.account_circle_outlined, color: Color(0xFF06B6D4)),
+                    icon: const Icon(
+                      Icons.account_circle_outlined,
+                      color: Color(0xFF06B6D4),
+                    ),
                     tooltip: 'Account Profile',
                     onPressed: _showProfileDialog,
                   ),
@@ -266,10 +350,14 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.security_rounded, color: Color(0xFF06B6D4), size: 16),
+                      Icon(
+                        Icons.security_rounded,
+                        color: Color(0xFF06B6D4),
+                        size: 16,
+                      ),
                       SizedBox(width: 8),
                       Text(
-                        'IT Admin Console (Student 4)',
+                        'IT Admin Console',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -279,13 +367,22 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.refresh_rounded, color: Color(0xFF06B6D4), size: 18),
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      color: Color(0xFF06B6D4),
+                      size: 18,
+                    ),
                     tooltip: 'Refresh',
                     onPressed: _loadAllData,
                     visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
+            ),
+          if (_error != null && (_machines.isNotEmpty || _workflows.isNotEmpty))
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Text(_error!, style: const TextStyle(color: Colors.amber)),
             ),
           Expanded(
             child: _error != null && _machines.isEmpty && _workflows.isEmpty
@@ -295,8 +392,11 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.cloud_off_rounded,
-                              color: Color(0xFFEF4444), size: 48),
+                          const Icon(
+                            Icons.cloud_off_rounded,
+                            color: Color(0xFFEF4444),
+                            size: 48,
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             _error!,
@@ -324,9 +424,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Color(0xFF0F172A),
-          border: Border(
-            top: BorderSide(color: Color(0xFF1E293B), width: 1),
-          ),
+          border: Border(top: BorderSide(color: Color(0xFF1E293B), width: 1)),
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
@@ -336,8 +434,10 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
           type: BottomNavigationBarType.fixed,
           selectedItemColor: const Color(0xFF06B6D4),
           unselectedItemColor: const Color(0xFF64748B),
-          selectedLabelStyle:
-              const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+          ),
           unselectedLabelStyle: const TextStyle(fontSize: 10),
           items: [
             const BottomNavigationBarItem(
@@ -373,7 +473,7 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen> {
             const BottomNavigationBarItem(
               icon: Icon(Icons.assignment_outlined),
               activeIcon: Icon(Icons.assignment_rounded),
-              label: 'Reports',
+              label: 'More',
             ),
           ],
         ),

@@ -46,7 +46,7 @@ class ManufacturingApp extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appState,
     builder: (context, _) => MaterialApp(
-      title: 'Manufacturing Coordinator',
+      title: 'AMIC',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(

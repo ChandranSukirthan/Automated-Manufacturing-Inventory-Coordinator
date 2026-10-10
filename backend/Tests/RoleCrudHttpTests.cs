@@ -266,12 +266,28 @@ public sealed class RoleCrudHttpTests : IDisposable
         await Success(await qa.PutAsJsonAsync($"/api/defects/{id}", new { description = "Seal defect confirmed" }));
         var holds = await Success(await qa.PostAsJsonAsync($"/api/defects/{id}/quarantine", new { reason = "Inspect seal" }));
         var holdId = holds[0].GetProperty("id").GetString();
+        var heldStock = await Success(await worker.GetAsync("/api/inventory"));
+        Assert.Equal(0, heldStock[0].GetProperty("stockLevel").GetInt32());
+        var listedHolds = await Success(await qa.GetAsync("/api/quarantine"));
+        Assert.Contains(listedHolds.EnumerateArray(), hold => hold.GetProperty("id").GetString() == holdId);
+        Assert.Equal(HttpStatusCode.Conflict, (await qa.PostAsJsonAsync($"/api/defects/{id}/quarantine", new { reason = "Duplicate hold" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await qa.DeleteAsync($"/api/defects/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await worker.PostAsJsonAsync($"/api/quarantine/{holdId}/release", new { })).StatusCode);
         await Success(await qa.PostAsJsonAsync($"/api/quarantine/{holdId}/release", new { resolutionNote = "Inspected" }));
         await Success(await qa.PostAsJsonAsync($"/api/quarantine/{holdId}/release", new { resolutionNote = "Retry" }));
-        Assert.Equal(HttpStatusCode.Conflict, (await qa.DeleteAsync($"/api/defects/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await qa.DeleteAsync($"/api/defects/{id}")).StatusCode);
         var stock = await Success(await worker.GetAsync("/api/inventory"));
         Assert.Equal(8, stock[0].GetProperty("stockLevel").GetInt32());
+        var secondDefect = await Success(await qa.PostAsJsonAsync("/api/defects", new { skuCode = "BP-FILM-001", severity = "MEDIUM", description = "New inspection", affectedInventory = new[] { "QA-ROLL" } }));
+        var secondId = secondDefect.GetProperty("id").GetString();
+        var secondHolds = await Success(await qa.PostAsJsonAsync($"/api/defects/{secondId}/quarantine", new { reason = "Inspect again" }));
+        var secondHeldStock = await Success(await worker.GetAsync("/api/inventory"));
+        Assert.Equal(0, secondHeldStock[0].GetProperty("stockLevel").GetInt32());
+        var secondHoldId = secondHolds[0].GetProperty("id").GetString();
+        var released = await Success(await qa.PostAsJsonAsync($"/api/quarantine/{secondHoldId}/release", new { resolutionNote = "Passed" }));
+        Assert.Equal("Released", released.GetProperty("status").GetString());
+        var restoredStock = await Success(await worker.GetAsync("/api/inventory"));
+        Assert.Equal(8, restoredStock[0].GetProperty("stockLevel").GetInt32());
     }
 
     [Fact]
@@ -302,6 +318,45 @@ public sealed class RoleCrudHttpTests : IDisposable
     }
 
     [Fact]
+    public async Task CustomisedProcurementOrder_IsLinkedAndRepeatedCreationReturnsExistingOrder()
+    {
+        using var client = Client("SupplyChainManager");
+        var supplier = await Success(await client.PostAsJsonAsync("/api/suppliers", new { name = "Linked Supplier", contactEmail = "linked@example.test", leadTimeDays = 3 }));
+        int requestId;
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var request = new ManufacturingCoordinator.Models.PurchaseOrders.ProcurementRequest
+            {
+                RawMaterialId = 1, MaterialName = "Film", RequiredSpecification = "Food grade",
+                ProductionRequirement = 10, MaximumBudget = 100, RequiredByDate = DateTime.UtcNow.AddDays(14)
+            };
+            db.ProcurementRequests.Add(request); await db.SaveChangesAsync(); requestId = request.Id;
+        }
+        var body = new { supplierId = supplier.GetProperty("id").GetInt32(), procurementRequestId = requestId,
+            budgetLimit = 100, lines = new[] { new { rawMaterialId = 1, quantity = 10, unitPrice = 2 } } };
+        var first = await Success(await client.PostAsJsonAsync("/api/purchase-orders", body));
+        var repeated = await Success(await client.PostAsJsonAsync("/api/purchase-orders", body));
+        Assert.Equal(first.GetProperty("id").GetInt32(), repeated.GetProperty("id").GetInt32());
+        var details = await Success(await client.GetAsync($"/api/procurement-requests/{requestId}"));
+        Assert.Equal(first.GetProperty("id").GetInt32(), details.GetProperty("generatedPurchaseOrderId").GetInt32());
+
+        // Reproduce older manually created POs with a missing reverse link.
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var request = await db.ProcurementRequests.FindAsync(requestId);
+            request!.GeneratedPurchaseOrderId = null; await db.SaveChangesAsync();
+            Assert.Equal(1, await db.PurchaseOrders.CountAsync(p => p.ProcurementRequestId == requestId));
+        }
+        foreach (var route in new[] { $"/api/procurement-requests/{requestId}", $"/api/procurement/{requestId}/recommendation" })
+        {
+            var recovered = await Success(await client.GetAsync(route));
+            Assert.Equal(first.GetProperty("id").GetInt32(), recovered.GetProperty("generatedPurchaseOrderId").GetInt32());
+        }
+    }
+
+    [Fact]
     public async Task ItAdmin_UserMachineShiftAndMaintenanceCrudWorksWithAiOffline()
     {
         using var client = Client("ITAdmin");
@@ -325,5 +380,74 @@ public sealed class RoleCrudHttpTests : IDisposable
         var adjusted = await Success(await client.PostAsJsonAsync($"/api/shifts/{shiftId}/adjust-output", new { }));
         Assert.Equal(60, adjusted.GetProperty("adjustedOutput").GetInt32());
         await Success(await client.GetAsync("/api/admin/audit-logs"));
+    }
+
+    [Fact]
+    public async Task ItAdmin_CanApproveAgenticWorkflows_ExceptPaymentExecutionIsForbidden()
+    {
+        int poId;
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var supplier = new ManufacturingCoordinator.Models.PurchaseOrders.Supplier
+            {
+                Name = "Apex Film Supplier",
+                SupplierCode = "SUP-APEX",
+                IsActive = true
+            };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+
+            var po = new ManufacturingCoordinator.Models.PurchaseOrders.PurchaseOrder
+            {
+                PoNumber = "PO-2026-9999",
+                SupplierId = supplier.Id,
+                Status = ManufacturingCoordinator.Enums.PurchaseOrderStatus.PendingApproval,
+                TotalCost = 50000m,
+                Currency = "LKR",
+                Notes = "Workflow ID: WF-PROC-9999"
+            };
+            db.PurchaseOrders.Add(po);
+            await db.SaveChangesAsync();
+            poId = po.Id;
+
+            var wf = new ManufacturingCoordinator.Models.Administration.AgentWorkflow
+            {
+                WorkflowId = "WF-PROC-9999",
+                WorkflowType = "Procurement",
+                PurchaseOrderId = po.Id,
+                Objective = "Procure film stock",
+                Status = ManufacturingCoordinator.Enums.WorkflowStatus.WaitingForApproval,
+                ApprovalStatus = ManufacturingCoordinator.Enums.ApprovalStatus.Pending
+            };
+            db.AgentWorkflows.Add(wf);
+            await db.SaveChangesAsync();
+        }
+
+        using var adminClient = Client("ITAdmin");
+
+        // 1. IT Admin approves the procurement agentic workflow
+        var approvedWf = await Success(await adminClient.PostAsync("/api/admin/agent-workflows/WF-PROC-9999/approve", null));
+        Assert.Equal("Approved", approvedWf.GetProperty("approvalStatus").GetString());
+
+        // Verify in DB that PO status is now Approved and workflow is running/approved
+        using (var scope = server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var po = await db.PurchaseOrders.FindAsync(poId);
+            Assert.NotNull(po);
+            Assert.Equal(ManufacturingCoordinator.Enums.PurchaseOrderStatus.Approved, po.Status);
+
+            var wf = await db.AgentWorkflows.SingleAsync(w => w.WorkflowId == "WF-PROC-9999");
+            Assert.Equal(ManufacturingCoordinator.Enums.ApprovalStatus.Approved, wf.ApprovalStatus);
+        }
+
+        // 2. IT Admin is FORBIDDEN from executing payment
+        var paymentResponse = await adminClient.PostAsync($"/api/purchase-orders/{poId}/process-payment", null);
+        Assert.Equal(HttpStatusCode.Forbidden, paymentResponse.StatusCode);
+
+        // 3. IT Admin is FORBIDDEN from creating Stripe checkout sessions
+        var checkoutResponse = await adminClient.PostAsync($"/api/purchase-orders/{poId}/create-checkout-session", null);
+        Assert.Equal(HttpStatusCode.Forbidden, checkoutResponse.StatusCode);
     }
 }

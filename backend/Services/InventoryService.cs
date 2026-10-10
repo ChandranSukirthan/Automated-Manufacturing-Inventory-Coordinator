@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using backend.Data;
 using backend.Dtos;
 using backend.Models;
@@ -76,6 +80,8 @@ namespace backend.Services
         {
             if (request.StockLevel < 0 || request.ReorderThreshold < 0)
                 throw new InvalidOperationException("Stock and reorder threshold cannot be negative.");
+            if (request.StockLevel > 1_000_000 || request.ReorderThreshold > 1_000_000)
+                throw new InvalidOperationException("Stock level and reorder threshold cannot exceed 1,000,000 units.");
             var packagingType = await _context.PackagingTypes
                 .FirstOrDefaultAsync(type => type.Id == request.PackagingTypeId && type.IsActive);
             if (packagingType == null)
@@ -241,27 +247,43 @@ var existing = await _context.InventoryItems.FindAsync(id);
                 .GroupBy(alert => alert.Sku)
                 .Select(group => group.Max(alert => alert.Id));
 
-            return await _context.StockAlerts
+            var alerts = await _context.StockAlerts
                 .AsNoTracking()
                 .Where(alert => newestAlertIdsBySku.Contains(alert.Id))
                 .OrderByDescending(alert => alert.Timestamp)
-                .Select(alert => new StockAlertResponseDto
-                {
-                    Id = alert.Id,
-                    Sku = alert.Sku,
-                    PackagingType = alert.PackagingType,
-                    QuantityRequested = alert.QuantityRequested,
-                    Status = alert.Status,
-                    Timestamp = alert.Timestamp,
-                    WorkerId = alert.WorkerId
-                })
                 .ToListAsync();
+
+            var skus = alerts.Where(a => !a.MaterialId.HasValue).Select(a => a.Sku).Distinct().ToList();
+            var skuMap = await _context.RawMaterials
+                .Where(m => skus.Contains(m.SkuCode))
+                .ToDictionaryAsync(m => m.SkuCode, m => m.Id);
+
+            var dtos = new List<StockAlertResponseDto>();
+            foreach (var alert in alerts)
+            {
+                var dto = MapToStockAlertResponseDto(alert);
+                if (!dto.MaterialId.HasValue && skuMap.TryGetValue(alert.Sku, out var rmId))
+                {
+                    dto.MaterialId = rmId;
+                }
+                dtos.Add(dto);
+            }
+            return dtos;
         }
 
         public async Task<StockAlertResponseDto?> GetStockAlertByIdAsync(int id)
         {
             var alert = await _context.StockAlerts.FindAsync(id);
-            return alert == null ? null : MapToStockAlertResponseDto(alert);
+            if (alert == null) return null;
+            var dto = MapToStockAlertResponseDto(alert);
+            if (!dto.MaterialId.HasValue)
+            {
+                dto.MaterialId = await _context.RawMaterials
+                    .Where(m => m.SkuCode == alert.Sku)
+                    .Select(m => (int?)m.Id)
+                    .FirstOrDefaultAsync();
+            }
+            return dto;
         }
 
         public async Task<IEnumerable<StockAlertResponseDto>> GetUnreadStockAlertsAsync()
@@ -271,7 +293,22 @@ var existing = await _context.InventoryItems.FindAsync(id);
                 .OrderByDescending(alert => alert.Timestamp)
                 .ToListAsync();
 
-            return alerts.Select(MapToStockAlertResponseDto);
+            var skus = alerts.Where(a => !a.MaterialId.HasValue).Select(a => a.Sku).Distinct().ToList();
+            var skuMap = await _context.RawMaterials
+                .Where(m => skus.Contains(m.SkuCode))
+                .ToDictionaryAsync(m => m.SkuCode, m => m.Id);
+
+            var dtos = new List<StockAlertResponseDto>();
+            foreach (var alert in alerts)
+            {
+                var dto = MapToStockAlertResponseDto(alert);
+                if (!dto.MaterialId.HasValue && skuMap.TryGetValue(alert.Sku, out var rmId))
+                {
+                    dto.MaterialId = rmId;
+                }
+                dtos.Add(dto);
+            }
+            return dtos;
         }
 
         public async Task<bool> MarkStockAlertAsReadAsync(int id)
@@ -432,6 +469,58 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 .ToListAsync();
         }
 
+        public async Task<PackagingType> CreatePackagingTypeAsync(PackagingType packagingType)
+        {
+            if (string.IsNullOrWhiteSpace(packagingType.Name) || string.IsNullOrWhiteSpace(packagingType.ShortCode))
+                throw new InvalidOperationException("Packaging type name and short code are required.");
+
+            var cleanCode = packagingType.ShortCode.Trim().ToUpperInvariant();
+            var cleanName = packagingType.Name.Trim();
+
+            if (await _context.PackagingTypes.AnyAsync(p => p.ShortCode.ToUpper() == cleanCode || p.Name.ToLower() == cleanName.ToLower()))
+                throw new InvalidOperationException($"A packaging type with code '{cleanCode}' or name '{cleanName}' already exists.");
+
+            packagingType.ShortCode = cleanCode;
+            packagingType.Name = cleanName;
+            packagingType.IsActive = true;
+            _context.PackagingTypes.Add(packagingType);
+            await _context.SaveChangesAsync();
+            return packagingType;
+        }
+
+        public async Task<bool> UpdatePackagingTypeAsync(int id, PackagingType packagingType)
+        {
+            if (id != packagingType.Id) return false;
+            var existing = await _context.PackagingTypes.FindAsync(id);
+            if (existing == null) return false;
+
+            if (string.IsNullOrWhiteSpace(packagingType.Name))
+                throw new InvalidOperationException("Packaging type name is required.");
+
+            var cleanName = packagingType.Name.Trim();
+            if (cleanName.ToLower() != existing.Name.ToLower() &&
+                await _context.PackagingTypes.AnyAsync(p => p.Id != id && p.Name.ToLower() == cleanName.ToLower()))
+                throw new InvalidOperationException($"A packaging type with name '{cleanName}' already exists.");
+
+            existing.Name = cleanName;
+            existing.IsActive = packagingType.IsActive;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> DeletePackagingTypeAsync(int id)
+        {
+            var existing = await _context.PackagingTypes.FindAsync(id);
+            if (existing == null) return false;
+
+            if (await _context.RawMaterials.AnyAsync(r => r.PackagingTypeId == id))
+                throw new InvalidOperationException("Cannot delete packaging type with active or historical raw materials. Deactivate it instead.");
+
+            existing.IsActive = false;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<RawMaterial?> GetRawMaterialByIdAsync(int id)
         {
             return await _context.RawMaterials
@@ -449,6 +538,26 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
 
         public async Task<RawMaterial> CreateRawMaterialAsync(RawMaterial material)
         {
+            if (string.IsNullOrWhiteSpace(material.SkuCode))
+                throw new InvalidOperationException("SKU code is required.");
+
+            var cleanSku = material.SkuCode.Trim().ToUpperInvariant();
+            var cleanCode = string.IsNullOrWhiteSpace(material.MaterialCode)
+                ? (cleanSku.Length > 20 ? cleanSku.Substring(0, 20) : cleanSku)
+                : material.MaterialCode.Trim().ToUpperInvariant();
+
+            if (await _context.RawMaterials.AnyAsync(r => r.SkuCode.ToUpper() == cleanSku))
+                throw new InvalidOperationException($"A raw material with SKU code '{cleanSku}' already exists.");
+
+            if (!string.IsNullOrWhiteSpace(material.MaterialCode) &&
+                await _context.RawMaterials.AnyAsync(r => r.MaterialCode.ToUpper() == cleanCode && r.PackagingTypeId == material.PackagingTypeId))
+                throw new InvalidOperationException($"A raw material with Material code '{cleanCode}' already exists for this packaging type.");
+
+            if (material.ReorderThreshold < 0 || material.ReorderThreshold > 1_000_000)
+                throw new InvalidOperationException("Reorder threshold must be between 0 and 1,000,000.");
+
+            material.SkuCode = cleanSku;
+            material.MaterialCode = cleanCode;
             material.CreatedAt = DateTime.UtcNow;
             material.UpdatedAt = DateTime.UtcNow;
             _context.RawMaterials.Add(material);
@@ -630,6 +739,10 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             {
                 throw new InvalidOperationException("Roll quantity must be greater than zero.");
             }
+            if (roll.InitialQuantity > 1_000_000)
+            {
+                throw new InvalidOperationException("Roll quantity cannot exceed 1,000,000 units.");
+            }
             if (roll.InitialQuantity != decimal.Truncate(roll.InitialQuantity))
             {
                 throw new InvalidOperationException("Roll quantity must be a whole number.");
@@ -731,6 +844,33 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
             existing.Status = roll.CurrentQuantity == 0 ? "Depleted" : roll.Status;
             existing.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            // Auto-generate low stock alert if consumption caused stock to fall below or equal reorder threshold
+            if (item.StockLevel <= item.ReorderThreshold)
+            {
+                var cleanSku = (item.Sku ?? string.Empty).Trim();
+                var hasActiveAlert = await _context.StockAlerts
+                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+                if (!hasActiveAlert)
+                {
+                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                    _context.StockAlerts.Add(new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = item.Category ?? "Standard Roll",
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Pending",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                }
+            }
             return true;
         }
 
@@ -752,6 +892,33 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 PreviousStock = previous, NewStock = item.StockLevel, Reason = "Roll registration removed" });
             _context.InventoryRolls.Remove(roll);
             await _context.SaveChangesAsync();
+
+            // Auto-generate low stock alert if removal caused stock to fall below or equal reorder threshold
+            if (item.StockLevel <= item.ReorderThreshold)
+            {
+                var cleanSku = (item.Sku ?? string.Empty).Trim();
+                var hasActiveAlert = await _context.StockAlerts
+                    .AnyAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+                if (!hasActiveAlert)
+                {
+                    var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                    _context.StockAlerts.Add(new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = item.Category ?? "Standard Roll",
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Pending",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                }
+            }
             return true;
         }
 
@@ -1024,7 +1191,9 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                     preferredRegion = "Sri Lanka",
                     unit = material.UnitOfMeasure,
                     material_id = materialSku,
-                    required_quantity = (double)draftQty
+                    required_quantity = (double)draftQty,
+                    worker_id = dto.WorkerId,
+                    initiator_id = dto.InitiatorId
                 };
 
                 using var agentRequest = new HttpRequestMessage(
@@ -1033,6 +1202,32 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 {
                     Content = JsonContent.Create(payload)
                 };
+                if (string.IsNullOrWhiteSpace(authorizationHeader))
+                {
+                    var jwtSecret = _configuration["JwtSettings:SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
+                    var jwtIssuer = _configuration["JwtSettings:Issuer"] ?? "InventoryCoordinatorAPI";
+                    var jwtAudience = _configuration["JwtSettings:Audience"] ?? "InventoryCoordinatorClient";
+                    if (!string.IsNullOrWhiteSpace(jwtSecret))
+                    {
+                        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
+                        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+                        var claims = new[]
+                        {
+                            new Claim(ClaimTypes.NameIdentifier, "00000000-0000-0000-0000-000000000001"),
+                            new Claim(ClaimTypes.Name, "Automated Low-Stock Detector"),
+                            new Claim(ClaimTypes.Role, "FloorWorker"),
+                            new Claim("employee_id", "EMP-AUTO-DETECTOR")
+                        };
+                        var token = new JwtSecurityToken(
+                            jwtIssuer,
+                            jwtAudience,
+                            claims,
+                            expires: DateTime.UtcNow.AddMinutes(30),
+                            signingCredentials: creds);
+                        authorizationHeader = "Bearer " + new JwtSecurityTokenHandler().WriteToken(token);
+                    }
+                }
+
                 if (!string.IsNullOrWhiteSpace(authorizationHeader))
                 {
                     agentRequest.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
@@ -1094,6 +1289,25 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 throw new HttpRequestException("The AI agent returned a workflow without an ID.");
             }
 
+            if (_appContext != null && (!string.IsNullOrWhiteSpace(dto.WorkerId) || !string.IsNullOrWhiteSpace(dto.InitiatorId)))
+            {
+                try
+                {
+                    var wfRecord = await _appContext.AgentWorkflows.SingleOrDefaultAsync(w => w.WorkflowId == wfId);
+                    if (wfRecord != null)
+                    {
+                        var stateMap = string.IsNullOrWhiteSpace(wfRecord.StateJson)
+                            ? new Dictionary<string, object?>()
+                            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(wfRecord.StateJson) ?? new();
+                        if (!string.IsNullOrWhiteSpace(dto.WorkerId)) stateMap["worker_id"] = dto.WorkerId;
+                        if (!string.IsNullOrWhiteSpace(dto.InitiatorId)) stateMap["initiator_id"] = dto.InitiatorId;
+                        wfRecord.StateJson = System.Text.Json.JsonSerializer.Serialize(stateMap);
+                        await _appContext.SaveChangesAsync();
+                    }
+                }
+                catch { }
+            }
+
             int? createdPoId = _appContext == null ? null :
                 await new ManufacturingCoordinator.Services.PurchaseOrders.WorkflowDraftService(_appContext).FinalizeAsync(wfId);
             var linkedPo = createdPoId.HasValue ? await _appContext!.PurchaseOrders.FindAsync(createdPoId.Value) : null;
@@ -1119,6 +1333,109 @@ QuantityRequested = alertDto.QuantityRequested > 0 ? alertDto.QuantityRequested 
                 agent_result = agentRawResult,
                 objective = objective
             };
+        }
+
+        public async Task ProcessAutomatedLowStockReplenishmentAsync()
+        {
+            var lowStockItems = await _context.InventoryItems
+                // Process items where stock is 0 (out of stock) OR stock is at/below reorder threshold
+                .Where(i => i.StockLevel == 0 || (i.ReorderThreshold > 0 && i.StockLevel <= i.ReorderThreshold))
+                .ToListAsync();
+
+            foreach (var item in lowStockItems)
+            {
+                var cleanSku = (item.Sku ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(cleanSku)) continue;
+
+                // 1. Deduplication: Check if an active OR recently-failed agentic workflow already exists for this SKU
+                var hasActiveWorkflow = false;
+                if (_appContext != null)
+                {
+                    hasActiveWorkflow = await _appContext.AgentWorkflows.AnyAsync(w =>
+                        w.WorkflowType == "Procurement" &&
+                        (w.Status == WorkflowStatus.Running ||
+                         w.Status == WorkflowStatus.WaitingForApproval ||
+                         // Treat Failed workflows within last 1 h as dedup (prevents instant spam, but allows recovery)
+                         (w.Status == WorkflowStatus.Failed && w.CompletedAt >= DateTime.UtcNow.AddHours(-1))) &&
+                        (w.Objective.Contains(cleanSku) || (w.StateJson != null && w.StateJson.Contains(cleanSku))));
+                }
+
+                if (hasActiveWorkflow) continue;
+
+                // 2. Open PO Check: Check if an open/in-progress PO already exists for this material
+                var hasOpenPo = false;
+                if (_appContext != null)
+                {
+                    hasOpenPo = await _appContext.OrderLines.AnyAsync(l =>
+                        (l.RawMaterial.SkuCode == cleanSku || l.Description.Contains(cleanSku)) &&
+                        (l.PurchaseOrder.Status == PurchaseOrderStatus.Draft ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.PendingApproval ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.Approved ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.Payment ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.Paid ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.Sent ||
+                         l.PurchaseOrder.Status == PurchaseOrderStatus.InTransit));
+                }
+
+                if (hasOpenPo) continue;
+
+                // 3. Ensure a StockAlert exists for audit & dashboard visibility
+                var existingAlert = await _context.StockAlerts
+                    .FirstOrDefaultAsync(a => a.Sku.ToLower() == cleanSku.ToLower() && a.Status != "Resolved" && a.Status != "Dismissed");
+
+                var reqQty = Math.Max(500, (item.ReorderThreshold * 2) - item.StockLevel);
+                if (existingAlert == null)
+                {
+                    existingAlert = new StockAlert
+                    {
+                        Sku = cleanSku,
+                        PackagingType = item.Category ?? "Standard Roll",
+                        QuantityRequested = reqQty,
+                        CurrentStock = item.StockLevel,
+                        RequiredQuantity = reqQty,
+                        SafetyStock = item.ReorderThreshold,
+                        MaterialName = item.Name,
+                        WorkerId = "Automated Low-Stock Detector",
+                        Status = "Processing",
+                        Severity = item.StockLevel <= (item.ReorderThreshold * 0.5) ? "Critical" : "Low",
+                        Timestamp = DateTime.UtcNow
+                    };
+                    _context.StockAlerts.Add(existingAlert);
+                    await _context.SaveChangesAsync();
+                }
+                else if (existingAlert.Status == "Pending")
+                {
+                    existingAlert.Status = "Processing";
+                    await _context.SaveChangesAsync();
+                }
+
+                // 4. Trigger the agentic replenishment workflow automatically
+                var triggerDto = new TriggerReplenishmentDto
+                {
+                    MaterialId = cleanSku,
+                    RequiredQuantity = reqQty,
+                    TriggerType = "AutoLowStock",
+                    WorkerId = "Automated Low-Stock Detector",
+                    InitiatorId = "system-auto-trigger",
+                    WorkflowId = existingAlert?.Id > 0 ? $"WF-AUTO-ALERT-{existingAlert.Id}" : null,
+                    Objective = $"Automated Stock Replenishment: Reorder {reqQty} units of {cleanSku} (current stock: {item.StockLevel}, threshold: {item.ReorderThreshold})"
+                };
+
+                try
+                {
+                    await TriggerAgentReplenishmentAsync(triggerDto, null);
+                    _logger.LogInformation("Successfully triggered automated replenishment workflow for low-stock SKU {Sku}", cleanSku);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to auto-trigger agent replenishment for SKU {Sku}. Will retry on next cycle.", cleanSku);
+                    if (existingAlert != null && existingAlert.Status == "Processing")
+                    {
+                        existingAlert.Status = "Pending";
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
         }
     }
 }

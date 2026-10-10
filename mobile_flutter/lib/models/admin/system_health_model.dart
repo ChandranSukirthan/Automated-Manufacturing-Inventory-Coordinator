@@ -13,22 +13,24 @@ class SystemHealthModel {
     List<ServiceHealthItem> serviceList = [];
     if (json['services'] is List) {
       serviceList = (json['services'] as List)
-          .map((item) => ServiceHealthItem.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => ServiceHealthItem.fromJson(item as Map<String, dynamic>),
+          )
           .toList();
     }
 
     return SystemHealthModel(
-      overallStatus: json['overallStatus']?.toString() ?? 'ONLINE',
+      overallStatus: json['overallStatus']?.toString() ?? 'UNKNOWN',
       services: serviceList,
       timestamp: DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'overallStatus': overallStatus,
-        'services': services.map((s) => s.toJson()).toList(),
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'overallStatus': overallStatus,
+    'services': services.map((s) => s.toJson()).toList(),
+    'timestamp': timestamp.toIso8601String(),
+  };
 }
 
 class ServiceHealthItem {
@@ -47,16 +49,16 @@ class ServiceHealthItem {
   factory ServiceHealthItem.fromJson(Map<String, dynamic> json) {
     return ServiceHealthItem(
       name: json['name']?.toString() ?? 'Service',
-      status: json['status']?.toString() ?? 'ONLINE',
-      message: json['message']?.toString() ?? 'Operational',
+      status: json['status']?.toString() ?? 'UNKNOWN',
+      message: json['message']?.toString() ?? 'Not confirmed',
       latencyMs: (json['latencyMs'] as num?)?.toInt(),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'status': status,
-        'message': message,
-        'latencyMs': latencyMs,
-      };
+    'name': name,
+    'status': status,
+    'message': message,
+    'latencyMs': latencyMs,
+  };
 }

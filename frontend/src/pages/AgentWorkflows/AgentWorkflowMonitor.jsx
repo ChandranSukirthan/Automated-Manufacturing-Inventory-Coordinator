@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppLayout from '../../components/Layout/AppLayout';
 import agentWorkflowService from '../../services/agentWorkflowService';
+import { useAuth } from '../../context/useAuth';
 import { parseErrorMessage } from '../../utils/errorHandler';
 import { 
   Activity, 
@@ -29,6 +30,12 @@ const statusLabels = {
 };
 
 export default function AgentWorkflowMonitor() {
+  const { user } = useAuth();
+  const isITAdmin = user && (user.role === 3 || user.role === '3' || user.role === 'ITAdmin');
+  const isWorker = user && (user.role === 0 || user.role === '0' || user.role === 'FloorWorker');
+  const isQA = user && (user.role === 2 || user.role === '2' || user.role === 'QualityInspector');
+  const isManager = user && (user.role === 1 || user.role === '1' || user.role === 'SupplyChainManager');
+
   const [workflows, setWorkflows] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -157,6 +164,15 @@ export default function AgentWorkflowMonitor() {
       });
     }
 
+    // Restrict Machine Maintenance workflows to ONLY IT Admin
+    if (!isITAdmin) {
+      result = result.filter((w) => {
+        const wt = (w.workflowType || '').toLowerCase();
+        const id = (w.workflowId || '').toLowerCase();
+        return wt !== 'maintenance' && !id.startsWith('wf-maint');
+      });
+    }
+
     // Type filter
     if (typeFilter !== 'ALL') {
       result = result.filter((w) => {
@@ -197,7 +213,18 @@ export default function AgentWorkflowMonitor() {
   const hasActiveFilters = search.trim() !== '' || statusFilter !== 'ALL' || typeFilter !== 'ALL' || approvalFilter !== 'ALL' || sortOrder !== 'desc';
 
   return (
-    <AppLayout title="Agent workflows" subtitle="Recorded execution stages and current decisions">
+    <AppLayout 
+      title="Agent workflows" 
+      subtitle={
+        isWorker
+          ? "Your material replenishment requests and workflow history"
+          : isQA
+          ? "Quality-validated agent workflows and inspection holds"
+          : isManager
+          ? "Supply chain and replenishment agent workflows"
+          : "Recorded execution stages and system-wide decisions"
+      }
+    >
       <div className="workflow-monitor">
         {/* Hero Section */}
         <section className="wm-hero">
@@ -275,7 +302,7 @@ export default function AgentWorkflowMonitor() {
               >
                 <option value="ALL">All Types</option>
                 <option value="Procurement">Procurement</option>
-                <option value="Maintenance">Maintenance</option>
+                {isITAdmin && <option value="Maintenance">Maintenance</option>}
                 <option value="Quality">Quality & Safety</option>
               </select>
 

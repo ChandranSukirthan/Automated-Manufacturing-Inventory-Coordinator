@@ -64,5 +64,27 @@ namespace ManufacturingCoordinator.Api.Controllers
                 InventoryRolls = rollDtos
             });
         }
+
+        [HttpPost]
+        [Authorize(Roles = "QualityInspector,ITAdmin")]
+        public async Task<IActionResult> CreateBatch([FromBody] ManufacturingCoordinator.Models.Inventory.Batch batch)
+        {
+            if (batch == null || string.IsNullOrWhiteSpace(batch.Id))
+                return BadRequest(new { message = "Batch ID is required." });
+
+            var cleanId = batch.Id.Trim();
+            if (await _db.Batches.AnyAsync(b => b.Id.ToLower() == cleanId.ToLower()))
+                return Conflict(new { message = $"Batch with ID '{cleanId}' already exists." });
+
+            batch.Id = cleanId;
+            _db.Batches.Add(batch);
+            await _db.SaveChangesAsync();
+            return CreatedAtAction(nameof(GetById), new { id = batch.Id }, new BatchDetailsDto
+            {
+                Id = batch.Id,
+                ProductType = batch.ProductType,
+                InventoryRolls = new List<InventoryRollDto>()
+            });
+        }
     }
 }

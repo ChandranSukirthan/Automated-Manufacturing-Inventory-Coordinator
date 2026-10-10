@@ -1,8 +1,11 @@
+import 'dart:async';
 import '../../utils/locale.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../models/purchase_order_models.dart';
 import 'receive_goods_screen.dart';
 import '../../services/purchase_order_service.dart';
+import '../../services/api_client.dart';
 import '../../widgets/app_widgets.dart';
 import '../../widgets/po_status_stepper.dart';
 
@@ -10,17 +13,24 @@ class PODetailsScreen extends StatefulWidget {
   const PODetailsScreen({
     required this.service,
     required this.poId,
+    this.allowManagement = true,
+    this.allowApproval = false,
     super.key,
   });
 
   final PurchaseOrderService service;
   final int poId;
+  final bool allowManagement;
+  final bool allowApproval;
 
   @override
   State<PODetailsScreen> createState() => _PODetailsScreenState();
 }
 
-class _PODetailsScreenState extends State<PODetailsScreen> {
+class _PODetailsScreenState extends State<PODetailsScreen>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
+  bool _fetching = false;
   bool _loading = true;
   bool _downloadingPdf = false;
   String? _error;
@@ -29,12 +39,33 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchDetails();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        _fetchDetails(showLoading: false);
+      }
+    });
   }
 
-  Future<void> _fetchDetails() async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _fetchDetails(showLoading: false);
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _fetchDetails({bool showLoading = true}) async {
+    if (_fetching) return;
+    _fetching = true;
     setState(() {
-      _loading = true;
+      if (showLoading) _loading = true;
       _error = null;
     });
 
@@ -49,10 +80,12 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     } catch (err) {
       if (mounted) {
         setState(() {
-          _error = err.toString();
+          if (showLoading || _po == null) _error = err.toString();
           _loading = false;
         });
       }
+    } finally {
+      _fetching = false;
     }
   }
 
@@ -66,7 +99,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               const Icon(Icons.picture_as_pdf, color: Color(0xFFEF4444)),
@@ -74,7 +109,11 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
               Expanded(
                 child: Text(
                   'PO #${_po?.poNumber ?? widget.poId}',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -99,11 +138,27 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Document Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                    Text(
+                      'Document Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB',
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('Supplier: ${_po?.supplierName ?? "Approved Vendor"}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    Text(
+                      'Supplier: ${_po?.supplierName ?? "Approved Vendor"}',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
                     const SizedBox(height: 4),
-                    Text('Total: ${_po?.currency ?? "LKR"} ${_po?.totalCost.toStringAsFixed(2) ?? "0.00"}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text(
+                      'Total: ${_po?.currency ?? "LKR"} ${_po?.totalCost.toStringAsFixed(2) ?? "0.00"}',
+                      style: const TextStyle(
+                        color: Color(0xFF10B981),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -112,7 +167,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close', style: TextStyle(color: Color(0xFF06B6D4))),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Color(0xFF06B6D4)),
+              ),
             ),
           ],
         ),
@@ -143,20 +201,44 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         elevation: 0,
         title: Text(
           _po?.poNumber ?? 'PO Details',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
         ),
         actions: [
           IconButton(
             icon: _downloadingPdf
-                ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))
-                : const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFEF4444)),
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white70,
+                    ),
+                  )
+                : const Icon(
+                    Icons.picture_as_pdf_outlined,
+                    color: Color(0xFFEF4444),
+                  ),
             tooltip: 'Download PDF',
             onPressed: _downloadingPdf ? null : _downloadPdf,
           ),
-          IconButton(icon: const Icon(Icons.inventory_2), tooltip: 'Delivery receipts', onPressed: () async {
-            await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => ReceiveGoodsScreen(purchaseOrderId: widget.poId)));
-            if (mounted) await _fetchDetails();
-          }),
+          if (widget.allowManagement)
+            IconButton(
+              icon: const Icon(Icons.inventory_2),
+              tooltip: 'Delivery receipts',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ReceiveGoodsScreen(purchaseOrderId: widget.poId),
+                  ),
+                );
+                if (mounted) await _fetchDetails();
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
             onPressed: _fetchDetails,
@@ -167,361 +249,469 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? StateMessage(
-                  message: _error!,
-                  icon: Icons.cloud_off,
-                  action: _fetchDetails,
-                )
-              : _po == null
-                  ? const Center(child: Text('Order not found', style: TextStyle(color: Colors.white54)))
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16.0),
+          ? StateMessage(
+              message: _error!,
+              icon: Icons.cloud_off,
+              action: _fetchDetails,
+            )
+          : _po == null
+          ? const Center(
+              child: Text(
+                'Order not found',
+                style: TextStyle(color: Colors.white54),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.allowManagement &&
+                      _po!.bankSlipStatus == 'SUBMITTED')
+                    ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          await widget.service.verifyBankSlip(widget.poId);
+                          await _fetchDetails();
+                        } catch (error) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(error.toString())),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'Confirm bank payment against bank records',
+                      ),
+                    ),
+                  // Manager Interactive Action Panel or Telemetry Notice
+                  if (widget.allowManagement || widget.allowApproval)
+                    _buildManagerActionBar(context, _po!),
+
+                  const SizedBox(height: 16),
+
+                  // Header Card: PO Number, Status, Supplier, Total
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _po!.poNumber,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Created ${_po!.createdAt.year}-${_po!.createdAt.month.toString().padLeft(2, '0')}-${_po!.createdAt.day.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(
+                                    color: Colors.white38,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(
+                                  _po!.status,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _getStatusColor(
+                                    _po!.status,
+                                  ).withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Text(
+                                _po!.status,
+                                style: TextStyle(
+                                  color: _getStatusColor(_po!.status),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(color: Colors.white10, height: 1),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildMetaColumn(
+                              'Supplier',
+                              _po!.supplierName,
+                              Icons.business_outlined,
+                            ),
+                            _buildMetaColumn(
+                              'Total Cost',
+                              formatMoney(
+                                _po!.totalCost,
+                                currency: _po!.currency,
+                              ),
+                              Icons.payments_outlined,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 10-Step Order Lifecycle Stepper
+                  POStatusStepper(currentStep: _po!.currentLifecycleStep),
+
+                  const SizedBox(height: 16),
+
+                  // Status Breakdown Cards: Approval, Payment, Notification
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Status Telemetry',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildStatusRow(
+                          title: 'Approval Status',
+                          value: _po!.approvalStatusDisplay,
+                          icon: Icons.check_circle_outline_rounded,
+                          iconColor: const Color(0xFF10B981),
+                        ),
+                        const Divider(color: Colors.white10, height: 16),
+                        _buildStatusRow(
+                          title: 'Payment Status',
+                          value: _po!.paymentStatusDisplay,
+                          icon: Icons.credit_card_outlined,
+                          iconColor: const Color(0xFF8B5CF6),
+                        ),
+                        const Divider(color: Colors.white10, height: 16),
+                        _buildStatusRow(
+                          title: 'Supplier Notification',
+                          value: _po!.supplierNotificationDisplay,
+                          icon: Icons.send_outlined,
+                          iconColor: cyanAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Payment & Settlement Receipt Card (when paid/sent or when bank slip/Stripe info exists)
+                  if (_po!.bankSlipUrl != null ||
+                      _po!.bankReferenceNumber != null ||
+                      _po!.stripePaymentIntentId != null ||
+                      _po!.status.toLowerCase() == 'sent' ||
+                      _po!.status.toLowerCase() == 'payment') ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(
+                            0xFF10B981,
+                          ).withValues(alpha: 0.35),
+                        ),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_po!.bankSlipStatus == 'SUBMITTED') ElevatedButton(onPressed: () async {
-                            try { await widget.service.verifyBankSlip(widget.poId); await _fetchDetails(); }
-                            catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString()))); }
-                          }, child: const Text('Confirm bank payment against bank records')),
-                          // Manager Interactive Action Panel or Telemetry Notice
-                          _buildManagerActionBar(context, _po!),
-
-                          const SizedBox(height: 16),
-
-                          // Header Card: PO Number, Status, Supplier, Total
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _po!.poNumber,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Created ${_po!.createdAt.year}-${_po!.createdAt.month.toString().padLeft(2, '0')}-${_po!.createdAt.day.toString().padLeft(2, '0')}',
-                                          style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                        ),
-                                      ],
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified_outlined,
+                                    color: Color(0xFF10B981),
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Payment & Settlement Receipt',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(_po!.status).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: _getStatusColor(_po!.status).withValues(alpha: 0.3)),
-                                      ),
-                                      child: Text(
-                                        _po!.status,
-                                        style: TextStyle(
-                                          color: _getStatusColor(_po!.status),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
                                 ),
-                                const SizedBox(height: 16),
-                                const Divider(color: Colors.white10, height: 1),
-                                const SizedBox(height: 16),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    _buildMetaColumn('Supplier', _po!.supplierName, Icons.business_outlined),
-                                    _buildMetaColumn('Total Cost', formatMoney(_po!.totalCost, currency: _po!.currency), Icons.payments_outlined),
-                                  ],
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF10B981,
+                                  ).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // 10-Step Order Lifecycle Stepper
-                          POStatusStepper(currentStep: _po!.currentLifecycleStep),
-
-                          const SizedBox(height: 16),
-
-                          // Status Breakdown Cards: Approval, Payment, Notification
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Status Telemetry',
-                                  style: TextStyle(
-                                    color: Colors.white,
+                                child: Text(
+                                  _po!.bankSlipStatus ?? 'Settled & Verified',
+                                  style: const TextStyle(
+                                    color: Color(0xFF10B981),
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 15,
+                                    fontSize: 11,
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                _buildStatusRow(
-                                  title: 'Approval Status',
-                                  value: _po!.approvalStatusDisplay,
-                                  icon: Icons.check_circle_outline_rounded,
-                                  iconColor: const Color(0xFF10B981),
-                                ),
-                                const Divider(color: Colors.white10, height: 16),
-                                _buildStatusRow(
-                                  title: 'Payment Status',
-                                  value: _po!.paymentStatusDisplay,
-                                  icon: Icons.credit_card_outlined,
-                                  iconColor: const Color(0xFF8B5CF6),
-                                ),
-                                const Divider(color: Colors.white10, height: 16),
-                                _buildStatusRow(
-                                  title: 'Supplier Notification',
-                                  value: _po!.supplierNotificationDisplay,
-                                  icon: Icons.send_outlined,
-                                  iconColor: cyanAccent,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Payment & Settlement Receipt Card (when paid/sent or when bank slip/Stripe info exists)
-                          if (_po!.bankSlipUrl != null ||
-                              _po!.bankReferenceNumber != null ||
-                              _po!.stripePaymentIntentId != null ||
-                              _po!.status.toLowerCase() == 'sent' ||
-                              _po!.status.toLowerCase() == 'payment') ...[
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: cardBg,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildReceiptRow(
+                            label: 'Payment Gateway',
+                            value: _po!.bankReferenceNumber != null
+                                ? 'Bank Transfer (Slip Verified)'
+                                : 'Stripe Online Checkout',
+                            icon: _po!.bankReferenceNumber != null
+                                ? Icons.account_balance
+                                : Icons.credit_card,
+                          ),
+                          const Divider(color: Colors.white10, height: 16),
+                          _buildReceiptRow(
+                            label: 'Transaction Reference',
+                            value:
+                                _po!.bankReferenceNumber ??
+                                _po!.stripePaymentIntentId ??
+                                'SETTLED-${_po!.id}',
+                            icon: Icons.tag,
+                          ),
+                          if (_po!.bankSlipUrl != null) ...[
+                            const Divider(color: Colors.white10, height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Verified Bank Voucher',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => _showVoucherDialog(_po!),
+                                  child: const Row(
                                     children: [
-                                      const Row(
-                                        children: [
-                                          Icon(Icons.verified_outlined, color: Color(0xFF10B981), size: 18),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Payment & Settlement Receipt',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
+                                      Icon(
+                                        Icons.receipt_long,
+                                        color: cyanAccent,
+                                        size: 15,
                                       ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          _po!.bankSlipStatus ?? 'Settled & Verified',
-                                          style: const TextStyle(
-                                            color: Color(0xFF10B981),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 11,
-                                          ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'View Slip Voucher',
+                                        style: TextStyle(
+                                          color: cyanAccent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 12),
-                                  _buildReceiptRow(
-                                    label: 'Payment Gateway',
-                                    value: _po!.bankReferenceNumber != null
-                                        ? 'Bank Transfer (Slip Verified)'
-                                        : 'Stripe Online Checkout',
-                                    icon: _po!.bankReferenceNumber != null
-                                        ? Icons.account_balance
-                                        : Icons.credit_card,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Order Lines (Material, Quantity, Unit Price, Total)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Order Lines',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              '${_po!.orderLines.length} items',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (_po!.orderLines.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(
+                              'No item lines attached.',
+                              style: TextStyle(color: Colors.white38),
+                            ),
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _po!.orderLines.length,
+                            separatorBuilder: (_, _) => const Divider(
+                              color: Colors.white10,
+                              height: 16,
+                            ),
+                            itemBuilder: (context, idx) {
+                              final line = _po!.orderLines[idx];
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: cyanAccent.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.inventory_2_outlined,
+                                      color: cyanAccent,
+                                      size: 18,
+                                    ),
                                   ),
-                                  const Divider(color: Colors.white10, height: 16),
-                                  _buildReceiptRow(
-                                    label: 'Transaction Reference',
-                                    value: _po!.bankReferenceNumber ?? _po!.stripePaymentIntentId ?? 'SETTLED-${_po!.id}',
-                                    icon: Icons.tag,
-                                  ),
-                                  if (_po!.bankSlipUrl != null) ...[
-                                    const Divider(color: Colors.white10, height: 16),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        const Text(
-                                          'Verified Bank Voucher',
-                                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                                        Text(
+                                          line.rawMaterialName,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
                                         ),
-                                        InkWell(
-                                          onTap: () => _showVoucherDialog(_po!),
-                                          child: const Row(
-                                            children: [
-                                              Icon(Icons.receipt_long, color: cyanAccent, size: 15),
-                                              SizedBox(width: 4),
-                                              Text(
-                                                'View Slip Voucher',
-                                                style: TextStyle(
-                                                  color: cyanAccent,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'SKU: ${line.rawMaterialSku}',
+                                          style: const TextStyle(
+                                            color: Colors.white38,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${line.quantity} units @ ${formatMoney(line.unitPrice, currency: _po!.currency)} / unit',
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12,
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-
-                          // Order Lines (Material, Quantity, Unit Price, Total)
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text(
-                                      'Order Lines',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${_po!.orderLines.length} items',
-                                      style: const TextStyle(color: Colors.white54, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                if (_po!.orderLines.isEmpty)
-                                  const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8.0),
-                                    child: Text(
-                                      'No item lines attached.',
-                                      style: TextStyle(color: Colors.white38),
-                                    ),
-                                  )
-                                else
-                                  ListView.separated(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: _po!.orderLines.length,
-                                    separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 16),
-                                    itemBuilder: (context, idx) {
-                                      final line = _po!.orderLines[idx];
-                                      return Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Container(
-                                            width: 36,
-                                            height: 36,
-                                            decoration: BoxDecoration(
-                                              color: cyanAccent.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Icon(Icons.inventory_2_outlined, color: cyanAccent, size: 18),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  line.rawMaterialName,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  'SKU: ${line.rawMaterialSku}',
-                                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '${line.quantity} units @ ${formatMoney(line.unitPrice, currency: _po!.currency)} / unit',
-                                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Text(
-                                            formatMoney(line.totalPrice, currency: _po!.currency),
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
                                   ),
-                              ],
-                            ),
+                                  Text(
+                                    formatMoney(
+                                      line.totalPrice,
+                                      currency: _po!.currency,
+                                    ),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-
-                          const SizedBox(height: 24),
-                        ],
-                      ),
+                      ],
                     ),
+                  ),
+
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
     );
   }
 
   Widget _buildManagerActionBar(BuildContext context, PurchaseOrderDetail po) {
-    final status = po.status.toLowerCase();
+    final cleanStatus = po.status.toLowerCase().replaceAll(
+      RegExp(r'[^a-z]'),
+      '',
+    );
 
-    if (status == 'pendingapproval') {
+    final pending =
+        cleanStatus == 'pendingapproval' ||
+        cleanStatus == 'waitingforapproval' ||
+        cleanStatus == 'pending';
+    if (!widget.allowManagement && !(widget.allowApproval && pending)) {
+      return const SizedBox.shrink();
+    }
+
+    if (cleanStatus == 'pendingapproval' ||
+        cleanStatus == 'waitingforapproval' ||
+        cleanStatus == 'pending') {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+          border: Border.all(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +722,11 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                 SizedBox(width: 8),
                 Text(
                   'Supply Chain Manager Approval Action',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -551,10 +745,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label: const Text('Approve', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text(
+                      'Approve',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -565,10 +767,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       backgroundColor: const Color(0xFFF59E0B),
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     icon: const Icon(Icons.edit_note_rounded, size: 16),
-                    label: const Text('Revise', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text(
+                      'Revise',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -579,10 +789,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       backgroundColor: const Color(0xFFEF4444),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     icon: const Icon(Icons.cancel_outlined, size: 16),
-                    label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text(
+                      'Reject',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -590,24 +808,36 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           ],
         ),
       );
-    } else if (status == 'approved' || status == 'payment') {
+    } else if (cleanStatus == 'approved' ||
+        cleanStatus == 'payment' ||
+        cleanStatus == 'paymentpending') {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF1E1E38),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+          border: Border.all(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
-                Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF8B5CF6), size: 20),
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: Color(0xFF8B5CF6),
+                  size: 20,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Payment Gateway & Financial Settlement',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -626,10 +856,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       backgroundColor: const Color(0xFF6366F1),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     icon: const Icon(Icons.credit_card, size: 16),
-                    label: const Text('Stripe Card', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text(
+                      'Stripe Card',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -640,10 +878,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                     icon: const Icon(Icons.receipt_long_rounded, size: 16),
-                    label: const Text('Bank Slip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text(
+                      'Bank Slip',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -651,7 +897,7 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           ],
         ),
       );
-    } else if (status == 'draft') {
+    } else if (cleanStatus == 'draft') {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -665,8 +911,17 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
             const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Draft Purchase Order', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text('Submit for manager approval', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                Text(
+                  'Draft Purchase Order',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Submit for manager approval',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
               ],
             ),
             ElevatedButton.icon(
@@ -676,7 +931,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                 foregroundColor: Colors.black,
               ),
               icon: const Icon(Icons.send, size: 16),
-              label: const Text('Submit', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Submit',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -688,17 +946,26 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
   Future<void> _handleApprove(int poId) async {
     try {
-      await widget.service.approvePurchaseOrder(poId, notes: 'Approved by Supply Chain Manager via Mobile');
+      await widget.service.approvePurchaseOrder(
+        poId,
+        notes: 'Approved by Supply Chain Manager via Mobile',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchase Order Approved successfully!'), backgroundColor: Color(0xFF10B981)),
+          const SnackBar(
+            content: Text('Purchase Order Approved successfully!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
         );
         _fetchDetails();
       }
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Approval failed: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Approval failed: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -709,14 +976,20 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
       await widget.service.submitPurchaseOrder(poId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchase Order Submitted for approval!'), backgroundColor: Color(0xFF5CC8F8)),
+          const SnackBar(
+            content: Text('Purchase Order Submitted for approval!'),
+            backgroundColor: Color(0xFF5CC8F8),
+          ),
         );
         _fetchDetails();
       }
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Submit failed: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Submit failed: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -728,7 +1001,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0F1B2B),
-        title: const Text('Reject Purchase Order', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Reject Purchase Order',
+          style: TextStyle(color: Colors.white),
+        ),
         content: TextField(
           controller: controller,
           style: const TextStyle(color: Colors.white),
@@ -740,11 +1016,16 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+            ),
             child: const Text('Reject Order'),
           ),
         ],
@@ -753,17 +1034,26 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
     if (result == true && controller.text.trim().isNotEmpty) {
       try {
-        await widget.service.rejectPurchaseOrder(poId, notes: controller.text.trim());
+        await widget.service.rejectPurchaseOrder(
+          poId,
+          notes: controller.text.trim(),
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Order Rejected.'), backgroundColor: Color(0xFFEF4444)),
+            const SnackBar(
+              content: Text('Order Rejected.'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
           );
           _fetchDetails();
         }
       } catch (err) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Rejection failed: $err'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Rejection failed: $err'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -776,7 +1066,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0F1B2B),
-        title: const Text('Request Revision', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Request Revision',
+          style: TextStyle(color: Colors.white),
+        ),
         content: TextField(
           controller: controller,
           style: const TextStyle(color: Colors.white),
@@ -788,11 +1081,17 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFF59E0B),
+              foregroundColor: Colors.black,
+            ),
             child: const Text('Send Revision'),
           ),
         ],
@@ -801,17 +1100,26 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
     if (result == true && controller.text.trim().isNotEmpty) {
       try {
-        await widget.service.revisePurchaseOrder(poId, notes: controller.text.trim());
+        await widget.service.revisePurchaseOrder(
+          poId,
+          notes: controller.text.trim(),
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Revision requested.'), backgroundColor: Color(0xFFF59E0B)),
+            const SnackBar(
+              content: Text('Revision requested.'),
+              backgroundColor: Color(0xFFF59E0B),
+            ),
           );
           _fetchDetails();
         }
       } catch (err) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Revision request failed: $err'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Revision request failed: $err'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -820,48 +1128,214 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
 
   Future<void> _handleStripeCheckout(int poId) async {
     try {
-      final checkoutUrl = await widget.service.createCheckoutSession(poId);
+      final sessionData = await widget.service.createCheckoutSession(poId);
+      final checkoutUrl = sessionData?['url'] as String?;
+      final sessionId = sessionData?['sessionId'] as String?;
       if (!mounted) return;
 
-      showDialog<void>(
+      bool verifying = false;
+
+      await showDialog<void>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF0F1B2B),
-          title: const Row(
-            children: [
-              Icon(Icons.payment, color: Color(0xFF8B5CF6)),
-              SizedBox(width: 8),
-              Text('Stripe Payment Checkout', style: TextStyle(color: Colors.white, fontSize: 16)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Stripe Checkout Session Created.', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 10),
-              if (checkoutUrl != null)
-                SelectableText(
-                  checkoutUrl,
-                  style: const TextStyle(color: Color(0xFF5CC8F8), fontSize: 12),
+        barrierDismissible: false,
+        builder: (ctx) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F1B2B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFF1E293B)),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.payment, color: Color(0xFF8B5CF6)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Stripe Payment Checkout',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Stripe Checkout Session Created.',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  if (checkoutUrl != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Payment Link:',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            checkoutUrl,
+                            style: const TextStyle(
+                              color: Color(0xFF5CC8F8),
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(
+                                  ClipboardData(text: checkoutUrl),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Stripe payment link copied to clipboard!',
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Color(0xFF8B5CF6),
+                              ),
+                              label: const Text(
+                                'Copy Payment Link',
+                                style: TextStyle(
+                                  color: Color(0xFF8B5CF6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color(0xFF8B5CF6),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  const Text(
+                    '1. Open the payment link in your browser to complete payment with test card.\n2. When finished, tap "Verify Payment" below.',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: verifying ? null : () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
-              const SizedBox(height: 14),
-              const Text('Complete secure payment via Stripe hosted checkout.', style: TextStyle(color: Colors.white54, fontSize: 11)),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
-              child: const Text('Done'),
-            ),
-          ],
+                ElevatedButton.icon(
+                  onPressed: verifying
+                      ? null
+                      : () async {
+                          setDialogState(() => verifying = true);
+                          try {
+                            if (sessionId == null || sessionId.isEmpty) {
+                              throw const ApiException(
+                                'Checkout session is missing. Start checkout again.',
+                              );
+                            }
+                            final confirmed = await widget.service
+                                .confirmCheckout(poId, sessionId);
+                            if (confirmed == null ||
+                                !{'paid', 'succeeded'}.contains(
+                                  confirmed.stripePaymentStatus?.toLowerCase(),
+                                )) {
+                              throw const ApiException(
+                                'Payment has not been confirmed for this order.',
+                              );
+                            }
+                            if (mounted && ctx.mounted) {
+                              setState(() => _po = confirmed);
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Payment checked and verified!',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              setDialogState(() => verifying = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Payment verification failed: $e',
+                                  ),
+                                  backgroundColor: Colors.amber,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: verifying
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.verified, size: 16),
+                  label: Text(verifying ? 'Verifying...' : 'Verify Payment'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       );
     } catch (err) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Stripe Checkout error: $err'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Stripe Checkout error: $err'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -882,7 +1356,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: const Color(0xFF0F1B2B),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: Row(
                 children: [
                   Container(
@@ -891,13 +1367,21 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       color: const Color(0xFF10B981).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.account_balance, color: Color(0xFF10B981), size: 20),
+                    child: const Icon(
+                      Icons.account_balance,
+                      color: Color(0xFF10B981),
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
                       'Bank Transfer Slip Gateway',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -920,23 +1404,59 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Supplier:', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                              Text(po.supplierName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                              const Text(
+                                'Supplier:',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                po.supplierName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Payable Total:', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                              Text(formatMoney(po.totalCost, currency: po.currency), style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                              const Text(
+                                'Payable Total:',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                formatMoney(
+                                  po.totalCost,
+                                  currency: po.currency,
+                                ),
+                                style: const TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 14),
-                    const Text('Bank / Institution Name', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Bank / Institution Name',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: bankNameController,
@@ -945,13 +1465,29 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
                         hintText: 'e.g. Chase Bank, HSBC, Commercial Bank',
-                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        hintStyle: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text('Transaction Reference Number *', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Transaction Reference Number *',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: refController,
@@ -960,13 +1496,29 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
                         hintText: 'e.g. TXN-9988231',
-                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        hintStyle: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text('Verification / Slip Notes', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                    const Text(
+                      'Verification / Slip Notes',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: notesController,
@@ -975,10 +1527,20 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
-                        hintText: 'Notes regarding wire transfer or branch deposit...',
-                        hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        hintText:
+                            'Notes regarding wire transfer or branch deposit...',
+                        hintStyle: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                       ),
                     ),
                   ],
@@ -987,7 +1549,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
               actions: [
                 TextButton(
                   onPressed: submitting ? null : () => Navigator.pop(ctx),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 ),
                 ElevatedButton.icon(
                   onPressed: submitting
@@ -996,7 +1561,12 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                           final ref = refController.text.trim();
                           if (ref.isEmpty) {
                             messenger.showSnackBar(
-                              const SnackBar(content: Text('Please enter a Transaction Reference Number.'), backgroundColor: Colors.orange),
+                              const SnackBar(
+                                content: Text(
+                                  'Please enter a Transaction Reference Number.',
+                                ),
+                                backgroundColor: Colors.orange,
+                              ),
                             );
                             return;
                           }
@@ -1014,7 +1584,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             if (mounted) {
                               messenger.showSnackBar(
                                 const SnackBar(
-                                  content: Text('Bank slip submitted for manager verification.'),
+                                  content: Text(
+                                    'Bank slip submitted for manager verification.',
+                                  ),
                                   backgroundColor: Color(0xFF10B981),
                                 ),
                               );
@@ -1026,7 +1598,12 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                             }
                             if (mounted) {
                               messenger.showSnackBar(
-                                SnackBar(content: Text('Bank slip submission failed: $err'), backgroundColor: Colors.red),
+                                SnackBar(
+                                  content: Text(
+                                    'Bank slip submission failed: $err',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
                               );
                             }
                           }
@@ -1036,9 +1613,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
                     foregroundColor: Colors.white,
                   ),
                   icon: submitting
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : const Icon(Icons.check_circle_outline, size: 16),
-                  label: Text(submitting ? 'Submitting...' : 'Submit bank slip'),
+                  label: Text(
+                    submitting ? 'Submitting...' : 'Submit bank slip',
+                  ),
                 ),
               ],
             );
@@ -1048,7 +1634,11 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     );
   }
 
-  Widget _buildReceiptRow({required String label, required String value, required IconData icon}) {
+  Widget _buildReceiptRow({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1056,12 +1646,19 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           children: [
             Icon(icon, size: 14, color: Colors.white38),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+            ),
           ],
         ),
         Text(
           value,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -1077,20 +1674,43 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           children: [
             Icon(Icons.receipt_long, color: Color(0xFF10B981)),
             SizedBox(width: 8),
-            Text('Bank Slip Voucher', style: TextStyle(color: Colors.white, fontSize: 16)),
+            Text(
+              'Bank Slip Voucher',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('PO Number: ${po.poNumber}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            Text(
+              'PO Number: ${po.poNumber}',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
             const SizedBox(height: 4),
-            Text('Reference: ${po.bankReferenceNumber ?? 'N/A'}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(
+              'Reference: ${po.bankReferenceNumber ?? 'N/A'}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 4),
-            Text('Total Amount: ${formatMoney(po.totalCost, currency: po.currency)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(
+              'Total Amount: ${formatMoney(po.totalCost, currency: po.currency)}',
+              style: const TextStyle(
+                color: Color(0xFF10B981),
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 12),
-            const Text('Slip Voucher URL on server:', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const Text(
+              'Slip Voucher URL on server:',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
             const SizedBox(height: 4),
             SelectableText(
               'http://localhost:5070${po.bankSlipUrl}',
@@ -1101,7 +1721,9 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
         actions: [
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+            ),
             child: const Text('Close'),
           ),
         ],
@@ -1117,7 +1739,10 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
           children: [
             Icon(icon, size: 14, color: Colors.white38),
             const SizedBox(width: 4),
-            Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -1168,14 +1793,18 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
+    final clean = status.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+    switch (clean) {
       case 'approved':
         return const Color(0xFF10B981);
       case 'sent':
         return const Color(0xFF06B6D4);
       case 'pendingapproval':
+      case 'waitingforapproval':
+      case 'pending':
         return const Color(0xFFF59E0B);
       case 'payment':
+      case 'paymentpending':
         return const Color(0xFF8B5CF6);
       case 'rejected':
         return const Color(0xFFEF4444);
@@ -1185,4 +1814,3 @@ class _PODetailsScreenState extends State<PODetailsScreen> {
     }
   }
 }
-

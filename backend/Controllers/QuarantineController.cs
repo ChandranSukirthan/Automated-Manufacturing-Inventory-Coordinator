@@ -33,12 +33,21 @@ namespace ManufacturingCoordinator.Api.Controllers
         }
 
         [HttpPost("{id:guid}/release")]
-[Authorize(Roles = "QualityInspector")]
+        [Authorize(Roles = "QualityInspector")]
         public async Task<IActionResult> Release(Guid id, [FromBody] ReleaseQuarantineDto? dto = null)
         {
             var resolvedBy = User.Identity?.Name ?? "QualityInspector";
             var quarantine = await _service.ReleaseAsync(id, dto?.ResolutionNote, resolvedBy);
             return quarantine == null ? NotFound() : Ok(quarantine);
+        }
+
+        [HttpPost("defect/{defectId:guid}/release-all")]
+        [Authorize(Roles = "QualityInspector")]
+        public async Task<IActionResult> ReleaseAllForDefect(Guid defectId, [FromBody] ReleaseQuarantineDto? dto = null)
+        {
+            var resolvedBy = User.Identity?.Name ?? "QualityInspector";
+            var released = await _service.ReleaseAllForDefectAsync(defectId, dto?.ResolutionNote, resolvedBy);
+            return Ok(released);
         }
     }
 }

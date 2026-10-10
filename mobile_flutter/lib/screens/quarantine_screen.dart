@@ -17,7 +17,7 @@ class QuarantineScreen extends StatefulWidget {
   State<QuarantineScreen> createState() => _QuarantineScreenState();
 }
 
-enum _QuarantineSort { newest, oldest, batch, severity, status }
+enum _QuarantineSort { newest, oldest, roll, severity, status }
 
 class _QuarantineScreenState extends State<QuarantineScreen> {
   static const _pageSize = 8;
@@ -74,7 +74,6 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
     final records = (_records ?? []).where((record) {
       final severity = _severityFor(record);
       final searchable = [
-        record.batchId,
         record.inventoryRollId,
         record.reason,
         record.status,
@@ -91,7 +90,7 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
       (left, right) => switch (_sort) {
         _QuarantineSort.newest => right.createdAt.compareTo(left.createdAt),
         _QuarantineSort.oldest => left.createdAt.compareTo(right.createdAt),
-        _QuarantineSort.batch => left.batchId.compareTo(right.batchId),
+        _QuarantineSort.roll => left.inventoryRollId.compareTo(right.inventoryRollId),
         _QuarantineSort.status => left.status.compareTo(right.status),
         _QuarantineSort.severity => _severityFor(
           left,
@@ -438,7 +437,7 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
             }),
             style: const TextStyle(color: AppColors.strongText, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'Search batch, inventory roll, reason...',
+              hintText: 'Search roll ID, containment reason...',
               hintStyle: const TextStyle(
                 color: AppColors.mutedText,
                 fontSize: 12,
@@ -542,8 +541,8 @@ class _QuarantineScreenState extends State<QuarantineScreen> {
                         child: Text('Oldest First', style: TextStyle(fontSize: 12)),
                       ),
                       PopupMenuItem(
-                        value: _QuarantineSort.batch,
-                        child: Text('Batch ID', style: TextStyle(fontSize: 12)),
+                        value: _QuarantineSort.roll,
+                        child: Text('Roll ID', style: TextStyle(fontSize: 12)),
                       ),
                       PopupMenuItem(
                         value: _QuarantineSort.severity,

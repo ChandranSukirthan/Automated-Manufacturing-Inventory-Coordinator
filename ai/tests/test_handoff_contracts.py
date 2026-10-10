@@ -101,21 +101,34 @@ def test_moq_rounded_cost_must_fit_budget(pipeline):
     assert result["validation_results"]["isValid"] is False
 
 
-def test_new_quality_risk_invalidates_an_older_manual_resolution(pipeline, monkeypatch):
+@pytest.mark.parametrize("old_resolution", ["RESOLVED", "REJECTED", "PENDING_REVIEW"])
+def test_historical_defect_clearance_does_not_authorize_or_block_fresh_order(pipeline, monkeypatch, old_resolution):
     from ai.agents import validation
     request, _, _, _ = pipeline
     result = workflow.run_workflow(**request)
     result["validation_results"] = {
-        "manualResolutionStatus": "RESOLVED",
+        "manualResolutionStatus": old_resolution,
         "historicalRisk": {"defectId": "old-defect"},
+        "defectFingerprint": "old-assessment",
     }
     monkeypatch.setattr(validation, "_check_historical_material_quality_risk", lambda *a: {
         "defectId": "new-defect", "material": "Material A", "issue": "New tear",
         "severity": "High", "relatedRoll": "ROLL-2",
     })
     checked = validation.validation_node(result)
-    assert checked["validation_results"]["manualResolutionStatus"] == "PENDING_REVIEW"
-    assert checked["validation_results"]["isValid"] is False
+    # Legacy resolution metadata is retained for compatibility, but the new
+    # assessment must not attach either historical defect to fresh stock.
+    assessment = checked["validation_results"]
+    assert assessment["manualResolutionStatus"] == old_resolution
+    assert assessment["historicalRisk"] is None
+    assert assessment["defectFingerprint"] is None
+    assert assessment["qualitySafetyStatus"] == "CLEAR"
+    assert assessment["isValid"] is True
+    from ai.agents.supervisor import supervisor_node
+    routed = supervisor_node({**result, **checked})
+    assert routed["required_action"] == "MANAGER_APPROVAL"
+    assert routed["requires_approval"] is True
+    assert routed["status"] == WorkflowStatus.WaitingForApproval
 
 
 def test_manual_request_above_threshold_still_proposes_purchase(pipeline):
@@ -129,55 +142,57 @@ def test_manual_request_above_threshold_still_proposes_purchase(pipeline):
     assert result["validation_results"]["isValid"] is True
 
 
-def test_new_quarantine_blocks_approval_without_supplier_retry(pipeline, monkeypatch):
+def test_existing_quarantine_does_not_block_fresh_order_approval_or_retry_supplier(pipeline, monkeypatch):
     from ai.agents import validation
     request, _, _, _ = pipeline
     result = workflow.run_workflow(**request)
     monkeypatch.setattr(validation, "_check_material_quarantine_count", lambda *a, **kw: 2)
-    with pytest.raises(ValueError, match="Fresh validation failed"):
-        workflow.approve_and_resume(result["workflow_id"], "manager")
+    # Quarantine remains recorded, but cannot prevent an independently valid
+    # replacement order progressing after explicit human approval.
+    assert result["status"] == WorkflowStatus.WaitingForApproval
+    assert result["requires_approval"] is True
+    approved = workflow.approve_and_resume(result["workflow_id"], "manager")
     stored = workflow.WORKFLOW_SESSIONS[result["workflow_id"]]
-    assert stored["required_action"] == "QA_REVIEW"
+    assert approved["approval_status"] == "Approved"
+    assert stored["current_agent"] == "Payment / Dispatch"
+    # The existing execution node keeps the approved recommendation staged
+    # while the separate backend order/payment lifecycle completes.
+    assert stored["status"] == WorkflowStatus.WaitingForApproval
     assert not stored["requires_approval"]
     assert stored["supplier_selection_attempt"] == 1
     assert stored["validation_results"]["quarantinedRollsCount"] == 2
+    assert stored["validation_results"]["qualitySafetyStatus"] == "CLEAR"
+    assert stored["validation_results"]["isValid"] is True
 
 
-def test_quality_clearance_returns_to_approval_and_survives_revision(pipeline, monkeypatch):
-    import json
+def test_existing_defects_and_quarantine_do_not_block_revalidation_or_revision(pipeline, monkeypatch):
     from ai.agents import validation
-    request, _, _, _ = pipeline
+    request, _, quote, _ = pipeline
     risk = {"defectId": "D1", "severity": "High", "material": "Material A", "relatedRoll": "R1"}
     monkeypatch.setattr(validation, "_check_historical_material_quality_risk", lambda *a: risk)
+    monkeypatch.setattr(validation, "_check_material_quarantine_count", lambda *a, **kw: 2)
     result = workflow.run_workflow(**request)
-    assert result["required_action"] == "QA_REVIEW"
+    assert result["required_action"] == "MANAGER_APPROVAL"
+    assert result["status"] == WorkflowStatus.WaitingForApproval
+    assert result["requires_approval"] is True
     assert result["supplier_selection_attempt"] == 1
-    decision = {**result["validation_results"], "manualResolutionStatus": "RESOLVED", "resolvedBy": "inspector"}
-    class DecisionConnection:
-        def __enter__(self): return self
-        def __exit__(self, *_): return False
-        def cursor(self): return self
-        def execute(self, *_): pass
-        def fetchone(self): return (json.dumps(decision),)
-    import psycopg
-    original_connect = psycopg.connect
-    # The authoritative decision query shares the regular live-check connection factory.
-    class RoutedConnection:
-        def __enter__(self): return self
-        def __exit__(self, *_): return False
-        def cursor(self): return self
-        def execute(self, sql, *args):
-            self.selected = DecisionConnection() if '"AgentWorkflows"' in sql else original_connect()
-            self.selected.execute(sql, *args)
-        def fetchone(self): return self.selected.fetchone()
-    monkeypatch.setattr(psycopg, "connect", lambda *a, **kw: RoutedConnection())
+    assert result["validation_results"]["quarantinedRollsCount"] == 2
+    assert result["validation_results"]["historicalRisk"] is None
+
     resumed = workflow.revalidate_workflow(result["workflow_id"])
     assert resumed["status"] == WorkflowStatus.WaitingForApproval
     assert resumed["validation_results"]["qualitySafetyStatus"] == "CLEAR"
     assert resumed["supplier_selection_attempt"] == 1
+    quote["unitPrice"] = 3
     revised = workflow.request_revision(result["workflow_id"], "Recheck quote")
-    assert revised["validation_results"]["manualResolutionStatus"] == "RESOLVED"
+    assert revised["estimated_total_cost"] == 60
+    assert revised["validation_results"]["checkedSupplier"]["totalCost"] == 60
+    assert revised["validation_results"]["quarantinedRollsCount"] == 2
     assert revised["validation_results"]["isValid"] is True
+    assert revised["status"] == WorkflowStatus.WaitingForApproval
+    assert revised["required_action"] == "MANAGER_APPROVAL"
+    assert revised["requires_approval"] is True
+    assert revised["approval_status"] == "Pending"
 
 
 def test_supplier_retry_loop_stops_at_three_and_cannot_be_reset(pipeline, monkeypatch):

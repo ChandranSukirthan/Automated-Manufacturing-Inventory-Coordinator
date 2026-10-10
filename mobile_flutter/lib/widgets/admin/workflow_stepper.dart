@@ -29,7 +29,8 @@ class WorkflowStepper extends StatelessWidget {
         final step = steps[index];
         final isLast = index == steps.length - 1;
         final isPassed = index + 1 < currentStep || step.status == 'Completed';
-        final isCurrent = index + 1 == currentStep && step.status != 'Completed';
+        final isCurrent =
+            index + 1 == currentStep && step.status != 'Completed';
 
         Color nodeColor = const Color(0xFF64748B);
         if (isPassed) {
@@ -55,7 +56,11 @@ class WorkflowStepper extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: isPassed
-                        ? const Icon(Icons.check, size: 14, color: Color(0xFF10B981))
+                        ? const Icon(
+                            Icons.check,
+                            size: 14,
+                            color: Color(0xFF10B981),
+                          )
                         : Text(
                             '${step.stepNumber}',
                             style: TextStyle(
@@ -87,12 +92,14 @@ class WorkflowStepper extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            step.agentName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                          Expanded(
+                            child: Text(
+                              step.agentName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           StatusChip(status: step.status, showDot: false),

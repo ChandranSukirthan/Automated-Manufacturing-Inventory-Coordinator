@@ -19,6 +19,11 @@ const shiftService = {
   adjustOutput: async (id) => {
     const response = await api.post(`/shifts/${id}/adjust-output`);
     return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/shifts/${id}`);
+    return response.data;
   }
 };
 

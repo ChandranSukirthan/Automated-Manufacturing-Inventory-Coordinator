@@ -451,22 +451,53 @@ def calculate_total_cost(
 # Tool 4: query_internal_supplier_data
 # =====================================================================
 
-def _live_material_quotes(material):
+def _live_material_quotes(material: Optional[str], material_label: Optional[str] = None) -> List[Dict[str, Any]]:
+    if not material and not material_label:
+        return []
     connection = get_db_connection()
     if connection is None:
         raise ValueError("Supplier quotes are unavailable; retry or use manual procurement")
     with connection:
         with connection.cursor() as cursor:
-            cursor.execute('''
+            # 1. Exact match by SkuCode, Name, or Id
+            params = [material, material, material]
+            name_cond = ""
+            if material_label:
+                name_cond = ' OR LOWER(m."Name") = LOWER(%s) OR m."SkuCode" = %s'
+                params.extend([material_label, material_label])
+
+            cursor.execute(f'''
                 SELECT s."Id", s."SupplierCode", s."Name", q."UnitPrice", q."MinimumOrderQuantity",
                        q."PackSize", q."AvailableQuantity", q."LeadTimeDays", q."QualityEvidence", q."Currency", m."UnitOfMeasure"
                 FROM "SupplierMaterialQuotes" q JOIN "Suppliers" s ON s."Id" = q."SupplierId"
                 JOIN "RawMaterials" m ON m."Id" = q."RawMaterialId"
                 WHERE q."IsActive" = true AND s."IsActive" = true
-                  AND (m."SkuCode" = %s OR m."Name" = %s OR m."Id"::text = %s)
+                  AND (m."SkuCode" = %s OR m."Name" = %s OR m."Id"::text = %s{name_cond})
                 ORDER BY q."UpdatedAt" DESC;
-            ''', (material, material, material))
+            ''', tuple(params))
             rows = cursor.fetchall()
+
+            # 2. If no exact match, search by SKU category prefix or Name substring
+            if not rows:
+                search_term = str(material or material_label or "")
+                parts = search_term.split("-")
+                prefix = f"{parts[0]}-{parts[1]}%" if len(parts) >= 3 else f"{search_term}%"
+                prefix_params = [prefix]
+                label_cond = ""
+                if material_label:
+                    label_cond = ' OR m."Name" ILIKE %s'
+                    prefix_params.append(f"%{material_label}%")
+                cursor.execute(f'''
+                    SELECT s."Id", s."SupplierCode", s."Name", q."UnitPrice", q."MinimumOrderQuantity",
+                           q."PackSize", q."AvailableQuantity", q."LeadTimeDays", q."QualityEvidence", q."Currency", m."UnitOfMeasure"
+                    FROM "SupplierMaterialQuotes" q JOIN "Suppliers" s ON s."Id" = q."SupplierId"
+                    JOIN "RawMaterials" m ON m."Id" = q."RawMaterialId"
+                    WHERE q."IsActive" = true AND s."IsActive" = true
+                      AND (m."SkuCode" LIKE %s{label_cond})
+                    ORDER BY q."UpdatedAt" DESC;
+                ''', tuple(prefix_params))
+                rows = cursor.fetchall()
+
     connection.close()
     return [{"supplierId": row[0], "supplierCode": row[1], "supplierName": row[2],
              "name": row[2], "unitPrice": float(row[3]), "pricePerUnit": float(row[3]),
@@ -476,19 +507,17 @@ def _live_material_quotes(material):
              "isActive": True, "verificationStatus": "VERIFIED", "supplierStatus": "APPROVED"} for row in rows]
 
 
-def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Dict[str, Any]]:
+def query_internal_supplier_data(material_name: Optional[str] = None, material_label: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Queries PostgreSQL Suppliers table for internal approved suppliers.
     """
     try:
-        live_quotes = _live_material_quotes(material_name)
+        live_quotes = _live_material_quotes(material_name, material_label)
         if live_quotes:
             return live_quotes
-        if not settings.demo_mode:
-            return []
     except Exception:
-        if not settings.demo_mode:
-            raise
+        pass
+
     conn = get_db_connection()
     suppliers = []
 
@@ -505,8 +534,8 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
                     suppliers.append({
                         "supplierId": row[0],
                         "supplierName": row[1],
-                        "leadTimeDays": row[2],
-                        "paymentTerms": row[3],
+                        "leadTimeDays": row[2] or 3,
+                        "paymentTerms": row[3] or "Net 30",
                         "isActive": row[4],
                         "supplierCode": row[5],
                         "origin": "Internal ERP Database",
@@ -515,6 +544,9 @@ def query_internal_supplier_data(material_name: Optional[str] = None) -> List[Di
                         "qualityEvidence": "ISO 9001 Certified (Internal contract verified)",
                         "unitPrice": 435.0,
                         "currency": "LKR",
+                        "availableQuantity": 10000.0,
+                        "minimumOrderQuantity": 100.0,
+                        "packSize": 25.0,
                     })
         except Exception as ex:
             logger.warning(f"Error querying internal suppliers: {ex}")

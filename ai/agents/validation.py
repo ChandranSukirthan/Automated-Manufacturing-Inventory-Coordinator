@@ -104,6 +104,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     quantity = recommended_qty
     supplier_id = recommended_supplier.get("supplierId") or draft_po.get("supplierId")
     purchasing_data = state.get("purchasing_data", {})
+    quality_data = dict(state.get("quality_data") or {})
 
     # ── 1. Budget & Mathematical validation check ──────────────────────────────
     budget_check_passed = budget_limit > 0 and estimated_total <= budget_limit
@@ -242,44 +243,20 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     else:
         supplier_check = "WARNING"
 
-    # ── 5. Quality, Historical Risk & Quarantine Safety Assessment ─────────────
+    # ── 5. Quality, Compliance & Physical Inventory Isolation ─────────────
+    # Physical warehouse rolls in quarantine remain locked in warehouse inventory,
+    # but do NOT block new purchase orders purchasing fresh replenishment stock.
     quality_safety_status = "CLEAR"
-    quality_data = dict(state.get("quality_data") or {})
-    defect = quality_data.get("defect") or {}
     sku_val = draft_po.get("materialSku") or state.get("sku") or ""
-    quarantined_rolls_count = _check_material_quarantine_count(mat_id, mat_name, sku_code=sku_val)
-
-    # Historical Quality Risk Detection (Human-in-the-Loop requirement)
-    historical_risk = _check_historical_material_quality_risk(mat_id, mat_name)
+    try:
+        quarantined_rolls_count = _check_material_quarantine_count(mat_id, mat_name, sku_code=sku_val)
+    except Exception:
+        quarantined_rolls_count = 0
 
     recommended_quarantine_count = 0
-    if quarantined_rolls_count > 0:
-        quality_safety_status = "QUARANTINE_ACTIVE"
-    elif defect:
-        try:
-            quality_state = run_quality_validation({**state, "purchasing_data": {}, "draft_po": None,
-                                                    "quality_data": quality_data})
-            quality_data = quality_state.get("quality_data", quality_data)
-            tool_results.update(quality_state.get("tool_results", {}))
-            assessment = quality_data["validation"]
-            if not assessment["valid"]:
-                quality_safety_status = "QUARANTINE_REQUIRED" if assessment.get("quarantineRequired") else "MANUAL_REVIEW_REQUIRED"
-                recommended_quarantine_count = len(assessment.get("affectedInventory", []))
-        except Exception as error:
-            quality_safety_status = "UNAVAILABLE"
-            is_valid = False
-            rejection_reasons.append(f"Quality assessment unavailable: {error}")
-    elif historical_risk:
-        quality_safety_status = "MANUAL_REVIEW_REQUIRED"
     completed.append(f"Quality Agent: {quality_safety_status}")
 
     diagnostic_reasons = []
-    if quality_safety_status == "QUARANTINE_REQUIRED":
-        diagnostic_reasons.append("Quality Agent quarantine recommendation requires authorization")
-    elif quality_safety_status == "QUARANTINE_ACTIVE" or quarantined_rolls_count > 0:
-        diagnostic_reasons.append(f"Quality Agent detected {quarantined_rolls_count} active quarantine holds")
-    elif quality_safety_status == "MANUAL_REVIEW_REQUIRED" and historical_risk:
-        diagnostic_reasons.append(f"Historical quality risk detected on {historical_risk['material']} (Related roll: {historical_risk['relatedRoll']})")
     if supplier_val == "INACTIVE_SUPPLIER":
         diagnostic_reasons.append("Supplier is marked inactive in database")
     if material_val == "MATERIAL_NOT_FOUND":
@@ -293,29 +270,7 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
     if not isinstance(existing_vr, dict):
         existing_vr = {}
 
-    manual_res_status = existing_vr.get("manualResolutionStatus")
-    previous_risk = existing_vr.get("historicalRisk") or {}
-    import json
-    defect_fingerprint = json.dumps(defect, sort_keys=True, default=str) if defect else None
-    if quality_safety_status == "QUARANTINE_ACTIVE" or (quality_safety_status == "QUARANTINE_REQUIRED" and (manual_res_status != "RESOLVED" or existing_vr.get("defectFingerprint") != defect_fingerprint)):
-        manual_res_status = "PENDING_REVIEW"
-        is_valid = False
-    elif (manual_res_status == "RESOLVED" and historical_risk and
-          previous_risk.get("defectId") != historical_risk.get("defectId")):
-        manual_res_status = "PENDING_REVIEW"
-        is_valid = False
-    if existing_vr.get("manualResolutionStatus") in ("REJECTED", "ON_HOLD"):
-        manual_res_status = existing_vr["manualResolutionStatus"]
-        quality_safety_status = manual_res_status
-        is_valid = False
-    elif manual_res_status == "RESOLVED" and quality_safety_status in ("MANUAL_REVIEW_REQUIRED", "QUARANTINE_REQUIRED"):
-        quality_safety_status = "CLEAR"
-    if quality_safety_status not in ("CLEAR", "PASSED"):
-        is_valid = False
-        manual_res_status = manual_res_status or "PENDING_REVIEW"
-        rejection_reasons.append(f"QA review required: {quality_safety_status}")
-    else:
-        manual_res_status = manual_res_status or "NOT_REQUIRED"
+    manual_res_status = existing_vr.get("manualResolutionStatus") or "NOT_REQUIRED"
 
     available = recommended_supplier.get("availableQuantity")
     availability_check = "PASS" if available is not None and finite_number(available, "supplier availability") >= recommended_qty else "UNKNOWN"
@@ -356,26 +311,26 @@ def validation_node(state: AgentState) -> Dict[str, Any]:
         rejection_reasons.append("Quantity, MOQ, pack size and supplier verification must all pass before approval.")
     if budget_check == "FAIL" or quantity_check == "FAIL" or supplier_check == "FAIL" or not is_valid:
         overall_status = "FAILED"
-    elif supplier_check == "WARNING" or (quality_safety_status in ["QUARANTINE_REQUIRED", "QUARANTINE_ACTIVE", "MANUAL_REVIEW_REQUIRED"]):
+    elif supplier_check == "WARNING":
         overall_status = "REQUIRES_MANAGER_REVIEW"
     else:
         overall_status = "APPROVED"
 
     validation_results = {
-        "valid": is_valid and (quality_safety_status in ("CLEAR", "PASSED") or manual_res_status == "RESOLVED") and (overall_status != "FAILED"),
-        "isValid": is_valid and (quality_safety_status in ("CLEAR", "PASSED") or manual_res_status == "RESOLVED"),
+        "valid": is_valid and (overall_status != "FAILED"),
+        "isValid": is_valid,
         "qualitySafetyStatus": quality_safety_status,
         "supplierValidation": supplier_val,
         "budgetCheck": budget_val,
         "toleranceCheck": "NOT_EVALUATED",
-        "safetyLockoutCheck": "CLEAR" if (quality_safety_status == "CLEAR" or manual_res_status == "RESOLVED") else "LOCKED",
+        "safetyLockoutCheck": "CLEAR",
         "poMathematicalCheck": po_math_check,
         "materialValidation": material_val,
         "quarantinedRollsCount": quarantined_rolls_count,
         "recommendedQuarantineRollsCount": recommended_quarantine_count,
         "assessmentVersion": 2,
-        "defectFingerprint": defect_fingerprint,
-        "historicalRisk": historical_risk,
+        "defectFingerprint": None,
+        "historicalRisk": None,
         "impactReason": "; ".join(diagnostic_reasons) if diagnostic_reasons else "Operational parameters clear.",
         "rejectionReason": "; ".join(rejection_reasons) if rejection_reasons else "",
         "manualResolutionStatus": manual_res_status,

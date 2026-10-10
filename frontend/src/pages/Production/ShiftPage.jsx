@@ -8,6 +8,7 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Edit, 
+  Trash2,
   Loader2,
   X
 } from 'lucide-react';
@@ -159,6 +160,19 @@ export default function ShiftPage() {
       setError(err.response?.data?.message || 'Failed to execute production adjustment rule.');
     } finally {
       setAdjustingId(null);
+    }
+  };
+
+  const handleDeleteShift = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete shift "${name}"?`)) return;
+    setError('');
+    setSuccess('');
+    try {
+      await shiftService.delete(id);
+      setSuccess(`Shift "${name}" deleted successfully.`);
+      fetchShifts();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete shift.');
     }
   };
 
@@ -316,6 +330,14 @@ export default function ShiftPage() {
                             className="p-1.5 rounded-lg text-slate-400 hover:text-brand-400 hover:bg-white/10 transition-colors"
                           >
                             <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteShift(shift.id, shift.name)}
+                            title="Delete shift"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-white/10 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>

@@ -255,7 +255,10 @@ class _QuarantineDetailScreenState extends State<QuarantineDetailScreen> {
                         child: _metaField('Severity', _defect?.severity ?? 'Unknown', isBadge: true),
                       ),
                       Expanded(
-                        child: _metaField('Batch Number', record.batchId),
+                        child: _metaField(
+                          'Quarantine ID',
+                          '#${record.id.length > 8 ? record.id.substring(0, 8) : record.id}',
+                        ),
                       ),
                     ],
                   ),
