@@ -28,7 +28,6 @@ class MockPurchaseOrderService extends Fake implements PurchaseOrderService {
   @override
   Future<List<IncomingSupplyItem>> getIncomingSupplies() async => [];
 
-  @override
   Future<ProcurementStatusTracking> getProcurementStatusTracking(int id) async =>
       const ProcurementStatusTracking(
         procurementId: 1,

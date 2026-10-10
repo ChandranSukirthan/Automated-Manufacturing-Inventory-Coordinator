@@ -59,8 +59,9 @@ class _ItAdminMainScreenState extends State<ItAdminMainScreen>
     _loadAllData();
     WidgetsBinding.instance.addObserver(this);
     _timer = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? false))
+      if (_foreground && (ModalRoute.of(context)?.isCurrent ?? false)) {
         _loadAllData(background: true);
+      }
     });
   }
 

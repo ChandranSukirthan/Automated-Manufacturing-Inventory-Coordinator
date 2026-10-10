@@ -167,8 +167,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       hint: 'e.g. s.perera@amic-plant.lk',
                       keyboardType: TextInputType.emailAddress,
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty)
+                        if (v == null || v.trim().isEmpty) {
                           return 'Email required';
+                        }
                         if (!v.contains('@')) return 'Enter valid email';
                         return null;
                       },
@@ -180,8 +181,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       hint: '••••••••',
                       obscureText: true,
                       validator: (v) {
-                        if (v == null || v.length < 8)
+                        if (v == null || v.length < 8) {
                           return 'Min 8 characters required';
+                        }
                         return null;
                       },
                     ),
@@ -585,10 +587,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Color _getRoleColor(String role) {
     final lower = role.toLowerCase();
     if (lower.contains('admin') || lower == '3') return const Color(0xFF06B6D4);
-    if (lower.contains('supply') || lower == '1')
+    if (lower.contains('supply') || lower == '1') {
       return const Color(0xFFF59E0B);
-    if (lower.contains('quality') || lower == '2')
+    }
+    if (lower.contains('quality') || lower == '2') {
       return const Color(0xFF8B5CF6);
+    }
     return const Color(0xFF3B82F6);
   }
 

@@ -39,7 +39,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
     );
-    if (picked != null && mounted)
+    if (picked != null && mounted) {
       setState(() {
         if (from) {
           _from = picked;
@@ -47,6 +47,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
           _to = picked;
         }
       });
+    }
   }
 
   void _applyFilters() {
@@ -100,33 +101,41 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
 
   Color _getActionColor(String action) {
     final lower = action.toLowerCase();
-    if (lower.contains('create') || lower.contains('add'))
+    if (lower.contains('create') || lower.contains('add')) {
       return const Color(0xFF10B981);
+    }
     if (lower.contains('update') ||
         lower.contains('edit') ||
-        lower.contains('adjust'))
+        lower.contains('adjust')) {
       return const Color(0xFFF59E0B);
+    }
     if (lower.contains('delete') ||
         lower.contains('reject') ||
-        lower.contains('deactivate'))
+        lower.contains('deactivate')) {
       return const Color(0xFFEF4444);
-    if (lower.contains('activate') || lower.contains('approve'))
+    }
+    if (lower.contains('activate') || lower.contains('approve')) {
       return const Color(0xFF06B6D4);
+    }
     return const Color(0xFF8B5CF6);
   }
 
   IconData _getActionIcon(String action) {
     final lower = action.toLowerCase();
-    if (lower.contains('create') || lower.contains('add'))
+    if (lower.contains('create') || lower.contains('add')) {
       return Icons.add_circle_outline_rounded;
+    }
     if (lower.contains('update') ||
         lower.contains('edit') ||
-        lower.contains('adjust'))
+        lower.contains('adjust')) {
       return Icons.edit_note_rounded;
-    if (lower.contains('delete') || lower.contains('deactivate'))
+    }
+    if (lower.contains('delete') || lower.contains('deactivate')) {
       return Icons.remove_circle_outline_rounded;
-    if (lower.contains('activate') || lower.contains('approve'))
+    }
+    if (lower.contains('activate') || lower.contains('approve')) {
       return Icons.verified_rounded;
+    }
     return Icons.history_rounded;
   }
 
@@ -143,13 +152,16 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
       if (!matchesSearch) return false;
 
       if (_selectedActionFilter == 'All') return true;
-      if (_selectedActionFilter == 'Create')
+      if (_selectedActionFilter == 'Create') {
         return log.action.toLowerCase().contains('create');
-      if (_selectedActionFilter == 'Update')
+      }
+      if (_selectedActionFilter == 'Update') {
         return log.action.toLowerCase().contains('update');
-      if (_selectedActionFilter == 'Security')
+      }
+      if (_selectedActionFilter == 'Security') {
         return log.action.toLowerCase().contains('activate') ||
             log.action.toLowerCase().contains('role');
+      }
       return true;
     }).toList();
 

@@ -261,8 +261,9 @@ class AdminApiService {
     DateTime? toDate,
   }) async {
     final queryParams = <String, String>{};
-    if (userName != null && userName.isNotEmpty)
+    if (userName != null && userName.isNotEmpty) {
       queryParams['userName'] = userName;
+    }
     if (action != null && action.isNotEmpty) queryParams['action'] = action;
     if (entity != null && entity.isNotEmpty) queryParams['entity'] = entity;
     if (fromDate != null) queryParams['fromDate'] = fromDate.toIso8601String();

@@ -113,10 +113,11 @@ class _ShiftDetailScreenState extends State<ShiftDetailScreen> {
       await widget.service.deleteShift(_currentShift.id);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not delete shift: $e')));
+      }
     }
   }
 

@@ -133,11 +133,12 @@ class _MaintenanceListScreenState extends State<MaintenanceListScreen> {
                         );
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
-                        if (ctx.mounted)
+                        if (ctx.mounted) {
                           update(() {
                             saving = false;
                             error = e.toString();
                           });
+                        }
                       }
                     },
               child: Text(saving ? 'Saving...' : 'Save'),
@@ -176,10 +177,11 @@ class _MaintenanceListScreenState extends State<MaintenanceListScreen> {
       await widget.service.deleteMaintenanceLog(log.id);
       if (mounted) await _fetchLogs();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not delete record: $e')));
+      }
     }
   }
 

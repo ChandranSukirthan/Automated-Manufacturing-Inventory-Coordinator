@@ -274,10 +274,11 @@ class _PODetailsScreenState extends State<PODetailsScreen>
                           await widget.service.verifyBankSlip(widget.poId);
                           await _fetchDetails();
                         } catch (error) {
-                          if (context.mounted)
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(error.toString())),
                             );
+                          }
                         }
                       },
                       child: const Text(
@@ -696,8 +697,9 @@ class _PODetailsScreenState extends State<PODetailsScreen>
         cleanStatus == 'pendingapproval' ||
         cleanStatus == 'waitingforapproval' ||
         cleanStatus == 'pending';
-    if (!widget.allowManagement && !(widget.allowApproval && pending))
+    if (!widget.allowManagement && !(widget.allowApproval && pending)) {
       return const SizedBox.shrink();
+    }
 
     if (cleanStatus == 'pendingapproval' ||
         cleanStatus == 'waitingforapproval' ||

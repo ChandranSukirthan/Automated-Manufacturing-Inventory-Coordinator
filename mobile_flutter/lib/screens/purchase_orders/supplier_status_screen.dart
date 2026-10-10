@@ -23,7 +23,6 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
   bool _loading = true;
   String? _error;
   List<SupplierSummary> _suppliers = [];
-  SupplierAnalytics? _analytics;
 
   String _searchQuery = '';
   String _statusFilter = 'all'; // 'all' | 'active' | 'inactive'
@@ -42,12 +41,11 @@ class _SupplierStatusScreenState extends State<SupplierStatusScreen> {
 
     try {
       final list = await widget.service.getSuppliers();
-      final stats = await widget.service.getSupplierAnalytics();
+      await widget.service.getSupplierAnalytics();
 
       if (mounted) {
         setState(() {
           _suppliers = list;
-          _analytics = stats;
           _loading = false;
         });
       }

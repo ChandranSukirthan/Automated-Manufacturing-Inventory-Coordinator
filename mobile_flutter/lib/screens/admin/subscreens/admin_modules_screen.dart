@@ -155,12 +155,14 @@ class _MaintenanceMachinesState extends State<MaintenanceMachinesScreen> {
     body: FutureBuilder(
       future: _machines,
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(
             child: Text('Could not load machines: ${snapshot.error}'),
           );
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         return ListView(
           children: [
             for (final machine in snapshot.data!)
